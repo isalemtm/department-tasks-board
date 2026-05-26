@@ -39,6 +39,17 @@
       </div>
     </section>
 
+    <section id="passwordSetupSection" class="auth-wrap hidden">
+      <div class="auth-card card">
+        <div id="passwordSetupNotice" class="notice info show">تم قبول الدعوة بنجاح. فضلاً عيّن كلمة مرور خاصة بك قبل الدخول للنظام.</div>
+        <h2 class="auth-title">تعيين كلمة المرور</h2>
+        <div class="form-group"><label>كلمة المرور الجديدة</label><input id="newPassword" type="password" placeholder="اكتب كلمة مرور قوية"></div>
+        <div class="form-group"><label>تأكيد كلمة المرور</label><input id="newPassword2" type="password" placeholder="أعد كتابة كلمة المرور"></div>
+        <div class="actions"><button class="btn btn-primary" onclick="completePasswordSetup()">حفظ كلمة المرور والدخول</button><button class="btn" onclick="logout()">تسجيل الخروج</button></div>
+      </div>
+    </section>
+
+
     <section id="appSection" class="hidden">
       <div class="tabs">
         <button id="tabTasks" class="tab active" onclick="showPage('tasks')">المهام</button>
@@ -122,9 +133,10 @@ function isLate(t){if(!t.due_date||t.status==='مكتملة')return false; const
 function currentRole(){return state.profile?.role||''} function isAdmin(){return currentRole()==='admin'} function isCeo(){return currentRole()==='ceo'} function isAdminOrCeo(){return isAdmin()||isCeo()}
 
 async function init(){ await loadPublicLookups(); const {data}=await supabaseClient.auth.getSession(); state.session=data.session; if(state.session){const ok=await bootstrap(); if(!ok) showAuthOnly();} else showAuthOnly(); }
-function showAuthOnly(){ $('authSection').classList.remove('hidden'); $('appSection').classList.add('hidden'); $('userBar').classList.add('hidden'); fillSectorSelect('requestSector',true); fillDepartmentSelect('requestDepartment', $('requestSector').value, true); }
-function showApp(){ $('authSection').classList.add('hidden'); $('appSection').classList.remove('hidden'); $('userBar').classList.remove('hidden'); $('userBadge').textContent=`${state.profile.name} - ${roleLabel(state.profile.role)}`; $('tabAdmin').classList.toggle('hidden',!isAdmin()); }
-async function bootstrap(){ await loadProfile(); if(!state.profile){ await supabaseClient.auth.signOut(); showNotice('تم تسجيل الدخول لكن الحساب غير مفعل في النظام. انتظر اعتماد مدير النظام.','info'); return false;} await loadAll(); setupFilters(); showApp(); showPage('tasks'); return true; }
+function showAuthOnly(){ $('authSection').classList.remove('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.add('hidden'); $('userBar').classList.add('hidden'); fillSectorSelect('requestSector',true); fillDepartmentSelect('requestDepartment', $('requestSector').value, true); }
+function showApp(){ $('authSection').classList.add('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.remove('hidden'); $('userBar').classList.remove('hidden'); $('userBadge').textContent=`${state.profile.name} - ${roleLabel(state.profile.role)}`; $('tabAdmin').classList.toggle('hidden',!isAdmin()); }
+function showPasswordSetup(){ $('authSection').classList.add('hidden'); $('appSection').classList.add('hidden'); $('passwordSetupSection').classList.remove('hidden'); $('userBar').classList.add('hidden'); }
+async function bootstrap(){ await loadProfile(); if(!state.profile){ await supabaseClient.auth.signOut(); showNotice('تم تسجيل الدخول لكن الحساب غير مفعل في النظام. انتظر اعتماد مدير النظام.','info'); return false;} if(state.profile.must_set_password){ showPasswordSetup(); return true; } await loadAll(); setupFilters(); showApp(); showPage('tasks'); return true; }
 async function loadPublicLookups(){ const [s,d]=await Promise.all([supabaseClient.from('sectors').select('*').order('name'),supabaseClient.from('departments').select('*').order('name')]); state.sectors=s.data||[]; state.departments=d.data||[]; }
 async function loadProfile(){ const uid=state.session?.user?.id; if(!uid)return; const {data,error}=await supabaseClient.from('users').select('*').eq('id',uid).maybeSingle(); if(error) console.error(error); state.profile=data&&data.is_active?data:null; }
 async function loadAll(){ await loadPublicLookups(); const [u,t,a,c,r]=await Promise.all([supabaseClient.from('users').select('*').order('name'),supabaseClient.from('tasks').select('*').order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),supabaseClient.from('task_assignees').select('*'),supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true}), isAdmin()?supabaseClient.from('registration_requests').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})]); state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[]; state.requests=r.data||[]; }
@@ -133,6 +145,7 @@ function showAuthView(v){ $('loginView').classList.toggle('hidden',v!=='login');
 async function login(){ const email=$('loginEmail').value.trim(), password=$('loginPassword').value; if(!email||!password)return showNotice('فضلاً أدخل البريد وكلمة المرور.','error'); const {data,error}=await supabaseClient.auth.signInWithPassword({email,password}); if(error)return showNotice(error.message,'error'); state.session=data.session; const ok=await bootstrap(); if(!ok)return; }
 async function logout(){ await supabaseClient.auth.signOut(); location.reload(); }
 async function resetPassword(){ const email=$('loginEmail').value.trim(); if(!email)return showNotice('اكتب بريدك أولاً.','error'); const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname}); showNotice(error?error.message:'تم إرسال رابط استعادة كلمة المرور.','info'); }
+async function completePasswordSetup(){ const p=$('newPassword').value, p2=$('newPassword2').value; const notice=$('passwordSetupNotice'); if(!p||!p2){ notice.textContent='فضلاً أدخل كلمة المرور وتأكيدها.'; notice.className='notice error show'; return; } if(p.length<8){ notice.textContent='كلمة المرور يجب ألا تقل عن 8 أحرف.'; notice.className='notice error show'; return; } if(p!==p2){ notice.textContent='كلمتا المرور غير متطابقتين.'; notice.className='notice error show'; return; } const {error:passError}=await supabaseClient.auth.updateUser({password:p}); if(passError){ notice.textContent=passError.message; notice.className='notice error show'; return; } const {error:profileError}=await supabaseClient.from('users').update({must_set_password:false}).eq('id',state.profile.id); if(profileError){ notice.textContent=profileError.message; notice.className='notice error show'; return; } state.profile.must_set_password=false; await loadAll(); setupFilters(); showApp(); showPage('tasks'); }
 async function submitJoinRequest(){ const name=$('requestName').value.trim(), email=$('requestEmail').value.trim().toLowerCase(), password=$('requestPassword').value, p2=$('requestPassword2').value; if(!name||!email||!password||!p2)return showNotice('فضلاً أكمل جميع الحقول.','error'); if(password!==p2)return showNotice('كلمتا المرور غير متطابقتين.','error'); const signup=await supabaseClient.auth.signUp({email,password}); if(signup.error)return showNotice(signup.error.message,'error'); const {error}=await supabaseClient.from('registration_requests').insert({full_name:name,email,password_text:'created-via-auth',auth_user_id:signup.data.user?.id,requested_role:$('requestRole').value,requested_sector_id:$('requestSector').value||null,requested_department_id:$('requestDepartment').value||null,status:'pending'}); if(error)return showNotice(error.message,'error'); showAuthView('login'); showNotice('تم إرسال طلب الانضمام. سيتم تفعيل الحساب بعد الاعتماد.','success'); }
 
 function fillSectorSelect(id,includeEmpty=false){ const el=$(id); el.innerHTML=(includeEmpty?'<option value="">بدون تحديد</option>':'')+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join(''); }
