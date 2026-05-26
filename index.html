@@ -72,6 +72,19 @@
       </section>
 
       <section id="adminPage" class="hidden">
+        <section class="panel card">
+          <h2>إضافة مستخدم مباشرة</h2>
+          <p class="meta">أدخل بيانات المستخدم وسيتم إرسال دعوة إلى بريده لإكمال الدخول وتعيين كلمة المرور.</p>
+          <div class="form-grid">
+            <div class="form-group"><label>الاسم الكامل</label><input id="adminInviteName" placeholder="مثال: محمد أحمد"></div>
+            <div class="form-group"><label>البريد الإلكتروني</label><input id="adminInviteEmail" type="email" placeholder="example@rasf.sa"></div>
+            <div class="form-group"><label>الدور</label><select id="adminInviteRole"><option value="employee">موظف</option><option value="department_manager">مدير إدارة</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option><option value="admin">مدير النظام</option></select></div>
+            <div class="form-group"><label>المسمى الوظيفي</label><input id="adminInviteJobTitle" placeholder="اختياري"></div>
+            <div class="form-group"><label>القطاع</label><select id="adminInviteSector" onchange="fillDepartmentSelect('adminInviteDepartment', this.value, true)"></select></div>
+            <div class="form-group"><label>الإدارة</label><select id="adminInviteDepartment"></select></div>
+          </div>
+          <div class="actions"><button class="btn btn-primary" onclick="inviteUserByAdmin()">إضافة المستخدم وإرسال الدعوة</button></div>
+        </section>
         <section class="panel card"><h2>طلبات الانضمام</h2><div id="requestsList"></div></section>
         <section class="panel card"><h2>المستخدمون</h2><div id="usersTable"></div></section>
       </section>
@@ -148,7 +161,29 @@ async function changeStatus(taskId,status){ const {error}=await supabaseClient.f
 async function deleteTask(taskId){ if(!confirm('حذف المهمة؟'))return; const {error}=await supabaseClient.from('tasks').delete().eq('id',taskId); if(error)return alert(error.message); await loadAll(); renderTasks(); }
 
 function renderDashboard(){ const rows=state.departments.map(d=>{ const ts=state.tasks.filter(t=>t.owner_department_id===d.id||t.target_department_id===d.id); return {name:d.name,sector:nameOfSector(d.sector_id),total:ts.length,done:ts.filter(t=>t.status==='مكتملة').length,late:ts.filter(isLate).length};}); $('dashboardContent').innerHTML=`<div class="table-wrap"><table><thead><tr><th>القطاع</th><th>الإدارة</th><th>إجمالي</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.sector)}</td><td>${escapeHtml(r.name)}</td><td>${r.total}</td><td>${r.done}</td><td>${r.late}</td><td>${r.total?Math.round(r.done/r.total*100):0}%</td></tr>`).join('')}</tbody></table></div>`; }
-function renderAdmin(){ renderRequests(); renderUsers(); }
+function renderAdmin(){ fillSectorSelect('adminInviteSector', true); fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true); renderRequests(); renderUsers(); }
+async function inviteUserByAdmin(){
+  try{
+    const name=$('adminInviteName').value.trim();
+    const email=$('adminInviteEmail').value.trim().toLowerCase();
+    const role=$('adminInviteRole').value;
+    const sector_id=$('adminInviteSector').value||null;
+    const department_id=$('adminInviteDepartment').value||null;
+    const job_title=$('adminInviteJobTitle').value.trim();
+    if(!name||!email)return alert('فضلاً أدخل الاسم والبريد الإلكتروني.');
+    const {data,error}=await supabaseClient.functions.invoke('admin-invite-user',{
+      body:{name,email,role,sector_id,department_id,job_title}
+    });
+    if(error)throw error;
+    if(data && data.error)throw new Error(data.error);
+    alert('تمت إضافة المستخدم وإرسال الدعوة إلى بريده.');
+    $('adminInviteName').value=''; $('adminInviteEmail').value=''; $('adminInviteJobTitle').value='';
+    await loadAll(); renderAdmin();
+  }catch(e){
+    console.error(e);
+    alert(e.message || 'تعذر إضافة المستخدم أو إرسال الدعوة.');
+  }
+}
 function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
 async function approveRequest(id){ const r=state.requests.find(x=>x.id===id); if(!r?.auth_user_id)return alert('لا يوجد auth_user_id للطلب'); const {error}=await supabaseClient.from('users').insert({id:r.auth_user_id,name:r.full_name,email:r.email,role:r.requested_role,sector_id:r.requested_sector_id,department_id:r.requested_department_id,is_active:true}).select(); if(error)return alert(error.message); await supabaseClient.from('registration_requests').update({status:'approved',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); }
 async function rejectRequest(id){ await supabaseClient.from('registration_requests').update({status:'rejected',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); }
