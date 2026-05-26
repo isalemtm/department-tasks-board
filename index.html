@@ -153,6 +153,11 @@ function formatDate(v){if(!v)return '—'; const d=new Date(v); return isNaN(d)?
 function isLate(t){if(!t.due_date||t.status==='مكتملة')return false; const today=new Date();today.setHours(0,0,0,0); const due=new Date(t.due_date);due.setHours(0,0,0,0); return due<today}
 function isDueSoon(t){if(!t.due_date||t.status==='مكتملة')return false; const today=new Date();today.setHours(0,0,0,0); const due=new Date(t.due_date);due.setHours(0,0,0,0); const diff=Math.ceil((due-today)/86400000); return diff<=3;}
 function currentRole(){return state.profile?.role||''} function isAdmin(){return currentRole()==='admin'} function isCeo(){return currentRole()==='ceo'} function isSectorHead(){return currentRole()==='sector_head'} function isDepartmentManager(){return currentRole()==='department_manager'} function isAdminOrCeo(){return isAdmin()||isCeo()}
+function canDeleteTask(t){
+  if(isAdmin()) return true;
+  if(!isSectorHead()) return false;
+  return t.owner_sector_id===state.profile.sector_id || t.target_sector_id===state.profile.sector_id;
+}
 
 async function init(){ await loadPublicLookups(); const {data}=await supabaseClient.auth.getSession(); state.session=data.session; if(state.session){const ok=await bootstrap(); if(!ok) showAuthOnly();} else showAuthOnly(); }
 function showAuthOnly(){ $('authSection').classList.remove('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.add('hidden'); $('userBar').classList.add('hidden'); fillSectorSelect('requestSector',true); fillDepartmentSelect('requestDepartment', $('requestSector').value, true); }
@@ -217,7 +222,7 @@ function exportTasksToExcel(){
     showToast('تم تصدير ملف Excel بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
 }
-function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${(isAdmin()||t.created_by===state.profile.id)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div></div></div>` }
+function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div></div></div>` }
 function renderAttachments(urls=[],names=[]){ if(!urls||!urls.length)return ''; return `<div class="attachments meta">المرفقات:<br>${urls.map((u,i)=>`<a href="${escapeHtml(u)}" target="_blank">${escapeHtml(names?.[i]||'مرفق '+(i+1))}</a>`).join('')}</div>` }
 
 function openTaskModal(){
@@ -233,7 +238,7 @@ function allowedAssignmentTypes(){
     ['employees','موظفون محددون'],['department_managers','مدراء إدارات'],['sector_heads','رؤساء قطاعات'],['all_department','كل إدارة'],['all_sector','كل قطاع'],['all_company','كل الشركة']
   ];
   if(isAdminOrCeo()) return all;
-  if(isSectorHead()) return all.filter(([v])=>['employees','department_managers','sector_heads','all_department','all_sector'].includes(v));
+  if(isSectorHead()) return all.filter(([v])=>['employees','sector_heads','all_sector'].includes(v));
   if(isDepartmentManager()) return all.filter(([v])=>['employees','all_department'].includes(v));
   return all.filter(([v])=>v==='employees');
 }
@@ -250,18 +255,29 @@ function applyTargetRestrictions(){
   const sectorEl=$('taskTargetSector');
   const deptEl=$('taskTargetDepartment');
   sectorEl.disabled=false; deptEl.disabled=false;
-  if(isSectorHead() && type!=='sector_heads'){
-    sectorEl.value=state.profile.sector_id||'';
-    sectorEl.disabled=true;
-    fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
-  } else if(isDepartmentManager()){
-    sectorEl.value=state.profile.sector_id||'';
-    sectorEl.disabled=true;
-    fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
-    if(type==='all_department'||type==='employees'){
-      deptEl.value=state.profile.department_id||'';
+
+  if(isSectorHead()){
+    if(type==='sector_heads'){
+      // عند تكليف رئيس قطاع آخر، لا نقيّد قائمة رؤساء القطاعات بقطاع رئيس القطاع الحالي.
+      fillDepartmentSelect('taskTargetDepartment', sectorEl.value, true);
       deptEl.disabled=true;
+      deptEl.value='';
+    } else {
+      sectorEl.value=state.profile.sector_id||'';
+      sectorEl.disabled=true;
+      fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
+      if(type==='all_sector'){
+        deptEl.value='';
+        deptEl.disabled=true;
+      }
     }
+  } else if(isDepartmentManager() || currentRole()==='employee'){
+    // الموظف ومدير الإدارة لا تظهر لهم القطاعات الأخرى ولا إداراتها.
+    sectorEl.value=state.profile.sector_id||'';
+    sectorEl.disabled=true;
+    fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
+    deptEl.value=state.profile.department_id||'';
+    deptEl.disabled=true;
   } else {
     fillDepartmentSelect('taskTargetDepartment', sectorEl.value, true);
   }
@@ -279,7 +295,7 @@ function permittedAssigneeUsers(){
   if(type==='employees'&&dept) rows=rows.filter(u=>u.department_id===dept||u.id===state.profile.id);
   if(type==='department_managers'&&sector) rows=rows.filter(u=>u.sector_id===sector);
   if(isSectorHead() && type!=='sector_heads') rows=rows.filter(u=>u.sector_id===state.profile.sector_id || u.id===state.profile.id);
-  if(isDepartmentManager()) rows=rows.filter(u=>u.department_id===state.profile.department_id || u.id===state.profile.id);
+  if(isDepartmentManager() || currentRole()==='employee') rows=rows.filter(u=>u.department_id===state.profile.department_id || u.id===state.profile.id);
   return rows;
 }
 function renderAssigneePicker(){
@@ -308,6 +324,10 @@ function validateAssignment(type,selected){
     const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.department_id!==state.profile.department_id);
     if(invalid.length) return 'مدير الإدارة يستطيع إسناد المهام داخل إدارته فقط.';
   }
+  if(currentRole()==='employee'){
+    const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.department_id!==state.profile.department_id);
+    if(invalid.length) return 'الموظف يستطيع إسناد المهام داخل إدارته فقط.';
+  }
   return '';
 }
 async function uploadFiles(fileList,folder){ const files=[...(fileList||[])]; const urls=[],names=[]; for(const f of files){ const path=`${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}-${f.name}`; const {error}=await supabaseClient.storage.from(BUCKET).upload(path,f,{upsert:false}); if(error)throw error; const {data}=supabaseClient.storage.from(BUCKET).getPublicUrl(path); urls.push(data.publicUrl); names.push(f.name);} return {urls,names}; }
@@ -326,8 +346,8 @@ async function saveTask(){
     if(validationMessage){ showToast(validationMessage,'error'); return; }
     const files=await uploadFiles($('taskFiles').files,'tasks');
     const primary=state.profile.id;
-    const targetSector=(isSectorHead()&&type!=='sector_heads')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
-    const targetDept=(isDepartmentManager())?state.profile.department_id:($('taskTargetDepartment').value||null);
+    const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
+    const targetDept=(isDepartmentManager()||currentRole()==='employee')?state.profile.department_id:($('taskTargetDepartment').value||null);
     const payload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names};
     const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
     if(error)throw error;
