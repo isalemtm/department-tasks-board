@@ -271,13 +271,19 @@ function applyTargetRestrictions(){
         deptEl.disabled=true;
       }
     }
-  } else if(isDepartmentManager() || currentRole()==='employee'){
-    // الموظف ومدير الإدارة لا تظهر لهم القطاعات الأخرى ولا إداراتها.
+  } else if(isDepartmentManager()){
+    // مدير الإدارة يبقى محصورًا داخل إدارته فقط.
     sectorEl.value=state.profile.sector_id||'';
     sectorEl.disabled=true;
     fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
     deptEl.value=state.profile.department_id||'';
     deptEl.disabled=true;
+  } else if(currentRole()==='employee'){
+    // الموظف محصور داخل قطاعه، ويستطيع اختيار موظفين من الإدارات التابعة لنفس القطاع.
+    sectorEl.value=state.profile.sector_id||'';
+    sectorEl.disabled=true;
+    fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
+    deptEl.disabled=false;
   } else {
     fillDepartmentSelect('taskTargetDepartment', sectorEl.value, true);
   }
@@ -295,7 +301,8 @@ function permittedAssigneeUsers(){
   if(type==='employees'&&dept) rows=rows.filter(u=>u.department_id===dept||u.id===state.profile.id);
   if(type==='department_managers'&&sector) rows=rows.filter(u=>u.sector_id===sector);
   if(isSectorHead() && type!=='sector_heads') rows=rows.filter(u=>u.sector_id===state.profile.sector_id || u.id===state.profile.id);
-  if(isDepartmentManager() || currentRole()==='employee') rows=rows.filter(u=>u.department_id===state.profile.department_id || u.id===state.profile.id);
+  if(isDepartmentManager()) rows=rows.filter(u=>u.department_id===state.profile.department_id || u.id===state.profile.id);
+  if(currentRole()==='employee') rows=rows.filter(u=>u.sector_id===state.profile.sector_id || u.id===state.profile.id);
   return rows;
 }
 function renderAssigneePicker(){
@@ -325,8 +332,8 @@ function validateAssignment(type,selected){
     if(invalid.length) return 'مدير الإدارة يستطيع إسناد المهام داخل إدارته فقط.';
   }
   if(currentRole()==='employee'){
-    const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.department_id!==state.profile.department_id);
-    if(invalid.length) return 'الموظف يستطيع إسناد المهام داخل إدارته فقط.';
+    const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.sector_id!==state.profile.sector_id);
+    if(invalid.length) return 'الموظف يستطيع إسناد المهام داخل قطاعه فقط.';
   }
   return '';
 }
@@ -347,7 +354,7 @@ async function saveTask(){
     const files=await uploadFiles($('taskFiles').files,'tasks');
     const primary=state.profile.id;
     const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
-    const targetDept=(isDepartmentManager()||currentRole()==='employee')?state.profile.department_id:($('taskTargetDepartment').value||null);
+    const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
     const payload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names};
     const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
     if(error)throw error;
