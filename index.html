@@ -645,16 +645,12 @@ function renderUsersImportPreview(){
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th></tr></thead><tbody>${usersImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function downloadUsersImportTemplate(){
-  if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة Excel. حدّث الصفحة وحاول مرة أخرى.','error');
-  const headers=['الاسم الكامل','البريد الإلكتروني','المسمى الوظيفي','الدور','القطاع','الإدارة'];
-  const examples=[headers, ['مثال موظف','employee@example.com','أخصائي','موظف', state.sectors[0]?.name||'قطاع الشؤون المؤسسية', state.departments.find(d=>d.sector_id===state.sectors[0]?.id)?.name||'الموارد البشرية']];
-  const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.aoa_to_sheet(examples);
-  ws['!cols']=[{wch:26},{wch:32},{wch:24},{wch:18},{wch:32},{wch:28}];
-  XLSX.utils.book_append_sheet(wb,ws,'نموذج المستخدمين');
-  const ref=[['الأدوار المسموحة'],['موظف'],['مدير إدارة'],['رئيس قطاع'],['الرئيس التنفيذي'],['مدير النظام'],[],['تعليمات'],['مشرف النظام يستطيع الإضافة في أي قطاع.'],['رئيس القطاع يستطيع إضافة موظف أو مدير إدارة داخل قطاعه فقط.'],['يجب كتابة أسماء القطاعات والإدارات كما تظهر في النظام.']];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ref),'تعليمات');
-  XLSX.writeFile(wb,'department-users-import-template.xlsx');
+  const link = document.createElement('a');
+  link.href = 'users_import_template.xlsx';
+  link.download = 'users_import_template.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 async function handleUsersImportFile(event){
   try{
