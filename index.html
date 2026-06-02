@@ -142,6 +142,7 @@
     <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
     <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
     <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء إدارات</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
+    <div class="form-group"><label>طريقة تنفيذ المهمة</label><select id="collaborationMode"><option value="shared" selected>مهمة مشتركة للجميع</option><option value="individual">مهمة منفصلة لكل شخص</option></select></div>
     <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
     <div class="form-group"><label>الإدارة المستهدفة</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
     <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
@@ -282,11 +283,12 @@ function exportTasksToExcel(){
       'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
       'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
       'تاريخ الاستحقاق':formatDate(t.due_date),
+      'طريقة التنفيذ':t.collaboration_mode==='individual'?'منفصلة':'مشتركة',
       'تاريخ الإنشاء':formatDate(t.created_at)
     }));
     if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16}];
+    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16},{wch:16}];
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'مهام الإدارات');
     XLSX.writeFile(wb,`مهام_الإدارات_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -414,19 +416,34 @@ async function saveTask(){
     const title=$('taskTitle').value.trim();
     if(!title){ showToast('اكتب عنوان المهمة.','error'); return; }
     const type=$('assignmentType').value;
+    const collaborationMode=$('collaborationMode')?.value || 'shared';
     let selected=[...$('assigneePicker').querySelectorAll('input:checked')].map(i=>i.value);
     if(type==='all_company') selected=state.users.filter(u=>u.is_active).map(u=>u.id);
     if(type==='all_sector') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetSector').value||u.sector_id===$('taskTargetSector').value)).map(u=>u.id);
     if(type==='all_department') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetDepartment').value||u.department_id===$('taskTargetDepartment').value)).map(u=>u.id);
+    selected=[...new Set(selected)];
     if(type!=='all_company' && !selected.length){ showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error'); return; }
-    if(!selected.includes(state.profile.id))selected.push(state.profile.id);
     const validationMessage=validateAssignment(type,selected);
     if(validationMessage){ showToast(validationMessage,'error'); return; }
     const files=await uploadFiles($('taskFiles').files,'tasks');
-    const primary=state.profile.id;
     const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
     const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
-    const payload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names};
+    const basePayload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names,collaboration_mode:collaborationMode};
+
+    if(collaborationMode==='individual' && selected.length>1){
+      const batchId=crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const payloads=selected.map(uid=>({...basePayload,primary_responsible_id:uid,batch_id:batchId}));
+      const {data,error}=await supabaseClient.from('tasks').insert(payloads).select('id,primary_responsible_id');
+      if(error)throw error;
+      const rows=(data||[]).map(t=>({task_id:t.id,user_id:t.primary_responsible_id,assigned_by:state.profile.id,assignment_role:'primary'}));
+      if(rows.length){const r=await supabaseClient.from('task_assignees').insert(rows); if(r.error)throw r.error;}
+      closeTaskModal(); await loadAll(); renderTasks(); showToast(`تم إنشاء ${rows.length} مهمة منفصلة بنجاح.`, 'success');
+      return;
+    }
+
+    if(!selected.includes(state.profile.id)) selected.push(state.profile.id);
+    const primary=state.profile.id;
+    const payload={...basePayload,primary_responsible_id:primary,batch_id:null,collaboration_mode:'shared'};
     const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
     if(error)throw error;
     const rows=[...new Set(selected)].map(uid=>({task_id:data.id,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===primary?'primary':'assignee'}));
