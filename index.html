@@ -242,6 +242,46 @@
           <div id="pendingUserInvitesList"></div>
         </section>
 
+        <!-- FEATURE: استيراد مستخدمين من لوحة أخرى -->
+        <section id="boardUsersImportPanel" class="panel card">
+          <div class="section-head">
+            <div>
+              <h2>استيراد مستخدمين من لوحة أخرى</h2>
+              <p class="meta">ارفع ملف Excel المصدّر من لوحة HR. سيتم حفظ المستخدمين كمسودات فقط بدون إرسال الدعوات، ثم تستطيع إرسال الدعوات لاحقًا من قسم المسودات.</p>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>ملف المستخدمين</label>
+              <input id="boardUsersImportFile" type="file" accept=".xlsx,.xls" onchange="handleBoardUsersImportFile(event)">
+              <span class="meta">يفضّل استخدام ملف "تصدير المستخدمين للنقل بين اللوحات" من لوحة HR.</span>
+            </div>
+            <div class="form-group">
+              <label>القطاع الافتراضي للمستخدمين المستوردين</label>
+              <select id="boardUsersImportSector" onchange="fillDepartmentSelect('boardUsersImportDepartment', this.value, true); renderBoardUsersImportPreview();"></select>
+            </div>
+            <div class="form-group">
+              <label>الإدارة الافتراضية للمستخدمين المستوردين</label>
+              <select id="boardUsersImportDepartment" onchange="renderBoardUsersImportPreview()"></select>
+            </div>
+            <div class="form-group full">
+              <label>الدور الافتراضي إذا لم يوجد دور واضح في الملف</label>
+              <select id="boardUsersImportRole" onchange="renderBoardUsersImportPreview()">
+                <option value="employee" selected>موظف</option>
+                <option value="department_manager">مدير إدارة</option>
+                <option value="sector_head">رئيس قطاع</option>
+                <option value="ceo">الرئيس التنفيذي</option>
+                <option value="admin">مدير النظام</option>
+              </select>
+            </div>
+          </div>
+          <div id="boardUsersImportPreview" style="margin-top:12px;"></div>
+          <div class="actions" style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="importBoardUsersFromExcel()">حفظ المستخدمين كمسودة</button>
+            <button class="btn" onclick="clearBoardUsersImport()">مسح الملف</button>
+          </div>
+        </section>
+
         <!-- FEATURE: استيراد مهام من لوحة أخرى -->
         <section id="boardTasksImportPanel" class="panel card">
           <div class="section-head">
@@ -876,6 +916,7 @@ function renderAdmin(){
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
+  $('boardUsersImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('boardTasksImportPanel')?.classList.remove('hidden');
   if(isAdmin()){
     fillSectorSelect('adminInviteSector', true);
@@ -886,6 +927,8 @@ function renderAdmin(){
   renderUsers();
   renderUsersImportPreview();
   renderPendingUserImports();
+  setupBoardUsersImportControls();
+  renderBoardUsersImportPreview();
   setupBoardTaskImportControls();
   renderBoardTasksImportPreview();
 }
@@ -913,6 +956,141 @@ async function inviteUserByAdmin(){
 }
 
 let usersImportRows = [];
+let boardUsersImportRows = [];
+
+function mapBoardUserImportRole(value){
+  const v=String(value||'').trim().toLowerCase();
+  const map={
+    'موظف':'employee','employee':'employee','member':'employee','عضو':'employee',
+    'مدير إدارة':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
+    'رئيس قطاع':'sector_head','sector_head':'sector_head','sector head':'sector_head',
+    'الرئيس التنفيذي':'ceo','رئيس تنفيذي':'ceo','ceo':'ceo',
+    'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin'
+  };
+  return map[v] || '';
+}
+function setupBoardUsersImportControls(){
+  if(!$('boardUsersImportSector')) return;
+  const currentSector=$('boardUsersImportSector').value;
+  const currentDept=$('boardUsersImportDepartment').value;
+  const currentRole=$('boardUsersImportRole')?.value || 'employee';
+  fillSectorSelect('boardUsersImportSector', true);
+  if(isSectorHead()||isDepartmentManager()){
+    $('boardUsersImportSector').value=state.profile.sector_id||'';
+    $('boardUsersImportSector').disabled=true;
+  }else{
+    $('boardUsersImportSector').disabled=false;
+    if(currentSector) $('boardUsersImportSector').value=currentSector;
+  }
+  fillDepartmentSelect('boardUsersImportDepartment', $('boardUsersImportSector').value, true);
+  if(isDepartmentManager()){
+    $('boardUsersImportDepartment').value=state.profile.department_id||'';
+    $('boardUsersImportDepartment').disabled=true;
+  }else{
+    $('boardUsersImportDepartment').disabled=false;
+    if(currentDept) $('boardUsersImportDepartment').value=currentDept;
+  }
+  if($('boardUsersImportRole')){
+    $('boardUsersImportRole').value=currentRole;
+    if(isSectorHead()||isDepartmentManager()){
+      [...$('boardUsersImportRole').options].forEach(opt=>{ opt.disabled=['admin','ceo','sector_head'].includes(opt.value); });
+      if(['admin','ceo','sector_head'].includes($('boardUsersImportRole').value)) $('boardUsersImportRole').value='employee';
+    }
+  }
+}
+function getBoardUserImportCell(row,names){
+  for(const n of names){
+    if(row[n]!==undefined && row[n]!==null && String(row[n]).trim()!=='') return String(row[n]).trim();
+  }
+  return '';
+}
+function resolveBoardUserImportRow(raw,index){
+  const defaultSectorId=$('boardUsersImportSector')?.value || state.profile?.sector_id || '';
+  const defaultDeptId=$('boardUsersImportDepartment')?.value || (isDepartmentManager()?state.profile.department_id:'') || '';
+  const defaultRole=$('boardUsersImportRole')?.value || 'employee';
+  const name=getBoardUserImportCell(raw,['الاسم الكامل','الاسم','اسم المستخدم','name','Name','Full Name']);
+  const email=getBoardUserImportCell(raw,['البريد الإلكتروني','البريد الالكتروني','البريد','email','Email']).toLowerCase();
+  const job_title=getBoardUserImportCell(raw,['المسمى الوظيفي','الوظيفة','job_title','Job Title']);
+  const roleText=getBoardUserImportCell(raw,['الدور','الدور المقترح','الصلاحية','role','Role']);
+  const role=mapBoardUserImportRole(roleText) || defaultRole;
+  const errors=[];
+  if(!name) errors.push('الاسم مطلوب');
+  if(!email) errors.push('البريد الإلكتروني مطلوب');
+  if(email && !/^\S+@\S+\.\S+$/.test(email)) errors.push('صيغة البريد غير صحيحة');
+  if(!role) errors.push('الدور غير صحيح');
+  const sector=state.sectors.find(sector=>sector.id===defaultSectorId) || null;
+  const department=state.departments.find(dept=>dept.id===defaultDeptId) || null;
+  if(!sector && !['admin','ceo'].includes(role)) errors.push('اختر القطاع الافتراضي');
+  if(defaultDeptId && !department) errors.push('الإدارة الافتراضية غير صحيحة');
+  if(department && sector && department.sector_id!==sector.id) errors.push('الإدارة المختارة لا تتبع القطاع المختار');
+  if(isSectorHead()){
+    if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع استيراد مستخدمين خارج قطاعه');
+    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء إدارات فقط');
+  }
+  if(isDepartmentManager()){
+    if(!department || department.id!==state.profile.department_id) errors.push('مدير الإدارة يستطيع استيراد مستخدمين داخل إدارته فقط');
+    if(['admin','ceo','sector_head'].includes(role)) errors.push('مدير الإدارة يستطيع استيراد موظفين أو مدراء إدارات فقط');
+  }
+  const duplicateUser=state.users.some(u=>String(u.email||'').toLowerCase()===email);
+  const duplicatePending=state.pendingUserImports.some(u=>u.status==='pending' && String(u.email||'').toLowerCase()===email);
+  if(email && duplicateUser) errors.push('البريد موجود مسبقًا ضمن المستخدمين');
+  if(email && duplicatePending) errors.push('البريد موجود مسبقًا ضمن المسودات');
+  return {raw,row_number:index+2,name,email,job_title,role,role_label:roleLabel(role),sector_id:sector?.id||null,sector_name:sector?.name||'',department_id:department?.id||null,department_name:department?.name||'',valid:errors.length===0,errors};
+}
+async function handleBoardUsersImportFile(event){
+  try{
+    const file=event.target.files?.[0];
+    if(!file){ boardUsersImportRows=[]; renderBoardUsersImportPreview(); return; }
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const sheet=wb.Sheets[wb.SheetNames[0]];
+    const raw=XLSX.utils.sheet_to_json(sheet,{defval:''});
+    if(!raw.length){ boardUsersImportRows=[]; renderBoardUsersImportPreview(); return showToast('الملف لا يحتوي على مستخدمين.','error'); }
+    boardUsersImportRows=raw.map((row,i)=>{
+      const normalized={};
+      Object.keys(row).forEach(k=>normalized[normalizeHeaderKey(k)]=row[k]);
+      return resolveBoardUserImportRow(normalized,i);
+    });
+    renderBoardUsersImportPreview();
+    showToast('تمت قراءة ملف المستخدمين. راجع المعاينة قبل الحفظ.','info');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر قراءة ملف المستخدمين.','error'); }
+}
+function renderBoardUsersImportPreview(){
+  const box=$('boardUsersImportPreview');
+  if(!box) return;
+  if(boardUsersImportRows.length){
+    const rawRows=boardUsersImportRows.map(item=>item.raw || item);
+    boardUsersImportRows=rawRows.map((row,i)=>resolveBoardUserImportRow(row,i));
+  }
+  if(!boardUsersImportRows.length){
+    box.innerHTML='<div class="empty">لم يتم رفع ملف مستخدمين بعد.</div>';
+    return;
+  }
+  const validCount=boardUsersImportRows.filter(r=>r.valid).length;
+  const invalidCount=boardUsersImportRows.length-validCount;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th></tr></thead><tbody>${boardUsersImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز كمسودة</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function clearBoardUsersImport(){
+  boardUsersImportRows=[];
+  if($('boardUsersImportFile')) $('boardUsersImportFile').value='';
+  renderBoardUsersImportPreview();
+}
+async function importBoardUsersFromExcel(){
+  try{
+    if(!boardUsersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
+    const invalid=boardUsersImportRows.filter(r=>!r.valid).length;
+    if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الخيارات أو الملف ثم أعد المحاولة.`,'error',6000);
+    const ok=await askConfirm({title:'حفظ مستخدمين من لوحة أخرى',message:`سيتم حفظ ${boardUsersImportRows.length} مستخدم كمسودة فقط بدون إرسال أي دعوة بريدية. يمكنك إرسال الدعوات لاحقًا من قسم مسودات المستخدمين المستوردين. هل تريد المتابعة؟`,okText:'حفظ كمسودة',danger:false});
+    if(!ok) return;
+    const rows=boardUsersImportRows.map(r=>({full_name:r.name,email:r.email,job_title:r.job_title||null,role:r.role,sector_id:r.sector_id,department_id:r.department_id,imported_by:state.profile.id,status:'pending'}));
+    const {error}=await supabaseClient.from('pending_user_imports').insert(rows);
+    if(error) throw error;
+    showToast(`تم حفظ ${rows.length} مستخدم كمسودة. لم يتم إرسال أي دعوة حتى الآن.`,'success',7000);
+    clearBoardUsersImport();
+    await loadAll(); renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المستخدمين كمسودة.','error',7000); }
+}
+
 let boardTasksImportRows = [];
 
 function normalizeHeaderKey(key){
