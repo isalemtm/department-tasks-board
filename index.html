@@ -242,6 +242,39 @@
           <div id="pendingUserInvitesList"></div>
         </section>
 
+        <section id="boardTasksImportPanel" class="panel card hidden">
+          <div class="section-head">
+            <div>
+              <h2>استيراد مهام من لوحة أخرى</h2>
+              <p class="meta">ارفع ملف Excel المصدّر من لوحة HR. سيتم نقل روابط المرفقات كنص داخل وصف المهمة، دون نقل الملفات بين التخزين.</p>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>ملف المهام</label>
+              <input id="boardTasksImportFile" type="file" accept=".xlsx,.xls" onchange="handleBoardTasksImportFile(event)">
+              <span class="meta">يفضّل استخدام ملف "تصدير المهام للنقل بين اللوحات" من لوحة HR.</span>
+            </div>
+            <div class="form-group">
+              <label>القطاع الافتراضي للمهام المستوردة</label>
+              <select id="boardTasksImportSector" onchange="fillDepartmentSelect('boardTasksImportDepartment', this.value, true); renderBoardTasksImportPreview();"></select>
+            </div>
+            <div class="form-group">
+              <label>الإدارة الافتراضية للمهام المستوردة</label>
+              <select id="boardTasksImportDepartment" onchange="renderBoardTasksImportPreview()"></select>
+            </div>
+            <div class="form-group full">
+              <label>المسؤول الافتراضي إذا لم تتم مطابقة البريد</label>
+              <select id="boardTasksImportResponsible" onchange="renderBoardTasksImportPreview()"></select>
+            </div>
+          </div>
+          <div id="boardTasksImportPreview" style="margin-top:12px;"></div>
+          <div class="actions" style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="importBoardTasksFromExcel()">استيراد المهام</button>
+            <button class="btn" onclick="clearBoardTasksImport()">مسح الملف</button>
+          </div>
+        </section>
+
         <section id="requestsPanel" class="panel card"><h2>طلبات الانضمام</h2><div id="requestsList"></div></section>
         <section id="transferRequestsPanel" class="panel card hidden"><h2>طلبات تحويل المهام</h2><p class="meta">طلبات التحويل التي يرفعها الموظفون، ولا يتم تحويل المهمة فعليًا إلا بعد الاعتماد.</p><div id="transferRequestsList"></div></section>
         <section class="panel card"><h2>المستخدمون</h2><div id="usersTable"></div></section>
@@ -842,6 +875,7 @@ function renderAdmin(){
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
+  $('boardTasksImportPanel')?.classList.toggle('hidden',!canManageUserImports());
   if(isAdmin()){
     fillSectorSelect('adminInviteSector', true);
     fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true);
@@ -851,6 +885,8 @@ function renderAdmin(){
   renderUsers();
   renderUsersImportPreview();
   renderPendingUserImports();
+  setupBoardTaskImportControls();
+  renderBoardTasksImportPreview();
 }
 async function inviteUserByAdmin(){
   try{
@@ -876,6 +912,7 @@ async function inviteUserByAdmin(){
 }
 
 let usersImportRows = [];
+let boardTasksImportRows = [];
 
 function normalizeHeaderKey(key){
   return String(key||'').replace(/\s+/g,' ').trim();
@@ -1068,6 +1105,323 @@ async function sendPendingUserInvites(){
     showToast(`تم إرسال الدعوات. نجح ${summary.success ?? sentIds.length}، فشل ${summary.failed ?? failedIds.length}.`,'success',7000);
     await loadAll(); renderAdmin();
   }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال الدعوات.','error',7000); }
+}
+
+
+function setupBoardTaskImportControls(){
+  if(!$('boardTasksImportSector') || !$('boardTasksImportResponsible')) return;
+
+  const currentSector=$('boardTasksImportSector').value;
+  const currentDept=$('boardTasksImportDepartment').value;
+  const currentResponsible=$('boardTasksImportResponsible').value;
+
+  fillSectorSelect('boardTasksImportSector', true);
+
+  if(isSectorHead() || isDepartmentManager() || currentRole()==='employee'){
+    $('boardTasksImportSector').value=state.profile.sector_id||'';
+    $('boardTasksImportSector').disabled=true;
+  }else{
+    $('boardTasksImportSector').disabled=false;
+    if(currentSector) $('boardTasksImportSector').value=currentSector;
+  }
+
+  fillDepartmentSelect('boardTasksImportDepartment', $('boardTasksImportSector').value, true);
+
+  if(isDepartmentManager()){
+    $('boardTasksImportDepartment').value=state.profile.department_id||'';
+    $('boardTasksImportDepartment').disabled=true;
+  }else{
+    $('boardTasksImportDepartment').disabled=false;
+    if(currentDept) $('boardTasksImportDepartment').value=currentDept;
+  }
+
+  const sectorId=$('boardTasksImportSector').value;
+  const departmentId=$('boardTasksImportDepartment').value;
+  let users=state.users.filter(u=>u.is_active);
+  if(sectorId) users=users.filter(u=>u.sector_id===sectorId || u.id===state.profile.id);
+  if(departmentId) users=users.filter(u=>u.department_id===departmentId || u.id===state.profile.id);
+  if(!users.some(u=>u.id===state.profile.id) && state.profile) users.unshift(state.profile);
+
+  $('boardTasksImportResponsible').innerHTML=users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('');
+  if(currentResponsible && users.some(u=>u.id===currentResponsible)) $('boardTasksImportResponsible').value=currentResponsible;
+  else if(state.profile?.id && users.some(u=>u.id===state.profile.id)) $('boardTasksImportResponsible').value=state.profile.id;
+}
+
+function getBoardTaskImportCell(row,names){
+  for(const n of names){
+    if(row[n]!==undefined && row[n]!==null && String(row[n]).trim()!=='') return row[n];
+  }
+  return '';
+}
+
+function normalizeBoardTaskImportRow(row){
+  const normalized={};
+  Object.keys(row||{}).forEach(k=>normalized[normalizeHeaderKey(k)]=row[k]);
+  return normalized;
+}
+
+function normalizeImportedStatus(value){
+  const v=String(value||'').trim();
+  if(v==='مكتملة') return 'مكتملة';
+  if(v==='قيد التنفيذ' || v==='متأخرة') return 'قيد التنفيذ';
+  return 'جديدة';
+}
+
+function normalizeImportedPriority(value){
+  const v=String(value||'').trim();
+  if(v==='عالية' || v==='منخفضة' || v==='عادية') return v;
+  return 'عادية';
+}
+
+function normalizeImportedDate(value){
+  if(!value) return null;
+  if(value instanceof Date && !isNaN(value)) return value.toISOString().slice(0,10);
+  if(typeof value==='number' && typeof XLSX!=='undefined'){
+    const parsed=XLSX.SSF.parse_date_code(value);
+    if(parsed){
+      const y=parsed.y;
+      const m=String(parsed.m).padStart(2,'0');
+      const d=String(parsed.d).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const text=String(value).trim();
+  const iso=text.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(iso){
+    return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
+  }
+  const d=new Date(text);
+  if(!isNaN(d)) return d.toISOString().slice(0,10);
+  return null;
+}
+
+function splitEmails(value){
+  return String(value||'')
+    .split(/[;,،\n]+/)
+    .map(v=>v.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function userByEmail(email){
+  const value=String(email||'').trim().toLowerCase();
+  if(!value) return null;
+  return state.users.find(u=>String(u.email||'').trim().toLowerCase()===value && u.is_active) || null;
+}
+
+function sectorByNameLoose(name){
+  const value=String(name||'').trim();
+  if(!value) return null;
+  return state.sectors.find(s=>String(s.name||'').trim()===value) || null;
+}
+
+function departmentByNameLoose(name, sectorId){
+  const value=String(name||'').trim();
+  if(!value) return null;
+  return state.departments.find(d=>String(d.name||'').trim()===value && (!sectorId || d.sector_id===sectorId)) || null;
+}
+
+function buildImportedTaskDescription(row){
+  const base=String(row.description||'').trim();
+  const taskLinks=String(row.task_attachment_links||'').trim();
+  const commentLinks=String(row.comment_attachment_links||'').trim();
+  const latestComment=String(row.latest_comment||'').trim();
+  const source=String(row.source||'لوحة أخرى').trim();
+  const createdAt=String(row.source_created_at||'').trim();
+
+  const parts=[];
+  if(base) parts.push(base);
+
+  const transferInfo=[];
+  transferInfo.push(`مصدر المهمة: ${source}`);
+  if(createdAt) transferInfo.push(`تاريخ الإنشاء في المصدر: ${createdAt}`);
+  if(latestComment) transferInfo.push(`آخر تعليق من المصدر:\n${latestComment}`);
+  if(taskLinks) transferInfo.push(`روابط مرفقات المهمة المنقولة:\n${taskLinks}`);
+  if(commentLinks) transferInfo.push(`روابط مرفقات التعليقات المنقولة:\n${commentLinks}`);
+
+  if(transferInfo.length) {
+    parts.push(`---\nمعلومات منقولة من لوحة أخرى:\n${transferInfo.join('\n\n')}`);
+  }
+
+  return parts.join('\n\n');
+}
+
+function resolveBoardTaskImportRow(rawRow,index){
+  const row=normalizeBoardTaskImportRow(rawRow);
+  const defaultSectorId=$('boardTasksImportSector')?.value || state.profile?.sector_id || '';
+  const defaultDeptId=$('boardTasksImportDepartment')?.value || (isDepartmentManager()?state.profile.department_id:'') || '';
+  const defaultResponsibleId=$('boardTasksImportResponsible')?.value || state.profile?.id || '';
+
+  const sectorName=String(getBoardTaskImportCell(row,['القطاع','sector','Sector'])).trim();
+  const departmentName=String(getBoardTaskImportCell(row,['الإدارة','الادارة','department','Department'])).trim();
+  const sector=sectorByNameLoose(sectorName);
+  const sector_id=sector?.id || defaultSectorId || null;
+  const department=departmentByNameLoose(departmentName, sector_id);
+  const department_id=department?.id || defaultDeptId || null;
+
+  const responsibleEmail=String(getBoardTaskImportCell(row,['بريد المسؤول','البريد المسؤول','responsible_email','Responsible Email'])).trim().toLowerCase();
+  const assigneeEmails=splitEmails(getBoardTaskImportCell(row,['بريد المسند إليهم','ايميلات المسند إليهم','assignee_emails','Assignee Emails']));
+  const responsibleUser=userByEmail(responsibleEmail) || assigneeEmails.map(userByEmail).find(Boolean) || state.users.find(u=>u.id===defaultResponsibleId) || state.profile;
+
+  const matchedAssignees=[...new Set([
+    responsibleUser?.id,
+    ...assigneeEmails.map(email=>userByEmail(email)?.id).filter(Boolean)
+  ].filter(Boolean))];
+
+  const title=String(getBoardTaskImportCell(row,['عنوان المهمة','المهمة','title','Title'])).trim();
+  const description=String(getBoardTaskImportCell(row,['وصف المهمة','الوصف','description','Description'])).trim();
+  const status=normalizeImportedStatus(getBoardTaskImportCell(row,['الحالة','status','Status']));
+  const priority=normalizeImportedPriority(getBoardTaskImportCell(row,['الأولوية','الاولوية','priority','Priority']));
+  const due_date=normalizeImportedDate(getBoardTaskImportCell(row,['تاريخ الاستحقاق','تاريخ الإستحقاق','due_date','Due Date']));
+  const latest_comment=String(getBoardTaskImportCell(row,['آخر تعليق','اخر تعليق','latest_comment','Latest Comment'])).trim();
+  const task_attachment_links=String(getBoardTaskImportCell(row,['روابط مرفقات المهمة','مرفقات المهمة','task_attachment_links','Task Attachment Links'])).trim();
+  const comment_attachment_links=String(getBoardTaskImportCell(row,['روابط مرفقات التعليقات','مرفقات التعليقات','comment_attachment_links','Comment Attachment Links'])).trim();
+  const source=String(getBoardTaskImportCell(row,['مصدر اللوحة','المصدر','source','Source'])).trim() || 'لوحة أخرى';
+  const source_created_at=String(getBoardTaskImportCell(row,['تاريخ الإنشاء','تاريخ الانشاء','created_at','Created At'])).trim();
+
+  const errors=[];
+  if(!title) errors.push('عنوان المهمة مطلوب');
+  if(!sector_id) errors.push('اختر القطاع الافتراضي أو أضف القطاع في الملف');
+  if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد المسؤول');
+  if(isSectorHead() && sector_id!==state.profile.sector_id) errors.push('لا يمكن استيراد مهام خارج قطاعك');
+  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج إدارتك');
+
+  return {
+    row_number:index+2,
+    title,
+    description,
+    status,
+    priority,
+    due_date,
+    sector_id,
+    sector_name:nameOfSector(sector_id),
+    department_id,
+    department_name:nameOfDept(department_id),
+    responsible_id:responsibleUser?.id||null,
+    responsible_name:responsibleUser?.name||'—',
+    assignee_ids:matchedAssignees,
+    latest_comment,
+    task_attachment_links,
+    comment_attachment_links,
+    source,
+    source_created_at,
+    final_description:null,
+    valid:errors.length===0,
+    errors
+  };
+}
+
+function refreshBoardTaskImportRows(){
+  boardTasksImportRows=boardTasksImportRows.map(item=>resolveBoardTaskImportRow(item.raw || item, item.original_index ?? (item.row_number-2)));
+}
+
+async function handleBoardTasksImportFile(event){
+  try{
+    const file=event.target.files?.[0];
+    if(!file){ boardTasksImportRows=[]; renderBoardTasksImportPreview(); return; }
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة قراءة Excel. حدّث الصفحة وحاول مرة أخرى.','error');
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const sheet=wb.Sheets[wb.SheetNames[0]];
+    const raw=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+    if(!raw.length){ boardTasksImportRows=[]; renderBoardTasksImportPreview(); return showToast('الملف لا يحتوي على مهام.','error'); }
+    boardTasksImportRows=raw.map((row,i)=>{
+      const resolved=resolveBoardTaskImportRow(row,i);
+      resolved.raw=row;
+      resolved.original_index=i;
+      return resolved;
+    });
+    renderBoardTasksImportPreview();
+    showToast('تمت قراءة ملف المهام. راجع المعاينة قبل الاستيراد.','info');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر قراءة ملف المهام.','error'); }
+}
+
+function renderBoardTasksImportPreview(){
+  const box=$('boardTasksImportPreview');
+  if(!box) return;
+  if(boardTasksImportRows.length){
+    const rawRows=boardTasksImportRows.map(item=>item.raw || item);
+    boardTasksImportRows=rawRows.map((row,i)=>{
+      const resolved=resolveBoardTaskImportRow(row,i);
+      resolved.raw=row;
+      resolved.original_index=i;
+      return resolved;
+    });
+  }
+
+  if(!boardTasksImportRows.length){
+    box.innerHTML='<div class="empty">لم يتم رفع ملف مهام بعد.</div>';
+    return;
+  }
+
+  const validCount=boardTasksImportRows.filter(r=>r.valid).length;
+  const invalidCount=boardTasksImportRows.length-validCount;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المهام: ${boardTasksImportRows.length} | صالح للاستيراد: ${validCount} | فيه أخطاء: ${invalidCount}</div>
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th></tr></thead><tbody>${boardTasksImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function clearBoardTasksImport(){
+  boardTasksImportRows=[];
+  if($('boardTasksImportFile')) $('boardTasksImportFile').value='';
+  renderBoardTasksImportPreview();
+}
+
+async function importBoardTasksFromExcel(){
+  try{
+    if(!boardTasksImportRows.length) return showToast('ارفع ملف المهام أولاً.','error');
+    renderBoardTasksImportPreview();
+    const invalid=boardTasksImportRows.filter(r=>!r.valid).length;
+    if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الإعدادات أو الملف ثم أعد المحاولة.`,'error',7000);
+
+    const ok=await askConfirm({
+      title:'استيراد المهام',
+      message:`سيتم استيراد ${boardTasksImportRows.length} مهمة إلى لوحة الإدارات والقطاعات. روابط المرفقات ستضاف كنص داخل وصف المهمة ولن يتم نقل الملفات فعليًا. هل تريد المتابعة؟`,
+      okText:'استيراد المهام',
+      danger:false
+    });
+    if(!ok) return;
+
+    let imported=0;
+    for(const row of boardTasksImportRows){
+      const payload={
+        title:row.title,
+        description:buildImportedTaskDescription(row),
+        status:row.status,
+        priority:row.priority,
+        created_by:state.profile.id,
+        owner_sector_id:state.profile.sector_id,
+        owner_department_id:state.profile.department_id,
+        target_sector_id:row.sector_id,
+        target_department_id:row.department_id,
+        primary_responsible_id:row.responsible_id,
+        assignment_type:'imported',
+        task_level:'employee',
+        due_date:row.due_date,
+        approval_status:'approved',
+        approved_by:state.profile.id,
+        approved_at:new Date().toISOString(),
+        attachment_urls:[],
+        attachment_names:[]
+      };
+
+      const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
+      if(error) throw error;
+
+      const assignees=[...new Set([row.responsible_id,...(row.assignee_ids||[]),state.profile.id].filter(Boolean))];
+      if(assignees.length){
+        const rows=assignees.map(uid=>({task_id:data.id,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===row.responsible_id?'primary':'assignee'}));
+        const inserted=await supabaseClient.from('task_assignees').insert(rows);
+        if(inserted.error) throw inserted.error;
+      }
+      imported++;
+    }
+
+    clearBoardTasksImport();
+    await loadAll();
+    setupFilters();
+    renderTasks();
+    renderDashboard();
+    showToast(`تم استيراد ${imported} مهمة بنجاح.`, 'success', 7000);
+  }catch(e){ console.error(e); showToast(e.message||'تعذر استيراد المهام.','error',7000); }
 }
 
 function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
