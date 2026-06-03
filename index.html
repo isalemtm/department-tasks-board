@@ -1623,6 +1623,24 @@ function userByEmail(email){
   return state.users.find(u=>String(u.email||'').trim().toLowerCase()===value && u.is_active) || null;
 }
 
+function normalizeArabicNameForMatch(value){
+  return String(value||'')
+    .trim()
+    .replace(/[إأآا]/g,'ا')
+    .replace(/ى/g,'ي')
+    .replace(/ة/g,'ه')
+    .replace(/\s+/g,' ')
+    .toLowerCase();
+}
+
+function userByNameLoose(name){
+  const value=normalizeArabicNameForMatch(name);
+  if(!value) return null;
+  return state.users.find(u=>u.is_active && normalizeArabicNameForMatch(u.name)===value)
+    || state.users.find(u=>u.is_active && normalizeArabicNameForMatch(u.name).includes(value))
+    || state.users.find(u=>u.is_active && value.includes(normalizeArabicNameForMatch(u.name)));
+}
+
 function sectorByNameLoose(name){
   const value=String(name||'').trim();
   if(!value) return null;
@@ -2465,22 +2483,35 @@ function resolveBoardTaskImportRow(rawRow,index){
   const defaultResponsibleId=$('boardTasksImportResponsible')?.value || state.profile?.id || '';
 
   const responsibleEmail=String(getBoardTaskImportCell(row,['بريد المسؤول','البريد المسؤول','responsible_email','Responsible Email','البريد الإلكتروني','البريد الالكتروني','email','Email'])).trim().toLowerCase();
+  const responsibleName=String(getBoardTaskImportCell(row,['اسم المسؤول','المسؤول','المسؤول الرئيسي','responsible_name','Responsible Name','Responsible'])).trim();
   const assigneeEmails=splitEmails(getBoardTaskImportCell(row,['بريد المسند إليهم','ايميلات المسند إليهم','assignee_emails','Assignee Emails','المسند إليهم','assignees']));
+  const assigneeNames=String(getBoardTaskImportCell(row,['المسند إليهم','أسماء المسند إليهم','اسم المسند إليهم','assignee_names','Assignee Names']))
+    .split(/[،,;\n]+/)
+    .map(v=>v.trim())
+    .filter(Boolean);
+
+  const defaultResponsible=state.users.find(u=>u.id===defaultResponsibleId) || state.profile;
   const responsibleUser=userByEmail(responsibleEmail)
+    || userByNameLoose(responsibleName)
     || assigneeEmails.map(userByEmail).find(Boolean)
-    || state.users.find(u=>u.id===defaultResponsibleId)
-    || state.profile;
+    || assigneeNames.map(userByNameLoose).find(Boolean)
+    || defaultResponsible;
 
   const sectorName=String(getBoardTaskImportCell(row,['القطاع','sector','Sector'])).trim();
   const departmentName=String(getBoardTaskImportCell(row,['الإدارة','الادارة','department','Department'])).trim();
   const sectorFromFile=sectorByNameLoose(sectorName);
   const sector_id=sectorFromFile?.id || responsibleUser?.sector_id || defaultSectorId || null;
   const departmentFromFile=departmentByNameLoose(departmentName, sector_id);
-  const department_id=departmentFromFile?.id || responsibleUser?.department_id || defaultDeptId || null;
+
+  // مهم: رئيس القطاع لا يلزم أن يكون تابعًا لإدارة. لذلك إذا كان المسؤول رئيس قطاع
+  // نسمح بأن تكون الإدارة فارغة، ونكتفي بتحديد القطاع حتى تُسند المهمة له باسمه.
+  const responsibleIsSectorHead = responsibleUser?.role === 'sector_head';
+  const department_id = departmentFromFile?.id || (responsibleIsSectorHead ? null : (responsibleUser?.department_id || defaultDeptId || null));
 
   const matchedAssignees=[...new Set([
     responsibleUser?.id,
-    ...assigneeEmails.map(email=>userByEmail(email)?.id).filter(Boolean)
+    ...assigneeEmails.map(email=>userByEmail(email)?.id).filter(Boolean),
+    ...assigneeNames.map(name=>userByNameLoose(name)?.id).filter(Boolean)
   ].filter(Boolean))];
 
   const title=String(getBoardTaskImportCell(row,['عنوان المهمة','المهمة','title','Title'])).trim();
@@ -2496,8 +2527,8 @@ function resolveBoardTaskImportRow(rawRow,index){
 
   const errors=[];
   if(!title) errors.push('عنوان المهمة مطلوب');
-  if(!sector_id) errors.push('لم يتم تحديد قطاع للمهمة؛ اختر القطاع الافتراضي أو طابق بريد المسؤول مع مستخدم له قطاع');
-  if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد المسؤول');
+  if(!sector_id) errors.push('لم يتم تحديد قطاع للمهمة؛ اختر القطاع الافتراضي أو طابق بريد/اسم المسؤول مع مستخدم له قطاع');
+  if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد/اسم المسؤول');
   if(isSectorHead() && sector_id!==state.profile.sector_id) errors.push('لا يمكن استيراد مهام خارج قطاعك');
   if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج إدارتك');
 
@@ -2511,7 +2542,7 @@ function resolveBoardTaskImportRow(rawRow,index){
     sector_id,
     sector_name:nameOfSector(sector_id),
     department_id,
-    department_name:nameOfDept(department_id),
+    department_name:department_id ? nameOfDept(department_id) : (responsibleIsSectorHead ? '— رئيس قطاع بدون إدارة' : nameOfDept(department_id)),
     responsible_id:responsibleUser?.id||null,
     responsible_name:responsibleUser?.name||'—',
     assignee_ids:matchedAssignees,
