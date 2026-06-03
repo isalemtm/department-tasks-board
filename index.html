@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>لوحة متابعة مهام الإدارات</title>
+  <link rel="icon" href="dam-logo.png" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
@@ -25,18 +26,70 @@
     @keyframes toastIn{from{opacity:0;transform:translate(-10px,-8px)}to{opacity:1;transform:translate(0,0)}}
     .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:15px}
     .section-head h2{margin:0!important}
+    .task-card.task-highlight{border-color:var(--warn);box-shadow:0 0 0 3px rgba(217,139,58,.18), var(--shadow)}
     .task-card.due-soon{border-color:#c75b5b;box-shadow:0 10px 28px rgba(199,91,91,.16)}
     .task-card.due-soon .task-title:before{content:"تنبيه قريب الاستحقاق";display:inline-block;background:#fdeaea;color:#8b2f2f;border-radius:999px;padding:3px 9px;font-size:11px;margin-left:8px;vertical-align:middle}
     table{font-size:15px}th{font-weight:900}
     .grid{display:grid;gap:16px}.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:16px}.stat{padding:17px;text-align:center}.stat span{color:var(--muted);font-size:13px}.stat strong{display:block;font-size:32px;color:var(--primary2);line-height:1.2}.panel{padding:20px;margin-bottom:18px}.panel h2,.panel h3{margin:0 0 15px;color:var(--primary2)}.filters{display:grid;grid-template-columns:1fr 220px 220px 220px;gap:12px;margin-bottom:15px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}table{width:100%;border-collapse:collapse;min-width:900px}th,td{padding:12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}th{background:#f1e9e2;color:var(--primary2);white-space:nowrap}.chip{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;background:#eef2f7;color:#35516a}.chip.done{background:#e9f8f4;color:#166c61}.chip.progress{background:#fff0d8;color:#935c1b}.chip.late{background:#fdeaea;color:#8b2f2f}.chip.high{background:#fdeaea;color:#8b2f2f}.chip.medium{background:#f4f0ec;color:#61463b}.chip.low{background:#e9f8f4;color:#166c61}.task-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff;margin-bottom:14px}.task-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.task-title{font-size:21px;color:var(--primary2);font-weight:900}.meta{color:var(--muted);font-size:14px}.task-desc{white-space:pre-wrap;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.comment-box{background:#fbf8f5;border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}.comment{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}.comment-head{display:flex;justify-content:space-between;color:var(--muted);font-size:13px}.attachments a{display:inline-block;margin:4px 0 4px 8px;color:#174ea6}.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;border:1px solid #d8cac0;border-radius:12px;padding:10px;background:#fff}.checkbox-item{display:flex;align-items:center;gap:8px;background:#fbf8f5;border:1px solid var(--line);border-radius:10px;padding:8px}.checkbox-item input{width:auto}.empty{padding:25px;text-align:center;color:var(--muted);border:1px dashed #d8cac0;border-radius:14px;background:#fff}.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:18px}.modal{background:#fff;border-radius:22px;width:min(900px,100%);max-height:92vh;overflow:auto;padding:22px}.modal-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px;align-items:center}.confirm-text{white-space:pre-wrap;color:var(--text);margin:0 0 14px}.confirm-input{margin-top:10px}.link{background:none;border:0;color:var(--primary);text-decoration:underline;cursor:pointer;font-family:inherit}
     @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.filters,.form-grid{grid-template-columns:1fr}.topbar-inner{align-items:flex-start;flex-direction:column}.task-top{flex-direction:column}.container{padding:13px}.panel{padding:15px}}
+  
+    /* HR-inspired visual layer transferred safely to department/sector board */
+    .brand{display:flex;align-items:center;gap:16px;min-width:220px}
+    .brand img{width:170px;max-width:34vw;height:auto;object-fit:contain;background:transparent}
+    .title-box{flex:1;text-align:right}
+    .title-box h1{margin:0 0 6px;color:var(--primary2);font-size:30px;line-height:1.2}
+    .title-box p{margin:0;color:var(--primary);font-size:15px}
+    .app-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:18px 0 20px;padding:18px 20px}
+    .welcome h2{margin:0 0 6px;font-size:24px;color:var(--primary2)}
+    .welcome p{margin:0;color:var(--muted)}
+    .app-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .app-actions .btn.active{background:var(--primary);color:#fff}
+    .section-title{margin:0 0 18px;font-size:24px;color:var(--primary2)}
+    .empty-state{padding:25px;text-align:center;color:var(--muted);border:1px dashed #d8cac0;border-radius:14px;background:rgba(255,255,255,.72)}
+    .status-chip{display:inline-block;padding:6px 12px;border-radius:999px;font-size:13px}
+    .status-جديدة{background:rgba(109,138,168,.14);color:#35516a}
+    .status-قيد-التنفيذ{background:rgba(217,139,58,.14);color:#8d5b19}
+    .status-مكتملة{background:rgba(42,157,143,.14);color:#1f6e65}
+    .status-متأخرة{background:rgba(199,91,91,.14);color:#8b2f2f}
+    .priority-chip{display:inline-block;padding:5px 10px;border-radius:999px;font-size:13px;background:#f4f0ec;color:var(--primary);margin-inline-start:8px}
+    .employee-dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:12px}
+    .employee-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff}
+    .employee-top{display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:12px}
+    .employee-title{margin:0;font-size:20px;color:var(--primary2)}
+    .employee-mini-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+    .mini-stat{background:#f8f5f2;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+    .mini-stat strong{display:block;font-size:20px;color:var(--primary2)}
+    .mini-stat span{color:var(--muted);font-size:13px}
+    .progress-wrap{margin-top:12px;background:#f3eee9;border-radius:999px;overflow:hidden;height:10px}
+    .progress-bar{height:100%;background:var(--good);width:0%}
+    .summary-task-row{cursor:pointer;transition:.2s ease}
+    .summary-task-row:hover td{background:#fbf6f1}
+    .summary-task-row.task-due-soon td{background:rgba(199,91,91,.08);border-top:1px solid rgba(199,91,91,.22);border-bottom:1px solid rgba(199,91,91,.22)}
+    .summary-task-row.task-due-soon td:first-child{border-inline-start:6px solid var(--bad);font-weight:700;color:#8b2f2f}
+    .due-soon-label{display:inline-block;margin-inline-start:8px;padding:3px 8px;border-radius:999px;background:rgba(199,91,91,.12);color:#8b2f2f;font-size:12px;font-weight:700}
+    .executive-stats{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:14px;margin:0 0 18px;align-items:stretch}
+    .executive-employees-row{grid-column:3 / 5;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:4px}
+    .executive-stat-card{padding:16px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(180deg,#ffffff 0%,#faf6f2 100%);box-shadow:var(--shadow);text-align:center}
+    .executive-stat-card span{display:block;color:var(--muted);font-size:13px;margin-bottom:8px}
+    .executive-stat-card strong{display:block;color:var(--primary2);font-size:30px;line-height:1.1}
+    .executive-stat-card small{display:block;color:var(--muted);margin-top:8px;line-height:1.6}
+    .comment-box h5{margin:0 0 10px;font-size:16px;color:var(--primary2)}
+    @media(max-width:992px){.executive-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.executive-employees-row{grid-column:1/-1;max-width:520px;width:100%;justify-self:center}}
+    @media(max-width:768px){.brand{justify-content:center}.brand img{width:220px}.title-box{text-align:center}.title-box h1{font-size:24px}.app-header{flex-direction:column;align-items:stretch}.app-actions{flex-direction:column;align-items:stretch}.executive-stats{grid-template-columns:1fr}.executive-employees-row{grid-column:1/-1;grid-template-columns:1fr;max-width:none}.employee-mini-stats{grid-template-columns:1fr}}
+
   </style>
 </head>
 <body>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
   <header class="topbar">
     <div class="topbar-inner">
-      <div class="brand"><h1>لوحة متابعة مهام الإدارات</h1><p>نظام مؤسسي لمتابعة مهام القطاعات والإدارات</p></div>
+      <div class="brand">
+        <img src="dam-logo.png" alt="شعار مجموعة دام القابضة" onerror="this.style.display='none'" />
+      </div>
+      <div class="title-box">
+        <h1>لوحة متابعة مهام الإدارات</h1>
+        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات والإدارات</p>
+      </div>
       <div id="userBar" class="userbar hidden"><span id="userBadge" class="badge">—</span><button class="btn btn-sm" onclick="logout()">تسجيل الخروج</button></div>
     </div>
   </header>
@@ -63,10 +116,16 @@
 
 
     <section id="appSection" class="hidden">
-      <div class="tabs">
-        <button id="tabTasks" class="tab active" onclick="showPage('tasks')">المهام</button>
-        <button id="tabDashboard" class="tab" onclick="showPage('dashboard')">الداشبورد</button>
-        <button id="tabAdmin" class="tab hidden" onclick="showPage('admin')">الإعدادات والاعتمادات</button>
+      <div class="app-header card">
+        <div class="welcome">
+          <h2 id="welcomeName">مرحباً</h2>
+          <p id="welcomeRole">صلاحيتك:</p>
+        </div>
+        <div class="app-actions">
+          <button id="tabTasks" class="btn btn-secondary active" onclick="showPage('tasks')">المهام</button>
+          <button id="tabDashboard" class="btn btn-info" onclick="showPage('dashboard')">داشبورد الموظفين</button>
+          <button id="tabAdmin" class="btn btn-secondary hidden" onclick="showPage('admin')">إدارة المستخدمين</button>
+        </div>
       </div>
 
       <section id="tasksPage">
@@ -142,7 +201,6 @@
     <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
     <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
     <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء إدارات</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
-    <div class="form-group"><label>طريقة تنفيذ المهمة</label><select id="collaborationMode"><option value="shared" selected>مهمة مشتركة للجميع</option><option value="individual">مهمة منفصلة لكل شخص</option></select></div>
     <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
     <div class="form-group"><label>الإدارة المستهدفة</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
     <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
@@ -233,7 +291,7 @@ function canDeleteTask(t){
 
 async function init(){ await loadPublicLookups(); const {data}=await supabaseClient.auth.getSession(); state.session=data.session; if(state.session){const ok=await bootstrap(); if(!ok) showAuthOnly();} else showAuthOnly(); }
 function showAuthOnly(){ $('authSection').classList.remove('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.add('hidden'); $('userBar').classList.add('hidden'); fillSectorSelect('requestSector',true); fillDepartmentSelect('requestDepartment', $('requestSector').value, true); }
-function showApp(){ $('authSection').classList.add('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.remove('hidden'); $('userBar').classList.remove('hidden'); $('userBadge').textContent=`${state.profile.name} - ${roleLabel(state.profile.role)}`; $('tabAdmin').classList.toggle('hidden',!(isAdmin() || isSectorHead())); }
+function showApp(){ $('authSection').classList.add('hidden'); $('passwordSetupSection').classList.add('hidden'); $('appSection').classList.remove('hidden'); $('userBar').classList.remove('hidden'); $('userBadge').textContent=`${state.profile.name} - ${roleLabel(state.profile.role)}`; if($('welcomeName')) $('welcomeName').textContent=`مرحباً ${state.profile.name}`; if($('welcomeRole')) $('welcomeRole').textContent=`صلاحيتك: ${roleLabel(state.profile.role)}`; $('tabAdmin').classList.toggle('hidden',!(isAdmin() || isSectorHead())); }
 function showPasswordSetup(){ $('authSection').classList.add('hidden'); $('appSection').classList.add('hidden'); $('passwordSetupSection').classList.remove('hidden'); $('userBar').classList.add('hidden'); }
 async function bootstrap(){ await loadProfile(); if(!state.profile){ await supabaseClient.auth.signOut(); showNotice('تم تسجيل الدخول لكن الحساب غير مفعل في النظام. انتظر اعتماد مدير النظام.','info'); return false;} if(state.profile.must_set_password){ showPasswordSetup(); return true; } await loadAll(); setupFilters(); showApp(); showPage('tasks'); return true; }
 async function loadPublicLookups(){ const [s,d]=await Promise.all([supabaseClient.from('sectors').select('*').order('name'),supabaseClient.from('departments').select('*').order('name')]); state.sectors=s.data||[]; state.departments=d.data||[]; }
@@ -283,19 +341,18 @@ function exportTasksToExcel(){
       'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
       'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
       'تاريخ الاستحقاق':formatDate(t.due_date),
-      'طريقة التنفيذ':t.collaboration_mode==='individual'?'منفصلة':'مشتركة',
       'تاريخ الإنشاء':formatDate(t.created_at)
     }));
     if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
     const ws=XLSX.utils.json_to_sheet(rows);
-    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16},{wch:16}];
+    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16}];
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'مهام الإدارات');
     XLSX.writeFile(wb,`مهام_الإدارات_${new Date().toISOString().slice(0,10)}.xlsx`);
     showToast('تم تصدير ملف Excel بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
 }
-function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div></div></div>` }
+function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div></div></div>` }
 function renderAttachments(urls=[],names=[]){ if(!urls||!urls.length)return ''; return `<div class="attachments meta">المرفقات:<br>${urls.map((u,i)=>`<a href="${escapeHtml(u)}" target="_blank">${escapeHtml(names?.[i]||'مرفق '+(i+1))}</a>`).join('')}</div>` }
 
 function openTaskModal(){
@@ -416,34 +473,19 @@ async function saveTask(){
     const title=$('taskTitle').value.trim();
     if(!title){ showToast('اكتب عنوان المهمة.','error'); return; }
     const type=$('assignmentType').value;
-    const collaborationMode=$('collaborationMode')?.value || 'shared';
     let selected=[...$('assigneePicker').querySelectorAll('input:checked')].map(i=>i.value);
     if(type==='all_company') selected=state.users.filter(u=>u.is_active).map(u=>u.id);
     if(type==='all_sector') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetSector').value||u.sector_id===$('taskTargetSector').value)).map(u=>u.id);
     if(type==='all_department') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetDepartment').value||u.department_id===$('taskTargetDepartment').value)).map(u=>u.id);
-    selected=[...new Set(selected)];
     if(type!=='all_company' && !selected.length){ showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error'); return; }
+    if(!selected.includes(state.profile.id))selected.push(state.profile.id);
     const validationMessage=validateAssignment(type,selected);
     if(validationMessage){ showToast(validationMessage,'error'); return; }
     const files=await uploadFiles($('taskFiles').files,'tasks');
+    const primary=state.profile.id;
     const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
     const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
-    const basePayload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names,collaboration_mode:collaborationMode};
-
-    if(collaborationMode==='individual' && selected.length>1){
-      const batchId=crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const payloads=selected.map(uid=>({...basePayload,primary_responsible_id:uid,batch_id:batchId}));
-      const {data,error}=await supabaseClient.from('tasks').insert(payloads).select('id,primary_responsible_id');
-      if(error)throw error;
-      const rows=(data||[]).map(t=>({task_id:t.id,user_id:t.primary_responsible_id,assigned_by:state.profile.id,assignment_role:'primary'}));
-      if(rows.length){const r=await supabaseClient.from('task_assignees').insert(rows); if(r.error)throw r.error;}
-      closeTaskModal(); await loadAll(); renderTasks(); showToast(`تم إنشاء ${rows.length} مهمة منفصلة بنجاح.`, 'success');
-      return;
-    }
-
-    if(!selected.includes(state.profile.id)) selected.push(state.profile.id);
-    const primary=state.profile.id;
-    const payload={...basePayload,primary_responsible_id:primary,batch_id:null,collaboration_mode:'shared'};
+    const payload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names};
     const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
     if(error)throw error;
     const rows=[...new Set(selected)].map(uid=>({task_id:data.id,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===primary?'primary':'assignee'}));
@@ -534,13 +576,89 @@ function renderSectorPerformance(){
   }).join('');
   return `<section class="panel card"><h2>أداء القطاعات</h2><div class="table-wrap"><table><thead><tr><th>القطاع</th><th>ملاحظات</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
 }
+function getDaysUntilDue(t){
+  if(!t?.due_date || t.status==='مكتملة') return null;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const due=new Date(t.due_date); if(isNaN(due)) return null; due.setHours(0,0,0,0);
+  return Math.ceil((due-today)/86400000);
+}
+function getDueSoonLabel(t){
+  const days=getDaysUntilDue(t);
+  if(days===null || days>3) return '';
+  if(days<0) return 'متأخرة';
+  if(days===0) return 'مستحقة اليوم';
+  if(days===1) return 'باقي يوم واحد';
+  if(days===2) return 'باقي يومان';
+  return 'باقي 3 أيام';
+}
+function getLatestTaskComment(taskId){
+  const rows=getTaskComments(taskId);
+  return rows.length?rows[rows.length-1]:null;
+}
+function renderMyTasksSummary(){
+  const currentUserId=state.profile?.id;
+  let rows=visibleTasks();
+  if(!isAdminOrCeo()){
+    const myTaskIds=new Set(state.assignees.filter(a=>a.user_id===currentUserId).map(a=>a.task_id));
+    rows=rows.filter(t=>myTaskIds.has(t.id)||t.primary_responsible_id===currentUserId||t.created_by===currentUserId);
+  }
+  rows=rows.map(t=>({...t,derivedStatus:isLate(t)?'متأخرة':t.status})).sort((a,b)=>{
+    const ad=a.status==='مكتملة'?1:0, bd=b.status==='مكتملة'?1:0;
+    if(ad!==bd) return ad-bd;
+    const da=a.due_date?new Date(a.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    const db=b.due_date?new Date(b.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    if(da!==db) return da-db;
+    return new Date(b.created_at||0)-new Date(a.created_at||0);
+  });
+  const body=rows.length?rows.map(t=>`<tr class="summary-task-row ${isDueSoon(t)?'task-due-soon':''}" onclick="openTaskFromSummary('${t.id}')"><td>${escapeHtml(t.title||'بدون عنوان')}</td><td>${escapeHtml(t.derivedStatus||'—')}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}</td><td>${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</td><td>${escapeHtml(getLatestTaskComment(t.id)?.comment_text||'—')}</td></tr>`).join(''):'<tr><td colspan="6">لا توجد مهام حالية.</td></tr>';
+  return `<section class="panel card"><h2>${isAdminOrCeo()?'جدول مختصر بالمهام المعتمدة':'مهامي الحالية'}</h2><p class="meta">اضغط على أي مهمة لفتحها والتعليق عليها أو تحديث حالتها حسب الصلاحية.</p><div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>المسند إليهم</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+}
+function openTaskFromSummary(taskId){
+  showPage('tasks');
+  if($('searchInput')) $('searchInput').value='';
+  if($('filterStatus')) $('filterStatus').value='';
+  if($('filterSector')) $('filterSector').value='';
+  if($('filterDepartment')) $('filterDepartment').value='';
+  renderTasks();
+  setTimeout(()=>{
+    const card=document.getElementById(`task-card-${taskId}`);
+    if(!card){ showToast('لم يتم العثور على بطاقة المهمة في القائمة الحالية.','info'); return; }
+    card.scrollIntoView({behavior:'smooth',block:'center'});
+    card.classList.add('task-highlight');
+    setTimeout(()=>card.classList.remove('task-highlight'),2500);
+  },100);
+}
+function renderExecutiveSummaryCards(){
+  const tasks=visibleTasks();
+  const total=tasks.length;
+  const doneTotal=tasks.filter(t=>t.status==='مكتملة').length;
+  const now=new Date();
+  const doneMonth=tasks.filter(t=>{
+    const d=new Date(t.approved_at||t.created_at||t.due_date);
+    return t.status==='مكتملة' && !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  }).length;
+  const inProgress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length;
+  const fresh=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
+  const late=tasks.filter(isLate).length;
+  const users=usersInDashboardScope();
+  const counts=users.map(u=>({u,count:tasksForUser(u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+  const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
+  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2><div class="executive-stats"><div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن الصلاحية</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ آخر اعتماد/إنشاء</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div></div></section>`;
+}
+function renderEmployeeCards(users){
+  const cards=users.map(u=>{
+    const m=taskMetrics(tasksForUser(u.id));
+    return `<div class="employee-card"><div class="employee-top"><div><h4 class="employee-title">${escapeHtml(u.name)}</h4><div class="meta">${escapeHtml(u.email||'—')}<br>${escapeHtml(nameOfSector(u.sector_id))} / ${escapeHtml(nameOfDept(u.department_id))}</div></div><span class="status-chip status-مكتملة">الإجمالي ${m.rate}%</span></div><div class="employee-mini-stats"><div class="mini-stat"><strong>${m.total}</strong><span>إجمالي</span></div><div class="mini-stat"><strong>${m.done}</strong><span>مكتملة</span></div><div class="mini-stat"><strong>${m.progress}</strong><span>قيد التنفيذ</span></div><div class="mini-stat"><strong>${m.late}</strong><span>متأخرة</span></div></div><div class="progress-wrap"><div class="progress-bar" style="width:${m.rate}%"></div></div></div>`;
+  }).join('');
+  return `<section class="panel card"><h2>بطاقات أداء الموظفين</h2><div class="employee-dashboard-grid">${cards||'<div class="empty-state">لا توجد بيانات لعرضها حالياً.</div>'}</div></section>`;
+}
 function renderDashboard(){
   const users=usersInDashboardScope();
   let title='داشبورد مهامي';
   if(isAdminOrCeo()) title='أداء جميع الموظفين';
   else if(isSectorHead()) title='أداء موظفي القطاع';
   else if(isDepartmentManager()) title='أداء موظفي الإدارة';
-  $('dashboardContent').innerHTML=`${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
+  $('dashboardContent').innerHTML=`${renderExecutiveSummaryCards()}${renderMyTasksSummary()}${renderEmployeeCards(users)}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
 }
 function exportDashboardToExcel(){
   try{
@@ -747,6 +865,7 @@ async function deleteUserByAdmin(userId,email,name){
     showToast(e.message || 'تعذر حذف المستخدم.','error');
   }
 }
+window.openTaskFromSummary=openTaskFromSummary;
 init();
 </script>
 </body>
