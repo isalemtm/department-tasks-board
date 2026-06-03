@@ -2452,6 +2452,114 @@ init = async function(){
   if(state.session){ const ok=await bootstrap(); if(!ok) showAuthOnly(); } else showAuthOnly();
 };
 
+
+/* === PATCH: تحسين استيراد المهام من لوحة HR ===
+   - إذا كان ملف المهام لا يحتوي قطاع/إدارة، يتم أخذ القطاع والإدارة تلقائيًا من المسؤول المطابق بالبريد.
+   - يمكن حذف أي مهمة من معاينة الاستيراد قبل الحفظ.
+   - الهدف: إزالة أخطاء "اختر القطاع الافتراضي أو أضف القطاع في الملف" عندما يكون المسؤول موجودًا في النظام.
+*/
+function resolveBoardTaskImportRow(rawRow,index){
+  const row=normalizeBoardTaskImportRow(rawRow);
+  const defaultSectorId=$('boardTasksImportSector')?.value || state.profile?.sector_id || '';
+  const defaultDeptId=$('boardTasksImportDepartment')?.value || (isDepartmentManager()?state.profile.department_id:'') || '';
+  const defaultResponsibleId=$('boardTasksImportResponsible')?.value || state.profile?.id || '';
+
+  const responsibleEmail=String(getBoardTaskImportCell(row,['بريد المسؤول','البريد المسؤول','responsible_email','Responsible Email','البريد الإلكتروني','البريد الالكتروني','email','Email'])).trim().toLowerCase();
+  const assigneeEmails=splitEmails(getBoardTaskImportCell(row,['بريد المسند إليهم','ايميلات المسند إليهم','assignee_emails','Assignee Emails','المسند إليهم','assignees']));
+  const responsibleUser=userByEmail(responsibleEmail)
+    || assigneeEmails.map(userByEmail).find(Boolean)
+    || state.users.find(u=>u.id===defaultResponsibleId)
+    || state.profile;
+
+  const sectorName=String(getBoardTaskImportCell(row,['القطاع','sector','Sector'])).trim();
+  const departmentName=String(getBoardTaskImportCell(row,['الإدارة','الادارة','department','Department'])).trim();
+  const sectorFromFile=sectorByNameLoose(sectorName);
+  const sector_id=sectorFromFile?.id || responsibleUser?.sector_id || defaultSectorId || null;
+  const departmentFromFile=departmentByNameLoose(departmentName, sector_id);
+  const department_id=departmentFromFile?.id || responsibleUser?.department_id || defaultDeptId || null;
+
+  const matchedAssignees=[...new Set([
+    responsibleUser?.id,
+    ...assigneeEmails.map(email=>userByEmail(email)?.id).filter(Boolean)
+  ].filter(Boolean))];
+
+  const title=String(getBoardTaskImportCell(row,['عنوان المهمة','المهمة','title','Title'])).trim();
+  const description=String(getBoardTaskImportCell(row,['وصف المهمة','الوصف','description','Description'])).trim();
+  const status=normalizeImportedStatus(getBoardTaskImportCell(row,['الحالة','status','Status']));
+  const priority=normalizeImportedPriority(getBoardTaskImportCell(row,['الأولوية','الاولوية','priority','Priority']));
+  const due_date=normalizeImportedDate(getBoardTaskImportCell(row,['تاريخ الاستحقاق','تاريخ الإستحقاق','due_date','Due Date']));
+  const latest_comment=String(getBoardTaskImportCell(row,['آخر تعليق','اخر تعليق','latest_comment','Latest Comment'])).trim();
+  const task_attachment_links=String(getBoardTaskImportCell(row,['روابط مرفقات المهمة','مرفقات المهمة','task_attachment_links','Task Attachment Links'])).trim();
+  const comment_attachment_links=String(getBoardTaskImportCell(row,['روابط مرفقات التعليقات','مرفقات التعليقات','comment_attachment_links','Comment Attachment Links'])).trim();
+  const source=String(getBoardTaskImportCell(row,['مصدر اللوحة','المصدر','source','Source'])).trim() || 'لوحة أخرى';
+  const source_created_at=String(getBoardTaskImportCell(row,['تاريخ الإنشاء','تاريخ الانشاء','created_at','Created At'])).trim();
+
+  const errors=[];
+  if(!title) errors.push('عنوان المهمة مطلوب');
+  if(!sector_id) errors.push('لم يتم تحديد قطاع للمهمة؛ اختر القطاع الافتراضي أو طابق بريد المسؤول مع مستخدم له قطاع');
+  if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد المسؤول');
+  if(isSectorHead() && sector_id!==state.profile.sector_id) errors.push('لا يمكن استيراد مهام خارج قطاعك');
+  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج إدارتك');
+
+  return {
+    row_number:index+2,
+    title,
+    description,
+    status,
+    priority,
+    due_date,
+    sector_id,
+    sector_name:nameOfSector(sector_id),
+    department_id,
+    department_name:nameOfDept(department_id),
+    responsible_id:responsibleUser?.id||null,
+    responsible_name:responsibleUser?.name||'—',
+    assignee_ids:matchedAssignees,
+    latest_comment,
+    task_attachment_links,
+    comment_attachment_links,
+    source,
+    source_created_at,
+    final_description:null,
+    valid:errors.length===0,
+    errors,
+    raw:rawRow,
+    original_index:index
+  };
+}
+
+function removeBoardTaskImportRow(index){
+  boardTasksImportRows.splice(index,1);
+  boardTasksImportRows=boardTasksImportRows.map((item,i)=>{
+    const resolved=resolveBoardTaskImportRow(item.raw || item, i);
+    resolved.raw=item.raw || item;
+    resolved.original_index=i;
+    return resolved;
+  });
+  renderBoardTasksImportPreview();
+  showToast('تم حذف المهمة من المعاينة فقط.','info');
+}
+
+function renderBoardTasksImportPreview(){
+  const box=$('boardTasksImportPreview');
+  if(!box) return;
+  if(boardTasksImportRows.length){
+    const rawRows=boardTasksImportRows.map(item=>item.raw || item);
+    boardTasksImportRows=rawRows.map((row,i)=>resolveBoardTaskImportRow(row,i));
+  }
+
+  if(!boardTasksImportRows.length){
+    box.innerHTML='<div class="empty">لم يتم رفع ملف مهام بعد.</div>';
+    return;
+  }
+
+  const validCount=boardTasksImportRows.filter(r=>r.valid).length;
+  const invalidCount=boardTasksImportRows.length-validCount;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المهام: ${boardTasksImportRows.length} | صالح للاستيراد: ${validCount} | فيه أخطاء: ${invalidCount}</div>
+  <p class="meta">إذا كان ملف HR لا يحتوي قطاع أو إدارة، سيأخذ النظام القطاع والإدارة تلقائيًا من المستخدم المسؤول المطابق بالبريد. ويمكنك حذف أي صف غير مطلوب قبل الاستيراد.</p>
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardTasksImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardTaskImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
 init();
 </script>
 </body>
