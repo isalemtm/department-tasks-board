@@ -1171,8 +1171,8 @@ async function downloadUsersImportTemplate(){
     const sheet = workbook.addWorksheet('المستخدمون');
     sheet.views = [{ rightToLeft: true, state: 'frozen', ySplit: 1 }];
 
-    const listSheet = workbook.addWorksheet('القوائم');
-    listSheet.state = 'veryHidden';
+    const listSheet = workbook.addWorksheet('_lists');
+    listSheet.state = 'hidden';
     listSheet.views = [{ rightToLeft: true }];
 
     const headers = ['الاسم الكامل','البريد الإلكتروني','المسمى الوظيفي','الدور','القطاع','الإدارة'];
@@ -1199,6 +1199,11 @@ async function downloadUsersImportTemplate(){
     const departmentsForCurrentUser = isSectorHead()
       ? state.departments.filter(d=>sectorIds.has(d.sector_id))
       : state.departments;
+
+    if (!sectorsForCurrentUser.length || !departmentsForCurrentUser.length) {
+      showToast('قائمة القطاعات أو الإدارات فارغة. حدّث الصفحة وتأكد من تحميل بيانات القطاعات والإدارات قبل تنزيل النموذج.','error');
+      return;
+    }
 
     listSheet.getCell('A1').value = 'الأدوار';
     rolesForCurrentUser.forEach((role, index)=>{ listSheet.getCell(index + 2, 1).value = role; });
@@ -1230,7 +1235,7 @@ async function downloadUsersImportTemplate(){
       sheet.getCell(`D${row}`).dataValidation = {
         type: 'list',
         allowBlank: false,
-        formulae: [`'القوائم'!$A$2:$A$${roleEnd}`],
+        formulae: [`'_lists'!$A$2:$A$${roleEnd}`],
         showErrorMessage: true,
         errorStyle: 'stop',
         errorTitle: 'اختيار غير مسموح',
@@ -1243,7 +1248,7 @@ async function downloadUsersImportTemplate(){
       sheet.getCell(`E${row}`).dataValidation = {
         type: 'list',
         allowBlank: false,
-        formulae: [`'القوائم'!$B$2:$B$${sectorEnd}`],
+        formulae: [`'_lists'!$B$2:$B$${sectorEnd}`],
         showErrorMessage: true,
         errorStyle: 'stop',
         errorTitle: 'اختيار غير مسموح',
@@ -1256,7 +1261,7 @@ async function downloadUsersImportTemplate(){
       sheet.getCell(`F${row}`).dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`'القوائم'!$C$2:$C$${deptEnd}`],
+        formulae: [`'_lists'!$C$2:$C$${deptEnd}`],
         showErrorMessage: true,
         errorStyle: 'stop',
         errorTitle: 'اختيار غير مسموح',
