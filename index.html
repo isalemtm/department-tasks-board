@@ -1183,6 +1183,7 @@ function ensureFullHrFeatureDom(){
           </div>
           <p class="meta">مرّر الجدول يمينًا ويسارًا لعرض جميع الأعمدة.</p>
           <div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody id="executiveTasksTable"></tbody></table></div>
+          <div id="executiveAllSectorsSections" style="margin-top:24px;"></div>
         </section>
       </section>`);
   }
@@ -1412,6 +1413,164 @@ exportTasksToExcel=function(){
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
 };
 exportDashboardToExcel=function(){ exportTasksToExcel(); };
+
+
+/* === SECTOR EXECUTIVE DASHBOARDS PATCH ===
+   يضيف رابط لوحة مستقلة لكل قطاع:
+   - اللوحة العامة: ?view=executive&token=7700
+   - لوحة قطاع محدد: ?view=sector&token=7700&sector=<sector_id>
+   - يدعم كذلك: ?view=executive&token=7700&sector=<sector_id>
+*/
+let executiveSectorScopeId = '';
+const __sectorOriginalEnsureFullHrFeatureDom = ensureFullHrFeatureDom;
+ensureFullHrFeatureDom = function(){
+  __sectorOriginalEnsureFullHrFeatureDom();
+  const section = $('executiveSection');
+  if(!section) return;
+  const h2 = section.querySelector('.section-head h2');
+  const subtitle = section.querySelector('.section-head .meta');
+  if(h2 && !h2.id) h2.id = 'executiveDirectTitle';
+  if(subtitle && !subtitle.id) subtitle.id = 'executiveDirectSubtitle';
+  const stats = $('executiveDirectStats');
+  if(stats && !$('sectorDashboardLinks')){
+    stats.insertAdjacentHTML('afterend', `
+      <div id="sectorDashboardLinks" class="panel" style="margin:0 0 16px;padding:14px;background:#fbf8f5;border:1px solid var(--line);border-radius:16px;box-shadow:none;">
+        <div class="section-head" style="margin-bottom:8px;">
+          <div>
+            <h3 style="margin:0;color:var(--primary2);font-size:18px;">روابط لوحات القطاعات</h3>
+            <p class="meta" style="margin:4px 0 0;">كل قطاع له رابط مستقل يعرض مؤشراته ومهامه فقط.</p>
+          </div>
+        </div>
+        <div id="sectorDashboardLinksBody" class="actions"></div>
+      </div>
+    `);
+  }
+};
+
+function executiveDirectBaseUrl(){
+  return `${location.origin}${location.pathname}`;
+}
+function getExecutiveSectorIdFromUrl(url){
+  return url.searchParams.get('sector') || url.searchParams.get('sector_id') || url.searchParams.get('sectorId') || '';
+}
+function renderSectorDashboardLinks(){
+  const wrap = $('sectorDashboardLinks');
+  if(wrap) wrap.classList.add('hidden');
+}
+
+init = async function(){
+  ensureFullHrFeatureDom();
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      state.session=session; state.profile=null; showPasswordSetup();
+      $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+    }
+  });
+
+  const url = new URL(location.href);
+  const view = url.searchParams.get('view');
+  if(view === 'executive' || view === 'sector'){
+    if(url.searchParams.get('token') === '7700'){
+      const sectorId = view === 'sector' ? getExecutiveSectorIdFromUrl(url) : getExecutiveSectorIdFromUrl(url);
+      await loadExecutiveDirectDashboard(sectorId);
+      return;
+    }
+    showAuthOnly();
+    showNotice('رابط المتابعة غير صحيح أو رمز الدخول غير صحيح.','error');
+    return;
+  }
+
+  const code = url.searchParams.get('code');
+  if(code){
+    const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code);
+    if(!error && data?.session){
+      state.session=data.session; state.profile=null; showPasswordSetup();
+      $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+      return;
+    }
+  }
+  const {data}=await supabaseClient.auth.getSession();
+  if(isRecoveryUrl() && data?.session){
+    state.session=data.session; state.profile=null; showPasswordSetup();
+    $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+    return;
+  }
+  state.session=data.session;
+  if(state.session){ const ok=await bootstrap(); if(!ok) showAuthOnly(); } else showAuthOnly();
+};
+
+loadExecutiveDirectDashboard = async function(sectorId=''){
+  try{
+    executiveSectorScopeId = sectorId || '';
+    await loadPublicLookups();
+    const [u,t,a,c]=await Promise.all([
+      supabaseClient.from('users').select('*').eq('is_active',true).order('name'),
+      supabaseClient.from('tasks').select('*').eq('approval_status','approved').eq('is_archived',false).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),
+      supabaseClient.from('task_assignees').select('*'),
+      supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true})
+    ]);
+    if(u.error) throw u.error; if(t.error) throw t.error; if(a.error) throw a.error; if(c.error) throw c.error;
+    state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[];
+
+    const sector = executiveSectorScopeId ? state.sectors.find(s=>s.id===executiveSectorScopeId) : null;
+    if(executiveSectorScopeId && !sector){
+      throw new Error('لم يتم العثور على القطاع المطلوب. تأكد من رابط القطاع.');
+    }
+
+    fillExecutiveFilters();
+    renderSectorDashboardLinks();
+
+    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent = sector ? `داشبورد قطاع ${sector.name}` : 'داشبورد متابعة مهام الإدارات والقطاعات';
+    if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent = sector ? 'عرض مباشر مستقل لهذا القطاع فقط: مؤشرات عامة وجدول تفصيلي للمهام.' : 'عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.';
+
+    renderExecutiveDirect();
+    $('authSection')?.classList.add('hidden');
+    $('appSection')?.classList.add('hidden');
+    $('passwordSetupSection')?.classList.add('hidden');
+    $('executiveSection')?.classList.remove('hidden');
+    $('userBar')?.classList.add('hidden');
+  }catch(e){
+    console.error(e);
+    ensureFullHrFeatureDom();
+    if($('executiveTasksTable')) $('executiveTasksTable').innerHTML=`<tr><td colspan="9">${escapeHtml(e.message || 'تعذر تحميل بيانات اللوحة. تأكد من تنفيذ SQL الخاص بصلاحية العرض المباشر.')}</td></tr>`;
+    $('authSection')?.classList.add('hidden');
+    $('appSection')?.classList.add('hidden');
+    $('passwordSetupSection')?.classList.add('hidden');
+    $('executiveSection')?.classList.remove('hidden');
+  }
+};
+
+fillExecutiveFilters = function(){
+  const sectorFilter = $('executiveSectorFilter');
+  if(sectorFilter){
+    sectorFilter.innerHTML='<option value="">كل القطاعات</option>'+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    if(executiveSectorScopeId){
+      sectorFilter.value = executiveSectorScopeId;
+      sectorFilter.disabled = true;
+    } else {
+      sectorFilter.disabled = false;
+    }
+  }
+  if($('executiveAssigneeFilter')){
+    let users = state.users;
+    if(executiveSectorScopeId) users = users.filter(u=>u.sector_id===executiveSectorScopeId);
+    $('executiveAssigneeFilter').innerHTML='<option value="">كل المسؤولين</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  }
+};
+
+renderExecutiveDirect = function(){
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
+  const selectedSector=$('executiveSectorFilter')?.value||'';
+  const fs=executiveSectorScopeId || selectedSector;
+  const fu=$('executiveAssigneeFilter')?.value||'';
+  const st=$('executiveStatusFilter')?.value||'';
+  let rows=visibleTasks().map(t=>({...t,derivedStatus:isLate(t)?'متأخرة':t.status}));
+  rows=rows.filter(t=>(!fs||t.target_sector_id===fs||t.owner_sector_id===fs)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||t.derivedStatus===st)&&(!q||`${t.title||''} ${t.description||''} ${getTaskAssignees(t.id).map(u=>u.name).join(' ')} ${nameOfUser(t.primary_responsible_id)} ${nameOfSector(t.target_sector_id||t.owner_sector_id)} ${nameOfDept(t.target_department_id||t.owner_department_id)}`.toLowerCase().includes(q)));
+  renderExecutiveDirectStats(rows);
+  const tbody=$('executiveTasksTable');
+  if(!tbody) return;
+  tbody.innerHTML=rows.length?rows.map(t=>`<tr><td>${escapeHtml(t.title||'—')}</td><td>${escapeHtml(t.description||'—')}</td><td>${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))}</td><td>${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}</td><td>${escapeHtml(nameOfUser(t.primary_responsible_id))}</td><td>${escapeHtml(t.derivedStatus)}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${formatDate(t.due_date)}</td><td>${escapeHtml(latestCommentText(t.id)||'—')}</td></tr>`).join(''):'<tr><td colspan="9">لا توجد مهام لعرضها.</td></tr>';
+};
 
 init();
 </script>
