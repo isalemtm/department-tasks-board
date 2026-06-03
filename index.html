@@ -1211,7 +1211,8 @@ function ensureFullHrFeatureDom(){
             <div><h2>داشبورد متابعة مهام الإدارات والقطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
             <span class="badge">عرض فقط</span>
           </div>
-          <div id="executiveDirectStats" class="executive-stats"></div>
+          <!-- FIX: executiveDirectStats container intentionally has no executive-stats class to avoid nested grid misalignment -->
+          <div id="executiveDirectStats"></div>
           <div class="filters" style="margin-top:16px;grid-template-columns:1fr 220px 220px 220px;">
             <input id="executiveSearchInput" placeholder="ابحث بعنوان المهمة أو الوصف أو المسؤول" oninput="renderExecutiveDirect()">
             <select id="executiveSectorFilter" onchange="renderExecutiveDirect()"><option value="">كل القطاعات</option></select>
