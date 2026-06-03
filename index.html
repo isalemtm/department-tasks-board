@@ -315,7 +315,7 @@ function fillDepartmentSelect(id,sectorId,includeEmpty=false){ const el=$(id); c
 function setupFilters(){ fillSectorSelect('filterSector',true); $('filterSector').insertAdjacentHTML('afterbegin','<option value="" selected>كل القطاعات</option>'); $('filterDepartment').innerHTML='<option value="">كل الإدارات</option>'+state.departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join(''); }
 function showPage(p){ ['tasks','dashboard','admin'].forEach(x=>{ $(x+'Page')?.classList.toggle('hidden',x!==p); $('tab'+x[0].toUpperCase()+x.slice(1))?.classList.toggle('active',x===p);}); if(p==='tasks')renderTasks(); if(p==='dashboard')renderDashboard(); if(p==='admin')renderAdmin(); }
 
-function visibleTasks(){ return state.tasks; }
+function visibleTasks(){ return state.tasks.filter(t=>t.is_archived!==true); }
 function renderStats(tasks=visibleTasks()){ $('statTotal').textContent=tasks.length; $('statNew').textContent=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length; $('statProgress').textContent=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length; $('statDone').textContent=tasks.filter(t=>t.status==='مكتملة').length; $('statLate').textContent=tasks.filter(isLate).length; }
 function getTaskAssignees(taskId){ return state.assignees.filter(a=>a.task_id===taskId).map(a=>state.users.find(u=>u.id===a.user_id)).filter(Boolean); }
 function getTaskComments(taskId){ return state.comments.filter(c=>c.task_id===taskId); }
@@ -636,7 +636,7 @@ function uniqueTasks(rows){
 }
 function tasksForUser(userId){
   const assignedIds=new Set(state.assignees.filter(a=>a.user_id===userId).map(a=>a.task_id));
-  return state.tasks.filter(t=>assignedIds.has(t.id)||t.primary_responsible_id===userId);
+  return visibleTasks().filter(t=>assignedIds.has(t.id)||t.primary_responsible_id===userId);
 }
 function taskMetrics(rows){
   const total=rows.length;
@@ -668,9 +668,9 @@ function renderDepartmentPerformance(){
   if(isDepartmentManager()) depts=depts.filter(d=>d.id===state.profile.department_id);
   if(currentRole()==='employee') depts=depts.filter(d=>d.sector_id===state.profile.sector_id);
   const body=depts.map(d=>{
-    const deptUsers=state.users.filter(u=>u.department_id===d.id).map(u=>u.id);
+    const deptUsers=state.users.filter(u=>u.is_active && u.department_id===d.id).map(u=>u.id);
     const deptTaskIds=new Set(state.assignees.filter(a=>deptUsers.includes(a.user_id)).map(a=>a.task_id));
-    const rows=state.tasks.filter(t=>deptTaskIds.has(t.id)||t.owner_department_id===d.id||t.target_department_id===d.id);
+    const rows=visibleTasks().filter(t=>deptTaskIds.has(t.id)||t.owner_department_id===d.id||t.target_department_id===d.id);
     return metricsRow(d.name,nameOfSector(d.sector_id),uniqueTasks(rows));
   }).join('');
   return `<section class="panel card"><h2>أداء الإدارات</h2><div class="table-wrap"><table><thead><tr><th>الإدارة</th><th>القطاع</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
@@ -678,9 +678,9 @@ function renderDepartmentPerformance(){
 function renderSectorPerformance(){
   if(!(isAdminOrCeo())) return '';
   const body=state.sectors.map(s=>{
-    const sectorUsers=state.users.filter(u=>u.sector_id===s.id).map(u=>u.id);
+    const sectorUsers=state.users.filter(u=>u.is_active && u.sector_id===s.id).map(u=>u.id);
     const sectorTaskIds=new Set(state.assignees.filter(a=>sectorUsers.includes(a.user_id)).map(a=>a.task_id));
-    const rows=state.tasks.filter(t=>sectorTaskIds.has(t.id)||t.owner_sector_id===s.id||t.target_sector_id===s.id);
+    const rows=visibleTasks().filter(t=>sectorTaskIds.has(t.id)||t.owner_sector_id===s.id||t.target_sector_id===s.id);
     return metricsRow(s.name,'—',uniqueTasks(rows));
   }).join('');
   return `<section class="panel card"><h2>أداء القطاعات</h2><div class="table-wrap"><table><thead><tr><th>القطاع</th><th>ملاحظات</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
@@ -944,7 +944,96 @@ async function importUsersFromExcel(){
 function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
 async function approveRequest(id){ const r=state.requests.find(x=>x.id===id); if(!r?.auth_user_id)return showToast('لا يوجد auth_user_id للطلب.','error'); const {error}=await supabaseClient.from('users').insert({id:r.auth_user_id,name:r.full_name,email:r.email,role:r.requested_role,sector_id:r.requested_sector_id,department_id:r.requested_department_id,is_active:true}).select(); if(error)return showToast(error.message,'error'); await supabaseClient.from('registration_requests').update({status:'approved',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم اعتماد طلب الانضمام.','success'); }
 async function rejectRequest(id){ await supabaseClient.from('registration_requests').update({status:'rejected',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم رفض طلب الانضمام.','success'); }
-function renderUsers(){ $('usersTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>إجراء</th></tr></thead><tbody>${state.users.map(u=>`<tr><td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${u.is_active?'نعم':'لا'}</td><td>${u.id===state.profile.id?'<span class="meta">حسابك الحالي</span>':`<button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف</button>`}</td></tr>`).join('')}</tbody></table></div>`; }
+function renderUsers(){
+  const rows=state.users.map(u=>{
+    const active=u.is_active!==false;
+    const archivedInfo=!active
+      ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>`
+      : '';
+    let action='—';
+    if(u.id===state.profile.id){
+      action='<span class="meta">حسابك الحالي</span>';
+    }else if(isAdmin()){
+      action=active
+        ? `<button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`
+        : '<span class="chip late">معطل ومؤرشف</span>';
+    }else{
+      action='<span class="meta">لا توجد صلاحية</span>';
+    }
+    return `<tr><td>${escapeHtml(u.name)}${archivedInfo}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${active?'نعم':'لا'}</td><td>${action}</td></tr>`;
+  }).join('');
+  $('usersTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+
+async function archiveUser(userId,name){
+  if(!isAdmin()){
+    showToast('تعطيل وأرشفة المستخدم من صلاحية مدير النظام فقط.','error');
+    return;
+  }
+  const user=state.users.find(u=>u.id===userId);
+  if(!user){ showToast('تعذر العثور على المستخدم.','error'); return; }
+  if(user.id===state.profile.id){ showToast('لا يمكن تعطيل حسابك الحالي.','error'); return; }
+
+  const reason=window.prompt(`اكتب سبب تعطيل وأرشفة المستخدم: ${name || user.name || ''}`,'ترك الشركة');
+  if(reason===null) return;
+
+  const ok=await askConfirm({
+    title:'تعطيل وأرشفة المستخدم',
+    message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد والداشبورد.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم التعامل مع المهام غير المكتملة كالتالي:\n- إذا كانت المهمة مشتركة: يتم إزالة المستخدم منها فقط.\n- إذا كانت فردية ولا يوجد مسند آخر: يتم أرشفة المهمة.\n\nهل تريد المتابعة؟`,
+    okText:'تعطيل وأرشفة',
+    danger:true,
+    requireText:'تعطيل',
+    inputLabel:'للتأكيد اكتب كلمة تعطيل'
+  });
+  if(!ok) return;
+
+  try{
+    const now=new Date().toISOString();
+    const affected=visibleTasks().filter(t=>t.status!=='مكتملة' && (t.primary_responsible_id===userId || state.assignees.some(a=>a.task_id===t.id && a.user_id===userId)));
+
+    for(const task of affected){
+      const assigneeRows=state.assignees.filter(a=>a.task_id===task.id);
+      const remaining=assigneeRows.filter(a=>a.user_id!==userId).map(a=>a.user_id);
+
+      const del=await supabaseClient.from('task_assignees').delete().eq('task_id',task.id).eq('user_id',userId);
+      if(del.error) throw del.error;
+
+      if(!remaining.length){
+        const upd=await supabaseClient.from('tasks').update({
+          is_archived:true,
+          archived_at:now,
+          archived_by:state.profile.id,
+          archived_reason:reason || 'ترك الشركة'
+        }).eq('id',task.id);
+        if(upd.error) throw upd.error;
+      }else if(task.primary_responsible_id===userId){
+        const upd=await supabaseClient.from('tasks').update({
+          primary_responsible_id:remaining[0]
+        }).eq('id',task.id);
+        if(upd.error) throw upd.error;
+      }
+    }
+
+    const userUpdate=await supabaseClient.from('users').update({
+      is_active:false,
+      archived_at:now,
+      archived_by:state.profile.id,
+      archived_reason:reason || 'ترك الشركة'
+    }).eq('id',userId);
+    if(userUpdate.error) throw userUpdate.error;
+
+    await loadAll();
+    setupFilters();
+    renderAdmin();
+    renderTasks();
+    renderDashboard();
+    showToast('تم تعطيل المستخدم وأرشفة مهامه حسب الحالة بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تعطيل وأرشفة المستخدم.','error');
+  }
+}
 
 async function deleteUserByAdmin(userId,email,name){
   if(!isAdmin()){ showToast('هذه الصلاحية لمدير النظام فقط.','error'); return; }
