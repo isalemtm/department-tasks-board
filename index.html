@@ -176,7 +176,7 @@
           <div class="section-head">
             <div>
               <h2>استيراد مستخدمين من Excel</h2>
-              <p class="meta">حمّل النموذج، عبّئ البيانات، ثم ارفعه لمراجعة الصفوف قبل إرسال الدعوات.</p>
+              <p class="meta">حمّل النموذج، عبّئ البيانات، ثم ارفعه لمراجعة الصفوف وحفظها كمسودة بدون إرسال الدعوات.</p>
             </div>
             <button class="btn btn-info btn-sm" onclick="downloadUsersImportTemplate()">تحميل نموذج Excel</button>
           </div>
@@ -189,9 +189,20 @@
           </div>
           <div id="usersImportPreview" style="margin-top:12px;"></div>
           <div class="actions" style="margin-top:12px;">
-            <button class="btn btn-primary" onclick="importUsersFromExcel()">استيراد المستخدمين وإرسال الدعوات</button>
+            <button class="btn btn-primary" onclick="importUsersFromExcel()">حفظ المستخدمين كمسودة بدون إرسال الدعوات</button>
             <button class="btn" onclick="clearUsersImport()">مسح الملف</button>
           </div>
+        </section>
+
+        <section id="pendingUserInvitesPanel" class="panel card hidden">
+          <div class="section-head">
+            <div>
+              <h2>مسودات المستخدمين المستوردين</h2>
+              <p class="meta">هؤلاء المستخدمون محفوظون داخل النظام كمسودة فقط. لن تصلهم أي دعوة إلا بعد الضغط على زر إرسال الدعوات.</p>
+            </div>
+            <button class="btn btn-success btn-sm" onclick="sendPendingUserInvites()">إرسال الدعوات الآن</button>
+          </div>
+          <div id="pendingUserInvitesList"></div>
         </section>
 
         <section id="requestsPanel" class="panel card"><h2>طلبات الانضمام</h2><div id="requestsList"></div></section>
@@ -237,7 +248,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_9BJgs44QfGjZsUBhSXnO3w_AebCJ7iR";
 const BUCKET = "department-task-attachments";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const state={session:null,profile:null,sectors:[],departments:[],users:[],tasks:[],assignees:[],comments:[],requests:[],transferRequests:[]};
+const state={session:null,profile:null,sectors:[],departments:[],users:[],tasks:[],assignees:[],comments:[],requests:[],transferRequests:[],pendingUserImports:[]};
 const $=id=>document.getElementById(id);
 function showToast(msg,type='success',timeout=3800){
   const host=$('toastHost');
@@ -301,7 +312,7 @@ function showPasswordSetup(){ $('authSection').classList.add('hidden'); $('appSe
 async function bootstrap(){ await loadProfile(); if(!state.profile){ await supabaseClient.auth.signOut(); showNotice('تم تسجيل الدخول لكن الحساب غير مفعل في النظام. انتظر اعتماد مدير النظام.','info'); return false;} if(state.profile.must_set_password){ showPasswordSetup(); return true; } await loadAll(); setupFilters(); showApp(); showPage('tasks'); return true; }
 async function loadPublicLookups(){ const [s,d]=await Promise.all([supabaseClient.from('sectors').select('*').order('name'),supabaseClient.from('departments').select('*').order('name')]); state.sectors=s.data||[]; state.departments=d.data||[]; }
 async function loadProfile(){ const uid=state.session?.user?.id; if(!uid)return; const {data,error}=await supabaseClient.from('users').select('*').eq('id',uid).maybeSingle(); if(error) console.error(error); state.profile=data&&data.is_active?data:null; }
-async function loadAll(){ await loadPublicLookups(); const [u,t,a,c,r,tr]=await Promise.all([supabaseClient.from('users').select('*').order('name'),supabaseClient.from('tasks').select('*').order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),supabaseClient.from('task_assignees').select('*'),supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true}), isAdmin()?supabaseClient.from('registration_requests').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]}), (isAdmin()||isSectorHead()||isDepartmentManager())?supabaseClient.from('task_transfer_requests').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})]); state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[]; state.requests=r.data||[]; state.transferRequests=tr.data||[]; }
+async function loadAll(){ await loadPublicLookups(); const [u,t,a,c,r,tr,pu]=await Promise.all([supabaseClient.from('users').select('*').order('name'),supabaseClient.from('tasks').select('*').order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),supabaseClient.from('task_assignees').select('*'),supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true}), isAdmin()?supabaseClient.from('registration_requests').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]}), (isAdmin()||isSectorHead()||isDepartmentManager())?supabaseClient.from('task_transfer_requests').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]}), (isAdmin()||isSectorHead())?supabaseClient.from('pending_user_imports').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})]); state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[]; state.requests=r.data||[]; state.transferRequests=tr.data||[]; state.pendingUserImports=pu.data||[]; }
 
 function showAuthView(v){ $('loginView').classList.toggle('hidden',v!=='login'); $('requestView').classList.toggle('hidden',v!=='request'); $('loginTab').classList.toggle('active',v==='login'); $('requestTab').classList.toggle('active',v==='request'); }
 async function login(){ const email=$('loginEmail').value.trim(), password=$('loginPassword').value; if(!email||!password)return showNotice('فضلاً أدخل البريد وكلمة المرور.','error'); const {data,error}=await supabaseClient.auth.signInWithPassword({email,password}); if(error)return showNotice(error.message,'error'); state.session=data.session; const ok=await bootstrap(); if(!ok)return; }
@@ -793,6 +804,7 @@ function renderAdmin(){
   $('requestsPanel')?.classList.toggle('hidden',!isAdmin());
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
+  $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   if(isAdmin()){
     fillSectorSelect('adminInviteSector', true);
     fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true);
@@ -801,6 +813,7 @@ function renderAdmin(){
   renderTransferRequests();
   renderUsers();
   renderUsersImportPreview();
+  renderPendingUserImports();
 }
 async function inviteUserByAdmin(){
   try{
@@ -926,19 +939,98 @@ async function importUsersFromExcel(){
     if(!usersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
     const invalid=usersImportRows.filter(r=>!r.valid).length;
     if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الملف ثم أعد رفعه.`,'error');
-    const ok=await askConfirm({title:'استيراد مستخدمين',message:`سيتم إرسال دعوات إلى ${usersImportRows.length} مستخدم. هل تريد المتابعة؟`,okText:'استيراد',danger:false});
+    const ok=await askConfirm({
+      title:'حفظ المستخدمين كمسودة',
+      message:`سيتم حفظ ${usersImportRows.length} مستخدم كمسودة فقط بدون إرسال أي دعوة بريدية. يمكنك إرسال الدعوات لاحقًا بزر مستقل. هل تريد المتابعة؟`,
+      okText:'حفظ كمسودة',
+      danger:false
+    });
     if(!ok) return;
-    const payload=usersImportRows.map(r=>({name:r.name,email:r.email,role:r.role,sector_id:r.sector_id,department_id:r.department_id,job_title:r.job_title}));
+
+    const existingEmails=new Set([
+      ...state.users.map(u=>String(u.email||'').toLowerCase()),
+      ...state.pendingUserImports.filter(r=>r.status==='pending').map(r=>String(r.email||'').toLowerCase())
+    ]);
+    const duplicates=usersImportRows.filter(r=>existingEmails.has(String(r.email||'').toLowerCase()));
+    if(duplicates.length){
+      return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين أو المسودات. احذف التكرارات ثم أعد الرفع.`,'error',6000);
+    }
+
+    const rows=usersImportRows.map(r=>({
+      full_name:r.name,
+      email:r.email,
+      job_title:r.job_title||null,
+      role:r.role,
+      sector_id:r.sector_id,
+      department_id:r.department_id,
+      imported_by:state.profile.id,
+      status:'pending'
+    }));
+    const {error}=await supabaseClient.from('pending_user_imports').insert(rows);
+    if(error) throw error;
+    showToast(`تم حفظ ${rows.length} مستخدم كمسودة. لم يتم إرسال أي دعوة حتى الآن.`,'success',6000);
+    clearUsersImport();
+    await loadAll(); renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المستخدمين كمسودة.','error'); }
+}
+
+function renderPendingUserImports(){
+  const box=$('pendingUserInvitesList');
+  if(!box) return;
+  const rows=(state.pendingUserImports||[]).filter(r=>r.status==='pending');
+  if(!rows.length){
+    box.innerHTML='<div class="empty">لا توجد مسودات مستخدمين بانتظار إرسال الدعوات.</div>';
+    return;
+  }
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">عدد المستخدمين بانتظار الدعوة: ${rows.length}</div>
+  <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>تاريخ الحفظ</th><th>إجراء</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.role)}</td><td>${nameOfSector(r.sector_id)}</td><td>${nameOfDept(r.department_id)}</td><td>${formatDate(r.created_at)}</td><td><button class="btn btn-danger btn-sm" onclick="deletePendingUserImport('${r.id}')">حذف المسودة</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+async function deletePendingUserImport(id){
+  const ok=await askConfirm({title:'حذف مسودة مستخدم',message:'سيتم حذف هذا المستخدم من المسودات فقط، ولن يتم إرسال دعوة له.',okText:'حذف المسودة',danger:true});
+  if(!ok) return;
+  const {error}=await supabaseClient.from('pending_user_imports').delete().eq('id',id).eq('status','pending');
+  if(error) return showToast(error.message,'error');
+  await loadAll(); renderAdmin(); showToast('تم حذف المسودة.','success');
+}
+
+async function sendPendingUserInvites(){
+  try{
+    const rows=(state.pendingUserImports||[]).filter(r=>r.status==='pending');
+    if(!rows.length) return showToast('لا توجد مسودات بانتظار إرسال الدعوات.','info');
+    const ok=await askConfirm({
+      title:'إرسال الدعوات',
+      message:`سيتم الآن إرسال دعوات إلى ${rows.length} مستخدم. بعد وصول الدعوة سيدخل المستخدم من الرابط ويعيّن كلمة المرور. هل تريد المتابعة؟`,
+      okText:'إرسال الدعوات',
+      danger:false,
+      requireText:'إرسال',
+      inputLabel:'للتأكيد اكتب كلمة إرسال'
+    });
+    if(!ok) return;
+    const payload=rows.map(r=>({name:r.full_name,email:r.email,role:r.role,sector_id:r.sector_id,department_id:r.department_id,job_title:r.job_title}));
     const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{body:{users:payload}});
     if(error) throw error;
     if(data?.error) throw new Error(data.error);
-    const summary=data?.summary||{};
-    showToast(`اكتمل الاستيراد: نجح ${summary.success||0}، فشل ${summary.failed||0}.`,'success',6000);
-    if(data?.results?.length){
-      $('usersImportPreview').innerHTML=`<div class="table-wrap"><table><thead><tr><th>البريد</th><th>النتيجة</th><th>الملاحظة</th></tr></thead><tbody>${data.results.map(r=>`<tr><td>${escapeHtml(r.email||'—')}</td><td>${r.success?'<span class="chip done">تم</span>':'<span class="chip late">فشل</span>'}</td><td>${escapeHtml(r.message||r.error||'—')}</td></tr>`).join('')}</tbody></table></div>`;
+
+    const results=data?.results||[];
+    const successEmails=new Set(results.filter(r=>r.success).map(r=>String(r.email||'').toLowerCase()));
+    const failedEmails=new Set(results.filter(r=>!r.success).map(r=>String(r.email||'').toLowerCase()));
+    const allSuccess=!results.length && !data?.error;
+    const sentIds=rows.filter(r=>allSuccess || successEmails.has(String(r.email||'').toLowerCase())).map(r=>r.id);
+    const failedIds=rows.filter(r=>failedEmails.has(String(r.email||'').toLowerCase())).map(r=>r.id);
+
+    if(sentIds.length){
+      const upd=await supabaseClient.from('pending_user_imports').update({status:'sent',sent_at:new Date().toISOString(),sent_by:state.profile.id,last_error:null}).in('id',sentIds);
+      if(upd.error) throw upd.error;
     }
+    if(failedIds.length){
+      const upd=await supabaseClient.from('pending_user_imports').update({status:'failed',last_error:'تعذر إرسال الدعوة من دالة الاستيراد'}).in('id',failedIds);
+      if(upd.error) throw upd.error;
+    }
+    const summary=data?.summary||{};
+    showToast(`تم إرسال الدعوات. نجح ${summary.success ?? sentIds.length}، فشل ${summary.failed ?? failedIds.length}.`,'success',7000);
     await loadAll(); renderAdmin();
-  }catch(e){ console.error(e); showToast(e.message||'تعذر استيراد المستخدمين.','error'); }
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال الدعوات.','error',7000); }
 }
 
 function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
@@ -1226,6 +1318,7 @@ renderAdmin=function(){
   $('pendingTasksPanel')?.classList.toggle('hidden',!(isAdminOrCeo()||isSectorHead()||isDepartmentManager()));
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
+  $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   if(isAdmin()){ fillSectorSelect('adminInviteSector', true); fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true); renderRequests(); }
   renderPendingTaskApprovals(); renderTransferRequests(); renderUsers(); renderUsersImportPreview();
 };
