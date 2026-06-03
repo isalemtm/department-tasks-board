@@ -1066,6 +1066,260 @@ async function deleteUserByAdmin(userId,email,name){
   }
 }
 window.openTaskFromSummary=openTaskFromSummary;
+
+/* === FULL HR FEATURE TRANSFER PATCH: executive link, recovery, approvals, edit, storage cleanup, comment delete, detailed export, clear form === */
+const __deptOriginalInit = init;
+const __deptOriginalShowAuthOnly = showAuthOnly;
+const __deptOriginalShowApp = showApp;
+
+function ensureFullHrFeatureDom(){
+  const main=document.querySelector('main.container');
+  if(main && !$('executiveSection')){
+    main.insertAdjacentHTML('afterbegin', `
+      <section id="executiveSection" class="hidden">
+        <section class="panel card">
+          <div class="section-head">
+            <div><h2>داشبورد متابعة مهام الإدارات والقطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
+            <span class="badge">عرض فقط</span>
+          </div>
+          <div id="executiveDirectStats" class="executive-stats"></div>
+          <div class="filters" style="margin-top:16px;grid-template-columns:1fr 220px 220px 220px;">
+            <input id="executiveSearchInput" placeholder="ابحث بعنوان المهمة أو الوصف أو المسؤول" oninput="renderExecutiveDirect()">
+            <select id="executiveSectorFilter" onchange="renderExecutiveDirect()"><option value="">كل القطاعات</option></select>
+            <select id="executiveAssigneeFilter" onchange="renderExecutiveDirect()"><option value="">كل المسؤولين</option></select>
+            <select id="executiveStatusFilter" onchange="renderExecutiveDirect()"><option value="">كل الحالات</option><option value="جديدة">جديدة</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select>
+          </div>
+          <p class="meta">مرّر الجدول يمينًا ويسارًا لعرض جميع الأعمدة.</p>
+          <div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody id="executiveTasksTable"></tbody></table></div>
+        </section>
+      </section>`);
+  }
+  if($('authSection') && !$('forgotPasswordView')){
+    $('loginView').insertAdjacentHTML('afterend', `
+      <div id="forgotPasswordView" class="hidden">
+        <h2 class="auth-title">استعادة كلمة المرور</h2>
+        <div class="form-group"><label>البريد الإلكتروني</label><input id="recoveryEmail" type="email" placeholder="example@rasf.sa"></div>
+        <div class="actions"><button class="btn btn-primary" onclick="sendPasswordRecovery()">إرسال رابط الاستعادة</button><button class="btn" onclick="showAuthView('login')">العودة لتسجيل الدخول</button></div>
+        <p class="meta">سيتم إرسال رابط إلى بريدك لتعيين كلمة مرور جديدة.</p>
+      </div>`);
+    const forgotBtn=document.querySelector('#loginView .link');
+    if(forgotBtn) forgotBtn.setAttribute('onclick','showForgotPasswordView()');
+  }
+  if($('adminPage') && !$('pendingTasksPanel')){
+    const transfer=$('transferRequestsPanel') || $('requestsPanel');
+    const html=`<section id="pendingTasksPanel" class="panel card hidden"><h2>مهام بانتظار الاعتماد</h2><p class="meta">المهام التي يضيفها الموظفون لا تظهر في القوائم والداشبورد إلا بعد الاعتماد. يمكنك تعديلها قبل الاعتماد.</p><div id="pendingTasksList"></div></section>`;
+    if(transfer) transfer.insertAdjacentHTML('beforebegin', html); else $('adminPage').insertAdjacentHTML('afterbegin', html);
+  }
+  if($('taskModal') && !$('clearTaskBtn')){
+    const actions=$('taskModal').querySelector('.actions');
+    if(actions) actions.insertAdjacentHTML('beforeend','<button id="clearTaskBtn" class="btn" onclick="clearTaskForm()">تفريغ الحقول</button>');
+  }
+  const modalTitle=$('taskModalTitle');
+  if(modalTitle && !$('taskModal').dataset.enhancedTitle){
+    $('taskModal').dataset.enhancedTitle='1';
+  }
+}
+
+function showForgotPasswordView(){
+  $('loginView')?.classList.add('hidden');
+  $('requestView')?.classList.add('hidden');
+  $('forgotPasswordView')?.classList.remove('hidden');
+  $('loginTab')?.classList.remove('active');
+  $('requestTab')?.classList.remove('active');
+  if($('recoveryEmail')) $('recoveryEmail').value=$('loginEmail')?.value?.trim()||'';
+}
+async function sendPasswordRecovery(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('فضلاً أدخل البريد الإلكتروني.','error');
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  if(error) return showNotice(error.message,'error');
+  showAuthView('login');
+  showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+}
+function isRecoveryUrl(){
+  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
+  const query=new URLSearchParams(location.search);
+  return hash.get('type')==='recovery' || query.get('type')==='recovery' || location.hash.includes('type=recovery') || location.search.includes('type=recovery');
+}
+showAuthView=function(v){
+  $('loginView')?.classList.toggle('hidden',v!=='login');
+  $('requestView')?.classList.toggle('hidden',v!=='request');
+  $('forgotPasswordView')?.classList.add('hidden');
+  $('loginTab')?.classList.toggle('active',v==='login');
+  $('requestTab')?.classList.toggle('active',v==='request');
+};
+showAuthOnly=function(){ ensureFullHrFeatureDom(); __deptOriginalShowAuthOnly(); $('executiveSection')?.classList.add('hidden'); $('forgotPasswordView')?.classList.add('hidden'); };
+showApp=function(){ ensureFullHrFeatureDom(); __deptOriginalShowApp(); $('executiveSection')?.classList.add('hidden'); };
+completePasswordSetup=async function(){
+  const p=$('newPassword').value, p2=$('newPassword2').value; const notice=$('passwordSetupNotice');
+  if(!p||!p2){ notice.textContent='فضلاً أدخل كلمة المرور وتأكيدها.'; notice.className='notice error show'; return; }
+  if(p.length<8){ notice.textContent='كلمة المرور يجب ألا تقل عن 8 أحرف.'; notice.className='notice error show'; return; }
+  if(p!==p2){ notice.textContent='كلمتا المرور غير متطابقتين.'; notice.className='notice error show'; return; }
+  const {error}=await supabaseClient.auth.updateUser({password:p});
+  if(error){ notice.textContent=error.message; notice.className='notice error show'; return; }
+  if(state.profile?.id){ await supabaseClient.from('users').update({must_set_password:false}).eq('id',state.profile.id); state.profile.must_set_password=false; await loadAll(); setupFilters(); showApp(); showPage('tasks'); }
+  else { await supabaseClient.auth.signOut(); history.replaceState({},document.title,location.pathname); showAuthOnly(); showAuthView('login'); showNotice('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','success'); }
+};
+init=async function(){
+  ensureFullHrFeatureDom();
+  supabaseClient.auth.onAuthStateChange((event, session)=>{ if(event==='PASSWORD_RECOVERY'){ state.session=session; state.profile=null; showPasswordSetup(); $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.'; }});
+  const url=new URL(location.href);
+  if(url.searchParams.get('view')==='executive'){
+    if(url.searchParams.get('token')==='7700'){ await loadExecutiveDirectDashboard(); return; }
+    showAuthOnly(); showNotice('رابط المتابعة غير صحيح أو رمز الدخول غير صحيح.','error'); return;
+  }
+  const code=url.searchParams.get('code');
+  if(code){ const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code); if(!error && data?.session){ state.session=data.session; state.profile=null; showPasswordSetup(); $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.'; return; } }
+  const {data}=await supabaseClient.auth.getSession();
+  if(isRecoveryUrl() && data?.session){ state.session=data.session; state.profile=null; showPasswordSetup(); $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.'; return; }
+  state.session=data.session;
+  if(state.session){ const ok=await bootstrap(); if(!ok) showAuthOnly(); } else showAuthOnly();
+};
+
+async function loadExecutiveDirectDashboard(){
+  try{
+    await loadPublicLookups();
+    const [u,t,a,c]=await Promise.all([
+      supabaseClient.from('users').select('*').eq('is_active',true).order('name'),
+      supabaseClient.from('tasks').select('*').eq('approval_status','approved').eq('is_archived',false).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),
+      supabaseClient.from('task_assignees').select('*'),
+      supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true})
+    ]);
+    if(u.error) throw u.error; if(t.error) throw t.error; if(a.error) throw a.error; if(c.error) throw c.error;
+    state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[];
+    fillExecutiveFilters(); renderExecutiveDirect();
+    $('authSection')?.classList.add('hidden'); $('appSection')?.classList.add('hidden'); $('passwordSetupSection')?.classList.add('hidden'); $('executiveSection')?.classList.remove('hidden'); $('userBar')?.classList.add('hidden');
+  }catch(e){ console.error(e); $('executiveTasksTable').innerHTML='<tr><td colspan="9">تعذر تحميل بيانات لوحة الرئيس التنفيذي. تأكد من تنفيذ SQL الخاص بصلاحية العرض المباشر.</td></tr>'; $('executiveSection')?.classList.remove('hidden'); }
+}
+function fillExecutiveFilters(){
+  if($('executiveSectorFilter')) $('executiveSectorFilter').innerHTML='<option value="">كل القطاعات</option>'+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if($('executiveAssigneeFilter')) $('executiveAssigneeFilter').innerHTML='<option value="">كل المسؤولين</option>'+state.users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+}
+function latestCommentText(taskId){ const cs=getTaskComments(taskId); return cs.length ? (cs[cs.length-1].comment_text||'') : ''; }
+function renderExecutiveDirect(){
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase(), fs=$('executiveSectorFilter')?.value||'', fu=$('executiveAssigneeFilter')?.value||'', st=$('executiveStatusFilter')?.value||'';
+  let rows=visibleTasks().map(t=>({...t,derivedStatus:isLate(t)?'متأخرة':t.status}));
+  rows=rows.filter(t=>(!fs||t.target_sector_id===fs||t.owner_sector_id===fs)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||t.derivedStatus===st)&&(!q||`${t.title||''} ${t.description||''} ${getTaskAssignees(t.id).map(u=>u.name).join(' ')} ${nameOfUser(t.primary_responsible_id)}`.toLowerCase().includes(q)));
+  renderExecutiveDirectStats(rows);
+  $('executiveTasksTable').innerHTML=rows.length?rows.map(t=>`<tr><td>${escapeHtml(t.title||'—')}</td><td>${escapeHtml(t.description||'—')}</td><td>${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))}</td><td>${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}</td><td>${escapeHtml(nameOfUser(t.primary_responsible_id))}</td><td>${escapeHtml(t.derivedStatus)}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${formatDate(t.due_date)}</td><td>${escapeHtml(latestCommentText(t.id)||'—')}</td></tr>`).join(''):'<tr><td colspan="9">لا توجد مهام لعرضها.</td></tr>';
+}
+function renderExecutiveDirectStats(rows){
+  const tasks=rows||visibleTasks(); const total=tasks.length, done=tasks.filter(t=>t.status==='مكتملة').length, late=tasks.filter(isLate).length, progress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length, fresh=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
+  const now=new Date(); const doneMonth=tasks.filter(t=>{const d=new Date(t.approved_at||t.created_at||t.due_date); return t.status==='مكتملة'&&!isNaN(d)&&d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();}).length;
+  const counts=state.users.map(u=>({u,count:tasks.filter(t=>getTaskAssignees(t.id).some(a=>a.id===u.id)||t.primary_responsible_id===u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count); const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
+  $('executiveDirectStats').innerHTML=`<div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${done}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>خلال الشهر الحالي</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div>`;
+}
+
+function isApprovedTask(t){ return !t.approval_status || t.approval_status==='approved'; }
+function isPendingTask(t){ return t.approval_status==='pending'; }
+visibleTasks=function(){ return state.tasks.filter(t=>t.is_archived!==true).filter(isApprovedTask); };
+function getPendingTasks(){ return state.tasks.filter(t=>t.is_archived!==true).filter(isPendingTask); }
+function canReviewTask(t){ return isAdminOrCeo() || (isSectorHead()&&(t.owner_sector_id===state.profile.sector_id||t.target_sector_id===state.profile.sector_id)) || (isDepartmentManager()&&(t.owner_department_id===state.profile.department_id||t.target_department_id===state.profile.department_id)); }
+function canEditTask(t){ return canReviewTask(t) || t.created_by===state.profile?.id || t.primary_responsible_id===state.profile?.id; }
+function canDeleteComment(c){ const t=state.tasks.find(x=>x.id===c.task_id); return isAdmin() || (t && canReviewTask(t)); }
+
+renderAdmin=function(){
+  if(!canManageUserImports()){ $('adminPage').innerHTML='<section class="panel card"><div class="empty">ليست لديك صلاحية الوصول لهذه الصفحة.</div></section>'; return; }
+  ensureFullHrFeatureDom();
+  $('directInvitePanel')?.classList.toggle('hidden',!isAdmin());
+  $('requestsPanel')?.classList.toggle('hidden',!isAdmin());
+  $('pendingTasksPanel')?.classList.toggle('hidden',!(isAdminOrCeo()||isSectorHead()||isDepartmentManager()));
+  $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
+  $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
+  if(isAdmin()){ fillSectorSelect('adminInviteSector', true); fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true); renderRequests(); }
+  renderPendingTaskApprovals(); renderTransferRequests(); renderUsers(); renderUsersImportPreview();
+};
+function renderPendingTaskApprovals(){
+  if(!$('pendingTasksList')) return;
+  const rows=getPendingTasks().filter(canReviewTask);
+  if(!rows.length){ $('pendingTasksList').innerHTML='<div class="empty">لا توجد مهام بانتظار الاعتماد حالياً.</div>'; return; }
+  $('pendingTasksList').innerHTML=rows.map(t=>`<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>المسند إليهم: ${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button></div></div>`).join('');
+}
+async function approveSubmittedTask(taskId){ const {error}=await supabaseClient.from('tasks').update({approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); renderTasks(); renderDashboard(); showToast('تم اعتماد المهمة وإظهارها في اللوحة.','success'); }
+async function rejectSubmittedTask(taskId){ const ok=await askConfirm({title:'رفض المهمة',message:'سيتم رفض المهمة ولن تظهر في القوائم والداشبورد. هل تريد المتابعة؟',okText:'رفض',danger:true}); if(!ok)return; const {error}=await supabaseClient.from('tasks').update({approval_status:'rejected',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); showToast('تم رفض المهمة.','success'); }
+
+function clearTaskForm(){
+  $('editTaskId').value=''; $('taskModalTitle').textContent='إضافة مهمة'; $('taskTitle').value=''; $('taskDescription').value=''; $('taskPriority').value='عادية'; $('taskDue').value=''; $('taskFiles').value='';
+  if($('assignmentType')) $('assignmentType').disabled=false; if($('taskTargetSector')) $('taskTargetSector').disabled=false; if($('taskTargetDepartment')) $('taskTargetDepartment').disabled=false;
+  configureAssignmentOptions(); handleTargetSectorChange(); [...$('assigneePicker').querySelectorAll('input')].forEach(i=>i.checked=false);
+}
+openTaskModal=function(){ ensureFullHrFeatureDom(); clearTaskForm(); $('taskModal').classList.remove('hidden'); };
+function editTask(taskId){
+  const t=state.tasks.find(x=>x.id===taskId); if(!t) return showToast('تعذر العثور على المهمة.','error'); if(!canEditTask(t)) return showToast('ليست لديك صلاحية تعديل هذه المهمة.','error');
+  $('editTaskId').value=t.id; $('taskModalTitle').textContent='تعديل المهمة'; $('taskTitle').value=t.title||''; $('taskDescription').value=t.description||''; $('taskPriority').value=t.priority||'عادية'; $('taskDue').value=t.due_date||''; $('taskFiles').value='';
+  fillSectorSelect('taskTargetSector',true); $('assignmentType').value=t.assignment_type||'employees'; configureAssignmentOptions(); $('taskTargetSector').value=t.target_sector_id||t.owner_sector_id||''; fillDepartmentSelect('taskTargetDepartment',$('taskTargetSector').value,true); $('taskTargetDepartment').value=t.target_department_id||t.owner_department_id||''; renderAssigneePicker();
+  const ids=getTaskAssignees(t.id).map(u=>u.id); [...$('assigneePicker').querySelectorAll('input')].forEach(i=>i.checked=ids.includes(i.value)); $('taskModal').classList.remove('hidden');
+}
+
+function getStoragePathFromPublicUrl(publicUrl){
+  if(!publicUrl) return null; const value=String(publicUrl).trim();
+  try{ const url=new URL(value); const markers=[`/storage/v1/object/public/${BUCKET}/`,`/storage/v1/object/authenticated/${BUCKET}/`,`/storage/v1/object/sign/${BUCKET}/`]; for(const m of markers){ const idx=url.pathname.indexOf(m); if(idx!==-1) return decodeURIComponent(url.pathname.substring(idx+m.length)); } }
+  catch(e){}
+  const cleaned=value.replace(/^\/+/, '').replace(new RegExp(`^${BUCKET}/`),'').split('?')[0].split('#')[0]; return cleaned?decodeURIComponent(cleaned):null;
+}
+async function deleteStorageFilesByUrls(urls=[]){ const paths=[...new Set((urls||[]).map(getStoragePathFromPublicUrl).filter(Boolean))]; if(!paths.length) return; const {error}=await supabaseClient.storage.from(BUCKET).remove(paths); if(error) throw error; }
+function attachmentUrls(record={}){ return Array.isArray(record?.attachment_urls)?record.attachment_urls.filter(Boolean):[]; }
+
+function renderCommentItem(c){ return `<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}${canDeleteComment(c)?`<div style="margin-top:8px"><button class="btn btn-danger btn-sm" onclick="deleteTaskComment('${c.id}')">حذف التعليق</button></div>`:''}</div>`; }
+taskCard=function(t){
+  const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id);
+  const editBtn=canEditTask(t)?`<button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل</button>`:'';
+  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
+};
+async function deleteTaskComment(commentId){
+  const comment=state.comments.find(c=>c.id===commentId); if(!comment) return showToast('تعذر العثور على التعليق.','error'); if(!canDeleteComment(comment)) return showToast('حذف التعليقات من صلاحية المدير ضمن النطاق فقط.','error');
+  const ok=await askConfirm({title:'حذف التعليق',message:'سيتم حذف التعليق ومرفقاته إن وجدت. هل تريد المتابعة؟',okText:'حذف',danger:true}); if(!ok)return;
+  try{ await deleteStorageFilesByUrls(attachmentUrls(comment)); const {error}=await supabaseClient.from('task_comments').delete().eq('id',commentId); if(error) throw error; await loadAll(); renderTasks(); renderDashboard(); showToast('تم حذف التعليق ومرفقاته.','success'); }catch(e){ console.error(e); showToast(e.message||'تعذر حذف التعليق.','error'); }
+}
+
+saveTask=async function(){
+  try{
+    const title=$('taskTitle').value.trim(); if(!title) return showToast('اكتب عنوان المهمة.','error');
+    const editId=$('editTaskId').value||''; const existing=editId?state.tasks.find(t=>t.id===editId):null; if(editId && !existing) return showToast('تعذر العثور على المهمة المراد تعديلها.','error'); if(existing && !canEditTask(existing)) return showToast('ليست لديك صلاحية تعديل هذه المهمة.','error');
+    const type=$('assignmentType').value; let selected=[...$('assigneePicker').querySelectorAll('input:checked')].map(i=>i.value);
+    if(type==='all_company') selected=state.users.filter(u=>u.is_active).map(u=>u.id);
+    if(type==='all_sector') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetSector').value||u.sector_id===$('taskTargetSector').value)).map(u=>u.id);
+    if(type==='all_department') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetDepartment').value||u.department_id===$('taskTargetDepartment').value)).map(u=>u.id);
+    selected=[...new Set(selected)]; if(type!=='all_company' && !selected.length) return showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error');
+    if(!selected.includes(state.profile.id)) selected.push(state.profile.id);
+    const validationMessage=validateAssignment(type,selected); if(validationMessage) return showToast(validationMessage,'error');
+    const files=await uploadFiles($('taskFiles').files,'tasks');
+    const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
+    const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
+    const primary=existing?.primary_responsible_id || state.profile.id;
+    const attachment_urls=files.urls.length?[...(existing?.attachment_urls||[]),...files.urls]:(existing?.attachment_urls||[]);
+    const attachment_names=files.names.length?[...(existing?.attachment_names||[]),...files.names]:(existing?.attachment_names||[]);
+    const payload={title,description:$('taskDescription').value.trim(),priority:$('taskPriority').value,owner_sector_id:existing?.owner_sector_id||state.profile.sector_id,owner_department_id:existing?.owner_department_id||state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,attachment_urls,attachment_names};
+    let taskId=editId;
+    if(editId){ const {error}=await supabaseClient.from('tasks').update(payload).eq('id',editId); if(error) throw error; await supabaseClient.from('task_assignees').delete().eq('task_id',editId); }
+    else{
+      Object.assign(payload,{status:'جديدة',created_by:state.profile.id,approval_status:currentRole()==='employee'?'pending':'approved'});
+      if(payload.approval_status==='approved'){ payload.approved_by=state.profile.id; payload.approved_at=new Date().toISOString(); }
+      const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single(); if(error) throw error; taskId=data.id;
+    }
+    const rows=[...new Set(selected)].map(uid=>({task_id:taskId,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===primary?'primary':'assignee'}));
+    if(rows.length){ const r=await supabaseClient.from('task_assignees').insert(rows); if(r.error) throw r.error; }
+    closeTaskModal(); await loadAll(); setupFilters(); renderTasks(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin(); if($('dashboardPage')&&!$('dashboardPage').classList.contains('hidden')) renderDashboard();
+    showToast(editId?'تم تحديث المهمة بنجاح.':(currentRole()==='employee'?'تم إرسال المهمة للاعتماد.':'تم حفظ المهمة بنجاح.'),'success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المهمة.','error'); }
+};
+
+deleteTask=async function(taskId){
+  const ok=await askConfirm({title:'حذف المهمة',message:'سيتم حذف المهمة ومرفقاتها ومرفقات التعليقات التابعة لها. هل تريد المتابعة؟',okText:'حذف',danger:true}); if(!ok)return;
+  try{ const task=state.tasks.find(t=>t.id===taskId); const comments=state.comments.filter(c=>c.task_id===taskId); await deleteStorageFilesByUrls([...(attachmentUrls(task)),...comments.flatMap(attachmentUrls)]); const {error}=await supabaseClient.from('tasks').delete().eq('id',taskId); if(error) throw error; await loadAll(); renderTasks(); renderDashboard(); showToast('تم حذف المهمة ومرفقاتها بنجاح.','success'); }catch(e){ console.error(e); showToast(e.message||'تعذر حذف المهمة أو مرفقاتها.','error'); }
+};
+
+exportTasksToExcel=function(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+    const rows=[]; const tasks=getFilteredTasks();
+    tasks.forEach(t=>{ const assignees=getTaskAssignees(t.id); const latest=latestCommentText(t.id); const base={'عنوان المهمة':t.title||'','وصف المهمة':t.description||'','الحالة':isLate(t)?'متأخرة':t.status,'الأولوية':t.priority||'عادية','القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),'المسند إليهم':assignees.map(u=>u.name).join('، '),'آخر تعليق':latest,'روابط مرفقات المهمة':(t.attachment_urls||[]).join(' | '),'أسماء مرفقات المهمة':(t.attachment_names||[]).join(' | '),'تاريخ الاستحقاق':formatDate(t.due_date),'هل المهمة متأخرة؟':isLate(t)?'نعم':'لا','حالة الاعتماد':isApprovedTask(t)?'معتمدة':(t.approval_status||'—'),'تاريخ الإنشاء':formatDate(t.created_at)}; if(assignees.length){assignees.forEach(u=>rows.push({...base,'الموظف':u.name,'بريد الموظف':u.email||'','دور الموظف':roleLabel(u.role),'قطاع الموظف':nameOfSector(u.sector_id),'إدارة الموظف':nameOfDept(u.department_id)}));} else rows.push(base); });
+    if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
+    const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:30},{wch:70},{wch:14},{wch:12},{wch:24},{wch:24},{wch:24},{wch:40},{wch:60},{wch:60},{wch:16},{wch:14},{wch:14},{wch:16}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'تقرير تفصيلي للمهام'); XLSX.writeFile(wb,`تقرير_مهام_الإدارات_تفصيلي_${new Date().toISOString().slice(0,10)}.xlsx`); showToast('تم تصدير التقرير التفصيلي بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
+};
+exportDashboardToExcel=function(){ exportTasksToExcel(); };
+
 init();
 </script>
 </body>
