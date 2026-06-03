@@ -214,7 +214,7 @@
           <div class="section-head">
             <div>
               <h2>استيراد مستخدمين من Excel</h2>
-              <p class="meta">حمّل النموذج، عبّئ البيانات، ثم ارفعه لمراجعة الصفوف وحفظها كمسودة بدون إرسال الدعوات.</p>
+              <p class="meta">حمّل النموذج، عبّئ البيانات، ثم ارفعه لمراجعة الصفوف. بعد الحفظ سيتم إنشاء المستخدمين كحسابات نشطة بدون إرسال أي بريد لهم الآن.</p>
             </div>
             <button class="btn btn-info btn-sm" onclick="downloadUsersImportTemplate()">تحميل نموذج Excel</button>
           </div>
@@ -227,7 +227,7 @@
           </div>
           <div id="usersImportPreview" style="margin-top:12px;"></div>
           <div class="actions" style="margin-top:12px;">
-            <button class="btn btn-primary" onclick="importUsersFromExcel()">حفظ المستخدمين كمسودة بدون إرسال الدعوات</button>
+            <button class="btn btn-primary" onclick="importUsersFromExcel()">حفظ المستخدمين كحسابات نشطة بدون إرسال بريد</button>
             <button class="btn" onclick="clearUsersImport()">مسح الملف</button>
           </div>
         </section>
@@ -235,10 +235,10 @@
         <section id="pendingUserInvitesPanel" class="panel card hidden">
           <div class="section-head">
             <div>
-              <h2>مسودات المستخدمين المستوردين</h2>
-              <p class="meta">هؤلاء المستخدمون محفوظون داخل النظام كمسودة فقط. لن تصلهم أي دعوة إلا بعد الضغط على زر إرسال الدعوات.</p>
+              <h2>إشعارات تعيين كلمة المرور</h2>
+              <p class="meta">هذا القسم لم يعد مستخدمًا في مسار الاستيراد الجديد. المستخدمون المستوردون يُنشؤون مباشرة كحسابات نشطة بدون بريد، ثم يمكن إرسال إشعار تعيين كلمة المرور لاحقًا من جدول المستخدمين.</p>
             </div>
-            <button class="btn btn-success btn-sm" onclick="sendPendingUserInvites()">إرسال الدعوات الآن</button>
+            <button class="btn btn-success btn-sm" onclick="sendPendingUserInvites()">إرسال إشعارات تعيين كلمة المرور للمحتاجين</button>
           </div>
           <div id="pendingUserInvitesList"></div>
         </section>
@@ -248,7 +248,7 @@
           <div class="section-head">
             <div>
               <h2>استيراد مستخدمين من لوحة أخرى</h2>
-              <p class="meta">ارفع ملف Excel المصدّر من لوحة HR. سيتم حفظ المستخدمين كمسودات فقط بدون إرسال الدعوات، ثم تستطيع إرسال الدعوات لاحقًا من قسم المسودات.</p>
+              <p class="meta">ارفع ملف Excel المصدّر من لوحة HR. سيتم إنشاء المستخدمين كحسابات نشطة بدون إرسال أي بريد الآن، وبعد تجهيز اللوحة تستطيع إرسال إشعار تعيين كلمة المرور لهم من جدول المستخدمين.</p>
             </div>
           </div>
           <div class="form-grid">
@@ -278,7 +278,7 @@
           </div>
           <div id="boardUsersImportPreview" style="margin-top:12px;"></div>
           <div class="actions" style="margin-top:12px;">
-            <button class="btn btn-primary" onclick="importBoardUsersFromExcel()">حفظ المستخدمين كمسودة</button>
+            <button class="btn btn-primary" onclick="importBoardUsersFromExcel()">حفظ المستخدمين كحسابات نشطة بدون بريد</button>
             <button class="btn" onclick="clearBoardUsersImport()">مسح الملف</button>
           </div>
         </section>
@@ -1069,27 +1069,68 @@ function renderBoardUsersImportPreview(){
   }
   const validCount=boardUsersImportRows.filter(r=>r.valid).length;
   const invalidCount=boardUsersImportRows.length-validCount;
-  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th></tr></thead><tbody>${boardUsersImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز كمسودة</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 function clearBoardUsersImport(){
   boardUsersImportRows=[];
   if($('boardUsersImportFile')) $('boardUsersImportFile').value='';
   renderBoardUsersImportPreview();
 }
+
+function removeBoardUserImportRow(index){
+  if(index < 0 || index >= boardUsersImportRows.length) return;
+  boardUsersImportRows.splice(index,1);
+  renderBoardUsersImportPreview();
+  showToast('تم حذف الصف من المعاينة.','info');
+}
 async function importBoardUsersFromExcel(){
   try{
     if(!boardUsersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
     const invalid=boardUsersImportRows.filter(r=>!r.valid).length;
     if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الخيارات أو الملف ثم أعد المحاولة.`,'error',6000);
-    const ok=await askConfirm({title:'حفظ مستخدمين من لوحة أخرى',message:`سيتم حفظ ${boardUsersImportRows.length} مستخدم كمسودة فقط بدون إرسال أي دعوة بريدية. يمكنك إرسال الدعوات لاحقًا من قسم مسودات المستخدمين المستوردين. هل تريد المتابعة؟`,okText:'حفظ كمسودة',danger:false});
+
+    const ok=await askConfirm({
+      title:'إنشاء مستخدمين من لوحة أخرى',
+      message:`سيتم إنشاء ${boardUsersImportRows.length} مستخدم كحسابات نشطة داخل النظام بدون إرسال أي بريد الآن.\n\nبعد تجهيز اللوحة، يمكنك إرسال إشعار تعيين كلمة المرور من جدول المستخدمين أو من قسم إشعارات تعيين كلمة المرور.\n\nهل تريد المتابعة؟`,
+      okText:'إنشاء المستخدمين',
+      danger:false
+    });
     if(!ok) return;
-    const rows=boardUsersImportRows.map(r=>({full_name:r.name,email:r.email,job_title:r.job_title||null,role:r.role,sector_id:r.sector_id,department_id:r.department_id,imported_by:state.profile.id,status:'pending'}));
-    const {error}=await supabaseClient.from('pending_user_imports').insert(rows);
+
+    const existingEmails=new Set(state.users.map(u=>String(u.email||'').toLowerCase()));
+    const duplicates=boardUsersImportRows.filter(r=>existingEmails.has(String(r.email||'').toLowerCase()));
+    if(duplicates.length){
+      return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين. احذف التكرارات من المعاينة ثم أعد الحفظ.`,'error',7000);
+    }
+
+    const payload=boardUsersImportRows.map(r=>({
+      name:r.name,
+      email:r.email,
+      job_title:r.job_title||null,
+      role:r.role,
+      sector_id:r.sector_id,
+      department_id:r.department_id
+    }));
+
+    const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{
+      body:{users:payload, send_invite:false}
+    });
     if(error) throw error;
-    showToast(`تم حفظ ${rows.length} مستخدم كمسودة. لم يتم إرسال أي دعوة حتى الآن.`,'success',7000);
-    clearBoardUsersImport();
-    await loadAll(); renderAdmin();
-  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المستخدمين كمسودة.','error',7000); }
+    if(data?.error) throw new Error(data.error);
+
+    const summary=data?.summary||{};
+    const failed=(data?.results||[]).filter(r=>!r.success);
+    if(failed.length){
+      const first=failed[0];
+      showToast(`تم إنشاء ${summary.success||0} مستخدم، وفشل ${summary.failed||failed.length}. أول خطأ: ${first.email || ''} - ${first.error || 'غير محدد'}`,'error',9000);
+    }else{
+      showToast(`تم إنشاء ${summary.success ?? payload.length} مستخدم كحسابات نشطة بدون إرسال بريد.`,'success',7000);
+      clearBoardUsersImport();
+    }
+
+    await loadAll();
+    renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إنشاء المستخدمين.','error',7000); }
 }
 
 let boardTasksImportRows = [];
@@ -1155,7 +1196,7 @@ function renderUsersImportPreview(){
   const validCount=usersImportRows.filter(r=>r.valid).length;
   const invalidCount=usersImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
-  <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل حفظ المستخدمين كمسودة، مثل الصفوف المكررة أو غير المطلوبة.</div>
+  <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل حفظ المستخدمين كحسابات نشطة بدون بريد، مثل الصفوف المكررة أو غير المطلوبة.</div>
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -1362,100 +1403,125 @@ async function importUsersFromExcel(){
     if(!usersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
     const invalid=usersImportRows.filter(r=>!r.valid).length;
     if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الملف ثم أعد رفعه.`,'error');
+
     const ok=await askConfirm({
-      title:'حفظ المستخدمين كمسودة',
-      message:`سيتم حفظ ${usersImportRows.length} مستخدم كمسودة فقط بدون إرسال أي دعوة بريدية. يمكنك إرسال الدعوات لاحقًا بزر مستقل. هل تريد المتابعة؟`,
-      okText:'حفظ كمسودة',
+      title:'إنشاء المستخدمين بدون إرسال بريد',
+      message:`سيتم إنشاء ${usersImportRows.length} مستخدم كحسابات نشطة داخل النظام بدون إرسال أي دعوة أو بريد الآن.\n\nلاحقًا، وبعد تجهيز اللوحة، يمكنك إرسال إشعار تعيين كلمة المرور من جدول المستخدمين.\n\nهل تريد المتابعة؟`,
+      okText:'إنشاء المستخدمين',
       danger:false
     });
     if(!ok) return;
 
-    const existingEmails=new Set([
-      ...state.users.map(u=>String(u.email||'').toLowerCase()),
-      ...state.pendingUserImports.filter(r=>r.status==='pending').map(r=>String(r.email||'').toLowerCase())
-    ]);
+    const existingEmails=new Set(state.users.map(u=>String(u.email||'').toLowerCase()));
     const duplicates=usersImportRows.filter(r=>existingEmails.has(String(r.email||'').toLowerCase()));
     if(duplicates.length){
-      return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين أو المسودات. احذف التكرارات ثم أعد الرفع.`,'error',6000);
+      return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين. احذف التكرارات من المعاينة ثم أعد الحفظ.`,'error',6000);
     }
 
-    const rows=usersImportRows.map(r=>({
-      full_name:r.name,
+    const payload=usersImportRows.map(r=>({
+      name:r.name,
       email:r.email,
       job_title:r.job_title||null,
       role:r.role,
       sector_id:r.sector_id,
-      department_id:r.department_id,
-      imported_by:state.profile.id,
-      status:'pending'
+      department_id:r.department_id
     }));
-    const {error}=await supabaseClient.from('pending_user_imports').insert(rows);
+
+    const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{
+      body:{users:payload, send_invite:false}
+    });
     if(error) throw error;
-    showToast(`تم حفظ ${rows.length} مستخدم كمسودة. لم يتم إرسال أي دعوة حتى الآن.`,'success',6000);
-    clearUsersImport();
-    await loadAll(); renderAdmin();
-  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المستخدمين كمسودة.','error'); }
+    if(data?.error) throw new Error(data.error);
+
+    const summary=data?.summary||{};
+    const failed=(data?.results||[]).filter(r=>!r.success);
+    if(failed.length){
+      const first=failed[0];
+      showToast(`تم إنشاء ${summary.success||0} مستخدم، وفشل ${summary.failed||failed.length}. أول خطأ: ${first.email || ''} - ${first.error || 'غير محدد'}`,'error',9000);
+    }else{
+      showToast(`تم إنشاء ${summary.success ?? payload.length} مستخدم كحسابات نشطة بدون إرسال بريد.`,'success',7000);
+      clearUsersImport();
+    }
+
+    await loadAll();
+    renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إنشاء المستخدمين.','error',7000); }
+}
+
+function getUsersNeedingPasswordSetup(){
+  return (state.users||[]).filter(u => u.is_active !== false && u.must_set_password === true && u.id !== state.profile?.id);
 }
 
 function renderPendingUserImports(){
   const box=$('pendingUserInvitesList');
   if(!box) return;
-  const rows=(state.pendingUserImports||[]).filter(r=>r.status==='pending');
+  const rows=getUsersNeedingPasswordSetup();
+
   if(!rows.length){
-    box.innerHTML='<div class="empty">لا توجد مسودات مستخدمين بانتظار إرسال الدعوات.</div>';
+    box.innerHTML='<div class="empty">لا يوجد مستخدمون بحاجة إلى إشعار تعيين كلمة المرور حاليًا.</div>';
     return;
   }
-  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">عدد المستخدمين بانتظار الدعوة: ${rows.length}</div>
-  <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>تاريخ الحفظ</th><th>إجراء</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.role)}</td><td>${nameOfSector(r.sector_id)}</td><td>${nameOfDept(r.department_id)}</td><td>${formatDate(r.created_at)}</td><td><button class="btn btn-danger btn-sm" onclick="deletePendingUserImport('${r.id}')">حذف المسودة</button></td></tr>`).join('')}</tbody></table></div>`;
+
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">عدد المستخدمين الذين يحتاجون إشعار تعيين كلمة المرور: ${rows.length}</div>
+  <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>إجراء</th></tr></thead><tbody>${rows.map(u=>`<tr><td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td><button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
 async function deletePendingUserImport(id){
-  const ok=await askConfirm({title:'حذف مسودة مستخدم',message:'سيتم حذف هذا المستخدم من المسودات فقط، ولن يتم إرسال دعوة له.',okText:'حذف المسودة',danger:true});
-  if(!ok) return;
-  const {error}=await supabaseClient.from('pending_user_imports').delete().eq('id',id).eq('status','pending');
-  if(error) return showToast(error.message,'error');
-  await loadAll(); renderAdmin(); showToast('تم حذف المسودة.','success');
+  showToast('لم يعد نظام المسودات مستخدمًا. يمكن حذف المستخدم من جدول المستخدمين إذا أُنشئ بالخطأ.','info');
+}
+
+async function sendPasswordSetupNotification(email){
+  try{
+    if(!email) return showToast('لا يوجد بريد للمستخدم.','error');
+    const ok=await askConfirm({
+      title:'إرسال إشعار تعيين كلمة المرور',
+      message:`سيتم إرسال بريد للمستخدم:\n${email}\n\nسيحتوي البريد على رابط لتعيين كلمة المرور والدخول للنظام. هل تريد المتابعة؟`,
+      okText:'إرسال الإشعار',
+      danger:false
+    });
+    if(!ok) return;
+
+    const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{
+      body:{action:'send_password_reset', emails:[email]}
+    });
+    if(error) throw error;
+    if(data?.error) throw new Error(data.error);
+
+    const failed=(data?.results||[]).filter(r=>!r.success);
+    if(failed.length) throw new Error(failed[0].error || 'تعذر إرسال الإشعار.');
+
+    showToast('تم إرسال إشعار تعيين كلمة المرور بنجاح.','success');
+    await loadAll(); renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال الإشعار.','error',7000); }
 }
 
 async function sendPendingUserInvites(){
   try{
-    const rows=(state.pendingUserImports||[]).filter(r=>r.status==='pending');
-    if(!rows.length) return showToast('لا توجد مسودات بانتظار إرسال الدعوات.','info');
+    const rows=getUsersNeedingPasswordSetup();
+    if(!rows.length) return showToast('لا يوجد مستخدمون بحاجة إلى إشعار تعيين كلمة المرور.','info');
+
     const ok=await askConfirm({
-      title:'إرسال الدعوات',
-      message:`سيتم الآن إرسال دعوات إلى ${rows.length} مستخدم. بعد وصول الدعوة سيدخل المستخدم من الرابط ويعيّن كلمة المرور. هل تريد المتابعة؟`,
-      okText:'إرسال الدعوات',
+      title:'إرسال إشعارات تعيين كلمة المرور',
+      message:`سيتم إرسال إشعار تعيين كلمة المرور إلى ${rows.length} مستخدم.\n\nاستخدم هذا الزر فقط بعد أن تصبح اللوحة جاهزة للإطلاق. هل تريد المتابعة؟`,
+      okText:'إرسال الإشعارات',
       danger:false,
       requireText:'إرسال',
       inputLabel:'للتأكيد اكتب كلمة إرسال'
     });
     if(!ok) return;
-    const payload=rows.map(r=>({name:r.full_name,email:r.email,role:r.role,sector_id:r.sector_id,department_id:r.department_id,job_title:r.job_title}));
-    const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{body:{users:payload}});
+
+    const emails=rows.map(u=>u.email).filter(Boolean);
+    const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{
+      body:{action:'send_password_reset', emails}
+    });
     if(error) throw error;
     if(data?.error) throw new Error(data.error);
 
-    const results=data?.results||[];
-    const successEmails=new Set(results.filter(r=>r.success).map(r=>String(r.email||'').toLowerCase()));
-    const failedEmails=new Set(results.filter(r=>!r.success).map(r=>String(r.email||'').toLowerCase()));
-    const allSuccess=!results.length && !data?.error;
-    const sentIds=rows.filter(r=>allSuccess || successEmails.has(String(r.email||'').toLowerCase())).map(r=>r.id);
-    const failedIds=rows.filter(r=>failedEmails.has(String(r.email||'').toLowerCase())).map(r=>r.id);
-
-    if(sentIds.length){
-      const upd=await supabaseClient.from('pending_user_imports').update({status:'sent',sent_at:new Date().toISOString(),sent_by:state.profile.id,last_error:null}).in('id',sentIds);
-      if(upd.error) throw upd.error;
-    }
-    if(failedIds.length){
-      const upd=await supabaseClient.from('pending_user_imports').update({status:'failed',last_error:'تعذر إرسال الدعوة من دالة الاستيراد'}).in('id',failedIds);
-      if(upd.error) throw upd.error;
-    }
     const summary=data?.summary||{};
-    showToast(`تم إرسال الدعوات. نجح ${summary.success ?? sentIds.length}، فشل ${summary.failed ?? failedIds.length}.`,'success',7000);
+    showToast(`تم إرسال الإشعارات. نجح ${summary.success ?? 0}، فشل ${summary.failed ?? 0}.`,'success',7000);
     await loadAll(); renderAdmin();
-  }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال الدعوات.','error',7000); }
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال الإشعارات.','error',7000); }
 }
-
 
 function setupBoardTaskImportControls(){
   if(!$('boardTasksImportSector') || !$('boardTasksImportResponsible')) return;
@@ -1777,24 +1843,36 @@ function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTM
 async function approveRequest(id){ const r=state.requests.find(x=>x.id===id); if(!r?.auth_user_id)return showToast('لا يوجد auth_user_id للطلب.','error'); const {error}=await supabaseClient.from('users').insert({id:r.auth_user_id,name:r.full_name,email:r.email,role:r.requested_role,sector_id:r.requested_sector_id,department_id:r.requested_department_id,is_active:true}).select(); if(error)return showToast(error.message,'error'); await supabaseClient.from('registration_requests').update({status:'approved',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم اعتماد طلب الانضمام.','success'); }
 async function rejectRequest(id){ await supabaseClient.from('registration_requests').update({status:'rejected',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم رفض طلب الانضمام.','success'); }
 function renderUsers(){
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
   const rows=state.users.map(u=>{
     const active=u.is_active!==false;
+    const needsPassword=u.must_set_password===true;
     const archivedInfo=!active
       ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>`
       : '';
     let action='—';
+    const notifyButton = active && needsPassword && canNotify
+      ? `<button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار تعيين كلمة المرور</button>`
+      : '';
+
     if(u.id===state.profile.id){
       action='<span class="meta">حسابك الحالي</span>';
     }else if(isAdmin()){
       action=active
-        ? `<button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`
+        ? `${notifyButton} <button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`
         : '<span class="chip late">معطل ومؤرشف</span>';
     }else{
-      action='<span class="meta">لا توجد صلاحية</span>';
+      action=notifyButton || '<span class="meta">لا توجد صلاحية</span>';
     }
-    return `<tr><td>${escapeHtml(u.name)}${archivedInfo}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${active?'نعم':'لا'}</td><td>${action}</td></tr>`;
+
+    return `<tr><td>${escapeHtml(u.name)}${archivedInfo}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${active?'نعم':'لا'}</td><td>${needsPassword?'نعم':'لا'}</td><td>${action}</td></tr>`;
   }).join('');
-  $('usersTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+
+  const passwordNotice = getUsersNeedingPasswordSetup().length
+    ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>`
+    : '';
+
+  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 
