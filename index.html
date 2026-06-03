@@ -1223,6 +1223,10 @@ async function downloadUsersImportTemplate(){
     sheet.getRow(1).height = 24;
 
     for(let row = 2; row <= 201; row++){
+      ["A", "B", "C", "D", "E", "F"].forEach(col => {
+        sheet.getCell(`${col}${row}`).protection = { locked: false };
+      });
+
       sheet.getCell(`D${row}`).dataValidation = {
         type: 'list',
         allowBlank: false,
@@ -1288,6 +1292,18 @@ async function downloadUsersImportTemplate(){
     note.addRow(['3. حفظ المستخدمين من هذا النموذج يكون كمسودة فقط، ولا يتم إرسال الدعوات إلا من زر إرسال الدعوات.']);
     note.getColumn(1).width = 110;
     note.getRow(1).font = { bold:true, size:14, color:{ argb:'FF61463B' } };
+
+    await sheet.protect('department-tasks-import-template', {
+      selectLockedCells: false,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertRows: false,
+      deleteRows: false,
+      sort: false,
+      autoFilter: false
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
