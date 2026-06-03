@@ -7,6 +7,7 @@
   <link rel="icon" href="dam-logo.png" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
   <style>
     @font-face{font-family:"Bressay";src:url("./Bressay-Regular.ttf") format("truetype");font-weight:normal;font-style:normal;}
     :root{
@@ -1156,13 +1157,153 @@ function renderUsersImportPreview(){
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th></tr></thead><tbody>${usersImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
 }
-function downloadUsersImportTemplate(){
-  const link = document.createElement('a');
-  link.href = 'users_import_template.xlsx';
-  link.download = 'users_import_template.xlsx';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+async function downloadUsersImportTemplate(){
+  try{
+    if(typeof ExcelJS==='undefined'){
+      showToast('تعذر تحميل أداة إنشاء نموذج Excel بالقوائم المنسدلة. حدّث الصفحة وحاول مرة أخرى.','error');
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'department-tasks-board';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('المستخدمون');
+    sheet.views = [{ rightToLeft: true, state: 'frozen', ySplit: 1 }];
+
+    const listSheet = workbook.addWorksheet('القوائم');
+    listSheet.state = 'veryHidden';
+    listSheet.views = [{ rightToLeft: true }];
+
+    const headers = ['الاسم الكامل','البريد الإلكتروني','المسمى الوظيفي','الدور','القطاع','الإدارة'];
+    sheet.addRow(headers);
+
+    sheet.columns = [
+      { header:'الاسم الكامل', key:'name', width:28 },
+      { header:'البريد الإلكتروني', key:'email', width:34 },
+      { header:'المسمى الوظيفي', key:'job_title', width:26 },
+      { header:'الدور', key:'role', width:22 },
+      { header:'القطاع', key:'sector', width:28 },
+      { header:'الإدارة', key:'department', width:30 }
+    ];
+
+    const rolesForCurrentUser = isSectorHead()
+      ? ['موظف','مدير إدارة']
+      : ['موظف','مدير إدارة','رئيس قطاع','الرئيس التنفيذي','مدير النظام'];
+
+    const sectorsForCurrentUser = isSectorHead()
+      ? state.sectors.filter(s=>s.id===state.profile?.sector_id)
+      : state.sectors;
+
+    const sectorIds = new Set(sectorsForCurrentUser.map(s=>s.id));
+    const departmentsForCurrentUser = isSectorHead()
+      ? state.departments.filter(d=>sectorIds.has(d.sector_id))
+      : state.departments;
+
+    listSheet.getCell('A1').value = 'الأدوار';
+    rolesForCurrentUser.forEach((role, index)=>{ listSheet.getCell(index + 2, 1).value = role; });
+
+    listSheet.getCell('B1').value = 'القطاعات';
+    sectorsForCurrentUser.forEach((sector, index)=>{ listSheet.getCell(index + 2, 2).value = sector.name; });
+
+    listSheet.getCell('C1').value = 'الإدارات';
+    departmentsForCurrentUser.forEach((department, index)=>{ listSheet.getCell(index + 2, 3).value = department.name; });
+
+    listSheet.getColumn(1).width = 24;
+    listSheet.getColumn(2).width = 30;
+    listSheet.getColumn(3).width = 34;
+
+    const roleEnd = Math.max(2, rolesForCurrentUser.length + 1);
+    const sectorEnd = Math.max(2, sectorsForCurrentUser.length + 1);
+    const deptEnd = Math.max(2, departmentsForCurrentUser.length + 1);
+
+    sheet.getRow(1).font = { bold:true, color:{ argb:'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF61463B' } };
+    sheet.getRow(1).alignment = { horizontal:'center', vertical:'middle' };
+    sheet.getRow(1).height = 24;
+
+    for(let row = 2; row <= 201; row++){
+      sheet.getCell(`D${row}`).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [`'القوائم'!$A$2:$A$${roleEnd}`],
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'اختيار غير مسموح',
+        error: 'اختر الدور من القائمة المنسدلة فقط، ولا تكتب قيمة خارج القائمة.',
+        showInputMessage: true,
+        promptTitle: 'الدور',
+        prompt: 'اختر الدور من القائمة المنسدلة.'
+      };
+
+      sheet.getCell(`E${row}`).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [`'القوائم'!$B$2:$B$${sectorEnd}`],
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'اختيار غير مسموح',
+        error: 'اختر القطاع من القائمة المنسدلة فقط، ولا تكتب قيمة خارج القائمة.',
+        showInputMessage: true,
+        promptTitle: 'القطاع',
+        prompt: 'اختر القطاع من القائمة المنسدلة.'
+      };
+
+      sheet.getCell(`F${row}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`'القوائم'!$C$2:$C$${deptEnd}`],
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'اختيار غير مسموح',
+        error: 'اختر الإدارة من القائمة المنسدلة فقط، ولا تكتب قيمة خارج القائمة.',
+        showInputMessage: true,
+        promptTitle: 'الإدارة',
+        prompt: 'اختر الإدارة من القائمة المنسدلة.'
+      };
+    }
+
+    // صف توضيحي فارغ بصيغة جاهزة، ويمكن حذفه أو تعبئة الصفوف تحته.
+    sheet.getCell('D2').value = rolesForCurrentUser[0] || 'موظف';
+    sheet.getCell('E2').value = sectorsForCurrentUser[0]?.name || '';
+    sheet.getCell('F2').value = '';
+
+    sheet.eachRow(row=>{
+      row.eachCell(cell=>{
+        cell.border = {
+          top:{ style:'thin', color:{ argb:'FFE3D7CF' } },
+          left:{ style:'thin', color:{ argb:'FFE3D7CF' } },
+          bottom:{ style:'thin', color:{ argb:'FFE3D7CF' } },
+          right:{ style:'thin', color:{ argb:'FFE3D7CF' } }
+        };
+        cell.alignment = { vertical:'middle', horizontal:'right', wrapText:true };
+      });
+    });
+
+    const note = workbook.addWorksheet('تعليمات');
+    note.views = [{ rightToLeft: true }];
+    note.addRow(['تعليمات تعبئة نموذج المستخدمين']);
+    note.addRow(['1. لا تكتب في أعمدة الدور والقطاع والإدارة يدويًا؛ اختر من القائمة المنسدلة فقط.']);
+    note.addRow(['2. عند اختيار قطاع وإدارة غير متطابقين، سيرفض النظام الصف في المعاينة قبل الحفظ.']);
+    note.addRow(['3. حفظ المستخدمين من هذا النموذج يكون كمسودة فقط، ولا يتم إرسال الدعوات إلا من زر إرسال الدعوات.']);
+    note.getColumn(1).width = 110;
+    note.getRow(1).font = { bold:true, size:14, color:{ argb:'FF61463B' } };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `users_import_template_dropdowns_${new Date().toISOString().slice(0,10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('تم تحميل نموذج Excel بقوائم منسدلة للدور والقطاع والإدارة.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر إنشاء نموذج Excel بالقوائم المنسدلة.','error');
+  }
 }
 async function handleUsersImportFile(event){
   try{
