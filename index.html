@@ -81,6 +81,43 @@
     @media(max-width:992px){.executive-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.executive-employees-row{grid-column:1/-1;max-width:520px;width:100%;justify-self:center}}
     @media(max-width:768px){.brand{justify-content:center}.brand img{width:220px}.title-box{text-align:center}.title-box h1{font-size:24px}.app-header{flex-direction:column;align-items:stretch}.app-actions{flex-direction:column;align-items:stretch}.executive-stats{grid-template-columns:1fr}.executive-employees-row{grid-column:1/-1;grid-template-columns:1fr;max-width:none}.employee-mini-stats{grid-template-columns:1fr}}
 
+
+    /* === تحسين محاذاة كروت إحصائيات القطاعات في داشبورد الرئيس التنفيذي === */
+    .sector-dashboard-section .executive-stats{
+      display:grid;
+      grid-template-columns:repeat(6,minmax(150px,1fr));
+      gap:14px;
+      align-items:stretch;
+      justify-content:center;
+      direction:rtl;
+      margin:18px auto;
+      width:100%;
+    }
+    .sector-dashboard-section .executive-stat-card{
+      width:100%;
+      min-height:120px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .sector-dashboard-section .executive-employees-row{
+      grid-column:3 / 5;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+      width:100%;
+      justify-self:center;
+      margin-top:0;
+    }
+    @media(max-width:992px){
+      .sector-dashboard-section .executive-stats{grid-template-columns:repeat(3,minmax(0,1fr));}
+      .sector-dashboard-section .executive-employees-row{grid-column:1 / -1;max-width:520px;}
+    }
+    @media(max-width:768px){
+      .sector-dashboard-section .executive-stats{grid-template-columns:1fr;}
+      .sector-dashboard-section .executive-employees-row{grid-column:1 / -1;grid-template-columns:1fr;max-width:none;}
+    }
+
   </style>
 </head>
 <body>
@@ -1578,7 +1615,7 @@ function renderAllSectorDashboardSections(filteredRows){
     .map(sector=>{
       const sectorRows=executiveSortTasks(filteredRows.filter(t=>executiveTaskSectorId(t)===sector.id));
       const rowsHtml=sectorRows.length ? sectorRows.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام مطابقة في هذا القطاع.</td></tr>';
-      return `<section class="panel card" style="margin-top:22px;box-shadow:none;background:#fff;">
+      return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;">
         <div class="section-head">
           <div>
             <h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2>
