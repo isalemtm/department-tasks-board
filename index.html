@@ -1415,47 +1415,182 @@ exportTasksToExcel=function(){
 exportDashboardToExcel=function(){ exportTasksToExcel(); };
 
 
-/* === SECTOR EXECUTIVE DASHBOARDS PATCH ===
-   يضيف رابط لوحة مستقلة لكل قطاع:
-   - اللوحة العامة: ?view=executive&token=7700
-   - لوحة قطاع محدد: ?view=sector&token=7700&sector=<sector_id>
-   - يدعم كذلك: ?view=executive&token=7700&sector=<sector_id>
+
+/* === ALL SECTORS EXECUTIVE DASHBOARD PATCH ===
+   يجعل رابط الرئيس التنفيذي الواحد يعرض:
+   1) مؤشرات عامة لجميع القطاعات.
+   2) جدول عام لجميع المهام.
+   3) ثم كل قطاع في قسم مستقل تحت بعض بمؤشراته وجدوله.
 */
-let executiveSectorScopeId = '';
-const __sectorOriginalEnsureFullHrFeatureDom = ensureFullHrFeatureDom;
+const __allSectorsOriginalEnsureFullHrFeatureDom = ensureFullHrFeatureDom;
 ensureFullHrFeatureDom = function(){
-  __sectorOriginalEnsureFullHrFeatureDom();
+  __allSectorsOriginalEnsureFullHrFeatureDom();
   const section = $('executiveSection');
   if(!section) return;
   const h2 = section.querySelector('.section-head h2');
   const subtitle = section.querySelector('.section-head .meta');
   if(h2 && !h2.id) h2.id = 'executiveDirectTitle';
   if(subtitle && !subtitle.id) subtitle.id = 'executiveDirectSubtitle';
-  const stats = $('executiveDirectStats');
-  if(stats && !$('sectorDashboardLinks')){
-    stats.insertAdjacentHTML('afterend', `
-      <div id="sectorDashboardLinks" class="panel" style="margin:0 0 16px;padding:14px;background:#fbf8f5;border:1px solid var(--line);border-radius:16px;box-shadow:none;">
-        <div class="section-head" style="margin-bottom:8px;">
-          <div>
-            <h3 style="margin:0;color:var(--primary2);font-size:18px;">روابط لوحات القطاعات</h3>
-            <p class="meta" style="margin:4px 0 0;">كل قطاع له رابط مستقل يعرض مؤشراته ومهامه فقط.</p>
-          </div>
-        </div>
-        <div id="sectorDashboardLinksBody" class="actions"></div>
-      </div>
-    `);
+  if(!$('executiveAllSectorsSections')){
+    const tableWrap = $('executiveTasksTable')?.closest('.table-wrap');
+    if(tableWrap){
+      tableWrap.insertAdjacentHTML('afterend', '<div id="executiveAllSectorsSections" style="margin-top:24px;"></div>');
+    }
   }
 };
 
-function executiveDirectBaseUrl(){
-  return `${location.origin}${location.pathname}`;
+function executiveTaskSectorId(task){
+  return task?.target_sector_id || task?.owner_sector_id || '';
 }
-function getExecutiveSectorIdFromUrl(url){
-  return url.searchParams.get('sector') || url.searchParams.get('sector_id') || url.searchParams.get('sectorId') || '';
+function executiveTaskDepartmentId(task){
+  return task?.target_department_id || task?.owner_department_id || '';
 }
-function renderSectorDashboardLinks(){
-  const wrap = $('sectorDashboardLinks');
-  if(wrap) wrap.classList.add('hidden');
+function executiveTaskStatus(task){
+  return isLate(task) ? 'متأخرة' : (task.status || 'جديدة');
+}
+function executiveTaskSearchText(task){
+  return `${task.title||''} ${task.description||''} ${getTaskAssignees(task.id).map(u=>u.name).join(' ')} ${nameOfUser(task.primary_responsible_id)} ${nameOfSector(executiveTaskSectorId(task))} ${nameOfDept(executiveTaskDepartmentId(task))}`.toLowerCase();
+}
+function executiveSortTasks(rows){
+  return [...rows].sort((a,b)=>{
+    const aDone = a.status === 'مكتملة' ? 1 : 0;
+    const bDone = b.status === 'مكتملة' ? 1 : 0;
+    if(aDone !== bDone) return aDone - bDone;
+    const ad = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+    const bd = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+    if(ad !== bd) return ad - bd;
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  });
+}
+function executiveTaskRow(task){
+  const status = executiveTaskStatus(task);
+  return `<tr>
+    <td>${escapeHtml(task.title || '—')}</td>
+    <td>${escapeHtml(task.description || '—')}</td>
+    <td>${escapeHtml(nameOfSector(executiveTaskSectorId(task)))}</td>
+    <td>${escapeHtml(nameOfDept(executiveTaskDepartmentId(task)))}</td>
+    <td>${escapeHtml(nameOfUser(task.primary_responsible_id))}</td>
+    <td>${escapeHtml(status)}</td>
+    <td>${escapeHtml(task.priority || 'عادية')}</td>
+    <td>${formatDate(task.due_date)}</td>
+    <td>${escapeHtml(latestCommentText(task.id) || '—')}</td>
+  </tr>`;
+}
+function executiveMetricsHtml(rows, titlePrefix=''){
+  const total=rows.length;
+  const done=rows.filter(t=>t.status==='مكتملة').length;
+  const now=new Date();
+  const doneMonth=rows.filter(t=>t.status==='مكتملة' && t.created_at && new Date(t.created_at).getFullYear()===now.getFullYear() && new Date(t.created_at).getMonth()===now.getMonth()).length;
+  const progress=rows.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length;
+  const fresh=rows.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
+  const late=rows.filter(isLate).length;
+  const users=state.users.map(u=>({u,count:rows.filter(t=>getTaskAssignees(t.id).some(a=>a.id===u.id)||t.primary_responsible_id===u.id).length})).filter(x=>x.count>0);
+  const most=[...users].sort((a,b)=>b.count-a.count)[0];
+  const least=[...users].sort((a,b)=>a.count-b.count)[0];
+  return `<div class="executive-stats">
+    <div class="executive-stat-card"><span>${titlePrefix}إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${done}</strong><small>إجمالي المكتمل</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>خلال الشهر الحالي</small></div>
+    <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
+    <div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div>
+    <div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+    <div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div>
+  </div>`;
+}
+
+function fillExecutiveFilters(){
+  if($('executiveSectorFilter')){
+    $('executiveSectorFilter').innerHTML='<option value="">كل القطاعات</option>'+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    $('executiveSectorFilter').disabled=false;
+  }
+  if($('executiveAssigneeFilter')){
+    $('executiveAssigneeFilter').innerHTML='<option value="">كل المسؤولين</option>'+state.users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  }
+}
+
+loadExecutiveDirectDashboard = async function(){
+  try{
+    ensureFullHrFeatureDom();
+    await loadPublicLookups();
+    const [u,t,a,c]=await Promise.all([
+      supabaseClient.from('users').select('*').eq('is_active',true).order('name'),
+      supabaseClient.from('tasks').select('*').eq('approval_status','approved').eq('is_archived',false).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),
+      supabaseClient.from('task_assignees').select('*'),
+      supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true})
+    ]);
+    if(u.error) throw u.error; if(t.error) throw t.error; if(a.error) throw a.error; if(c.error) throw c.error;
+    state.users=u.data||[];
+    state.tasks=t.data||[];
+    state.assignees=a.data||[];
+    state.comments=c.data||[];
+    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام الإدارات والقطاعات';
+    if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent='عرض مباشر للرئيس التنفيذي: المؤشرات العامة، ثم عرض كل قطاع في قسم مستقل تحت بعض.';
+    fillExecutiveFilters();
+    renderExecutiveDirect();
+    $('authSection')?.classList.add('hidden');
+    $('appSection')?.classList.add('hidden');
+    $('passwordSetupSection')?.classList.add('hidden');
+    $('executiveSection')?.classList.remove('hidden');
+    $('userBar')?.classList.add('hidden');
+  }catch(e){
+    console.error(e);
+    ensureFullHrFeatureDom();
+    if($('executiveTasksTable')) $('executiveTasksTable').innerHTML=`<tr><td colspan="9">${escapeHtml(e.message || 'تعذر تحميل بيانات اللوحة. تأكد من تنفيذ SQL الخاص بصلاحية العرض المباشر.')}</td></tr>`;
+    $('authSection')?.classList.add('hidden');
+    $('appSection')?.classList.add('hidden');
+    $('passwordSetupSection')?.classList.add('hidden');
+    $('executiveSection')?.classList.remove('hidden');
+  }
+};
+
+renderExecutiveDirect = function(){
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
+  const fs=$('executiveSectorFilter')?.value||'';
+  const fu=$('executiveAssigneeFilter')?.value||'';
+  const st=$('executiveStatusFilter')?.value||'';
+
+  let rows=visibleTasks().filter(t=>
+    (!fs || executiveTaskSectorId(t)===fs) &&
+    (!fu || getTaskAssignees(t.id).some(u=>u.id===fu) || t.primary_responsible_id===fu) &&
+    (!st || executiveTaskStatus(t)===st) &&
+    (!q || executiveTaskSearchText(t).includes(q))
+  );
+  rows=executiveSortTasks(rows);
+
+  const statsBox=$('executiveDirectStats');
+  if(statsBox) statsBox.innerHTML=executiveMetricsHtml(rows);
+
+  const tbody=$('executiveTasksTable');
+  if(tbody){
+    tbody.innerHTML=rows.length ? rows.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام لعرضها.</td></tr>';
+  }
+
+  renderAllSectorDashboardSections(rows);
+};
+
+function renderAllSectorDashboardSections(filteredRows){
+  const box=$('executiveAllSectorsSections');
+  if(!box) return;
+  const q=($('executiveSearchInput')?.value||'').trim();
+  const selectedSector=$('executiveSectorFilter')?.value||'';
+  const sections=state.sectors
+    .filter(s=>!selectedSector || s.id===selectedSector)
+    .map(sector=>{
+      const sectorRows=executiveSortTasks(filteredRows.filter(t=>executiveTaskSectorId(t)===sector.id));
+      const rowsHtml=sectorRows.length ? sectorRows.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام مطابقة في هذا القطاع.</td></tr>';
+      return `<section class="panel card" style="margin-top:22px;box-shadow:none;background:#fff;">
+        <div class="section-head">
+          <div>
+            <h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2>
+            <p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}.</p>
+          </div>
+          <span class="badge">${sectorRows.length} مهمة</span>
+        </div>
+        ${executiveMetricsHtml(sectorRows, '')}
+        <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+      </section>`;
+    }).join('');
+  box.innerHTML = sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
 }
 
 init = async function(){
@@ -1469,10 +1604,9 @@ init = async function(){
 
   const url = new URL(location.href);
   const view = url.searchParams.get('view');
-  if(view === 'executive' || view === 'sector'){
+  if(view === 'executive'){
     if(url.searchParams.get('token') === '7700'){
-      const sectorId = view === 'sector' ? getExecutiveSectorIdFromUrl(url) : getExecutiveSectorIdFromUrl(url);
-      await loadExecutiveDirectDashboard(sectorId);
+      await loadExecutiveDirectDashboard();
       return;
     }
     showAuthOnly();
@@ -1497,79 +1631,6 @@ init = async function(){
   }
   state.session=data.session;
   if(state.session){ const ok=await bootstrap(); if(!ok) showAuthOnly(); } else showAuthOnly();
-};
-
-loadExecutiveDirectDashboard = async function(sectorId=''){
-  try{
-    executiveSectorScopeId = sectorId || '';
-    await loadPublicLookups();
-    const [u,t,a,c]=await Promise.all([
-      supabaseClient.from('users').select('*').eq('is_active',true).order('name'),
-      supabaseClient.from('tasks').select('*').eq('approval_status','approved').eq('is_archived',false).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}),
-      supabaseClient.from('task_assignees').select('*'),
-      supabaseClient.from('task_comments').select('*').order('created_at',{ascending:true})
-    ]);
-    if(u.error) throw u.error; if(t.error) throw t.error; if(a.error) throw a.error; if(c.error) throw c.error;
-    state.users=u.data||[]; state.tasks=t.data||[]; state.assignees=a.data||[]; state.comments=c.data||[];
-
-    const sector = executiveSectorScopeId ? state.sectors.find(s=>s.id===executiveSectorScopeId) : null;
-    if(executiveSectorScopeId && !sector){
-      throw new Error('لم يتم العثور على القطاع المطلوب. تأكد من رابط القطاع.');
-    }
-
-    fillExecutiveFilters();
-    renderSectorDashboardLinks();
-
-    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent = sector ? `داشبورد قطاع ${sector.name}` : 'داشبورد متابعة مهام الإدارات والقطاعات';
-    if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent = sector ? 'عرض مباشر مستقل لهذا القطاع فقط: مؤشرات عامة وجدول تفصيلي للمهام.' : 'عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.';
-
-    renderExecutiveDirect();
-    $('authSection')?.classList.add('hidden');
-    $('appSection')?.classList.add('hidden');
-    $('passwordSetupSection')?.classList.add('hidden');
-    $('executiveSection')?.classList.remove('hidden');
-    $('userBar')?.classList.add('hidden');
-  }catch(e){
-    console.error(e);
-    ensureFullHrFeatureDom();
-    if($('executiveTasksTable')) $('executiveTasksTable').innerHTML=`<tr><td colspan="9">${escapeHtml(e.message || 'تعذر تحميل بيانات اللوحة. تأكد من تنفيذ SQL الخاص بصلاحية العرض المباشر.')}</td></tr>`;
-    $('authSection')?.classList.add('hidden');
-    $('appSection')?.classList.add('hidden');
-    $('passwordSetupSection')?.classList.add('hidden');
-    $('executiveSection')?.classList.remove('hidden');
-  }
-};
-
-fillExecutiveFilters = function(){
-  const sectorFilter = $('executiveSectorFilter');
-  if(sectorFilter){
-    sectorFilter.innerHTML='<option value="">كل القطاعات</option>'+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-    if(executiveSectorScopeId){
-      sectorFilter.value = executiveSectorScopeId;
-      sectorFilter.disabled = true;
-    } else {
-      sectorFilter.disabled = false;
-    }
-  }
-  if($('executiveAssigneeFilter')){
-    let users = state.users;
-    if(executiveSectorScopeId) users = users.filter(u=>u.sector_id===executiveSectorScopeId);
-    $('executiveAssigneeFilter').innerHTML='<option value="">كل المسؤولين</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
-  }
-};
-
-renderExecutiveDirect = function(){
-  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
-  const selectedSector=$('executiveSectorFilter')?.value||'';
-  const fs=executiveSectorScopeId || selectedSector;
-  const fu=$('executiveAssigneeFilter')?.value||'';
-  const st=$('executiveStatusFilter')?.value||'';
-  let rows=visibleTasks().map(t=>({...t,derivedStatus:isLate(t)?'متأخرة':t.status}));
-  rows=rows.filter(t=>(!fs||t.target_sector_id===fs||t.owner_sector_id===fs)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||t.derivedStatus===st)&&(!q||`${t.title||''} ${t.description||''} ${getTaskAssignees(t.id).map(u=>u.name).join(' ')} ${nameOfUser(t.primary_responsible_id)} ${nameOfSector(t.target_sector_id||t.owner_sector_id)} ${nameOfDept(t.target_department_id||t.owner_department_id)}`.toLowerCase().includes(q)));
-  renderExecutiveDirectStats(rows);
-  const tbody=$('executiveTasksTable');
-  if(!tbody) return;
-  tbody.innerHTML=rows.length?rows.map(t=>`<tr><td>${escapeHtml(t.title||'—')}</td><td>${escapeHtml(t.description||'—')}</td><td>${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))}</td><td>${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}</td><td>${escapeHtml(nameOfUser(t.primary_responsible_id))}</td><td>${escapeHtml(t.derivedStatus)}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${formatDate(t.due_date)}</td><td>${escapeHtml(latestCommentText(t.id)||'—')}</td></tr>`).join(''):'<tr><td colspan="9">لا توجد مهام لعرضها.</td></tr>';
 };
 
 init();
