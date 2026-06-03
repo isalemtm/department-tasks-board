@@ -1155,7 +1155,15 @@ function renderUsersImportPreview(){
   const validCount=usersImportRows.filter(r=>r.valid).length;
   const invalidCount=usersImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
-  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th></tr></thead><tbody>${usersImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+  <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل حفظ المستخدمين كمسودة، مثل الصفوف المكررة أو غير المطلوبة.</div>
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function removeImportedUserRow(index){
+  if(index < 0 || index >= usersImportRows.length) return;
+  const removed = usersImportRows.splice(index, 1)[0];
+  renderUsersImportPreview();
+  showToast(`تم حذف ${removed?.name || 'الصف'} من المعاينة فقط.`, 'info');
 }
 async function downloadUsersImportTemplate(){
   try{
