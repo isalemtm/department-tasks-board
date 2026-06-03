@@ -242,7 +242,8 @@
           <div id="pendingUserInvitesList"></div>
         </section>
 
-        <section id="boardTasksImportPanel" class="panel card hidden">
+        <!-- FEATURE: استيراد مهام من لوحة أخرى -->
+        <section id="boardTasksImportPanel" class="panel card">
           <div class="section-head">
             <div>
               <h2>استيراد مهام من لوحة أخرى</h2>
@@ -875,7 +876,7 @@ function renderAdmin(){
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
-  $('boardTasksImportPanel')?.classList.toggle('hidden',!canManageUserImports());
+  $('boardTasksImportPanel')?.classList.remove('hidden');
   if(isAdmin()){
     fillSectorSelect('adminInviteSector', true);
     fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true);
