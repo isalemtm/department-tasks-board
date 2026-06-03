@@ -1826,7 +1826,7 @@ async function importBoardTasksFromExcel(){
         target_sector_id:row.sector_id,
         target_department_id:row.department_id,
         primary_responsible_id:row.responsible_id,
-        assignment_type:'imported',
+        assignment_type:(r.responsible_user?.role === 'sector_head' ? 'sector_heads' : 'employees'),
         task_level:'employee',
         due_date:row.due_date,
         approval_status:'approved',
