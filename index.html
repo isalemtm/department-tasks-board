@@ -3787,6 +3787,257 @@ renderTasks = function(){
     renderTaskGroup('مكتملة', groups.completed, 'لا توجد مهام مكتملة.', true, false);
 };
 
+
+/* === PATCH: إصلاح إضافة المهمة - القطاعات + الأقسام التابعة + إسناد المهمة لنفسي ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   يعالج:
+   1) عدم ظهور قائمة القطاعات داخل نافذة إضافة المهمة.
+   2) إظهار المستخدم الحالي ضمن المسند إليهم حتى يستطيع إسناد المهمة لنفسه عند الحاجة.
+   3) جعل قائمة القسم المستهدف تابعة للقطاع المستهدف المختار فقط.
+*/
+function taskTargetAllowedSectors(){
+  let rows = state.sectors || [];
+
+  // مدير النظام والرئيس التنفيذي يريان كل القطاعات.
+  if(isAdminOrCeo()) return rows;
+
+  // رئيس القطاع، مدير القسم، والموظف محصورون في قطاعهم.
+  const mySectorId = state.profile?.sector_id || '';
+  if(mySectorId) rows = rows.filter(s => s.id === mySectorId);
+
+  return rows;
+}
+
+function fillTaskTargetSectorSelect(preserveValue=true){
+  const el = $('taskTargetSector');
+  if(!el) return;
+
+  const current = preserveValue ? el.value : '';
+  const sectors = taskTargetAllowedSectors();
+
+  el.innerHTML = '<option value="">اختر القطاع</option>' +
+    sectors.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+  if(current && sectors.some(s => s.id === current)) {
+    el.value = current;
+  } else if(state.profile?.sector_id && sectors.some(s => s.id === state.profile.sector_id)) {
+    el.value = state.profile.sector_id;
+  } else if(sectors.length === 1) {
+    el.value = sectors[0].id;
+  } else {
+    el.value = '';
+  }
+}
+
+function fillTaskTargetDepartmentSelect(preserveValue=true){
+  const deptEl = $('taskTargetDepartment');
+  const sectorEl = $('taskTargetSector');
+  if(!deptEl || !sectorEl) return;
+
+  const current = preserveValue ? deptEl.value : '';
+  const sectorId = sectorEl.value || '';
+  const rows = (state.departments || []).filter(d => !sectorId || d.sector_id === sectorId);
+
+  deptEl.innerHTML = '<option value="">بدون تحديد</option>' +
+    rows.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+  if(current && rows.some(d => d.id === current)) {
+    deptEl.value = current;
+  } else if(isDepartmentManager() && state.profile?.department_id && rows.some(d => d.id === state.profile.department_id)) {
+    deptEl.value = state.profile.department_id;
+  } else if(currentRole()==='employee' && state.profile?.department_id && rows.some(d => d.id === state.profile.department_id)) {
+    deptEl.value = state.profile.department_id;
+  } else {
+    deptEl.value = '';
+  }
+}
+
+applyTargetRestrictions = function(){
+  const type = $('assignmentType')?.value || 'employees';
+  const sectorEl = $('taskTargetSector');
+  const deptEl = $('taskTargetDepartment');
+  if(!sectorEl || !deptEl) return;
+
+  fillTaskTargetSectorSelect(true);
+
+  sectorEl.disabled = false;
+  deptEl.disabled = false;
+
+  if(isSectorHead() && !isAdmin()){
+    sectorEl.value = state.profile?.sector_id || '';
+    sectorEl.disabled = true;
+  }
+
+  if(isDepartmentManager()){
+    sectorEl.value = state.profile?.sector_id || '';
+    sectorEl.disabled = true;
+  }
+
+  if(currentRole()==='employee'){
+    sectorEl.value = state.profile?.sector_id || '';
+    sectorEl.disabled = true;
+  }
+
+  fillTaskTargetDepartmentSelect(true);
+
+  if(type === 'sector_heads'){
+    deptEl.value = '';
+    deptEl.disabled = true;
+  }
+
+  if(type === 'all_sector'){
+    deptEl.value = '';
+    deptEl.disabled = true;
+  }
+
+  if(isDepartmentManager()){
+    deptEl.value = state.profile?.department_id || '';
+    deptEl.disabled = true;
+  }
+};
+
+handleAssignmentTypeChange = function(){
+  applyTargetRestrictions();
+  renderAssigneePicker();
+};
+
+handleTargetSectorChange = function(){
+  fillTaskTargetDepartmentSelect(false);
+  applyTargetRestrictions();
+  renderAssigneePicker();
+};
+
+function addCurrentUserToRows(rows){
+  const map = new Map();
+  (rows || []).forEach(u => { if(u?.id) map.set(u.id, u); });
+
+  const profileUser = (state.users || []).find(u => u.id === state.profile?.id) || state.profile;
+  if(profileUser?.id) map.set(profileUser.id, profileUser);
+
+  return [...map.values()].sort((a,b)=>{
+    if(a.id === state.profile?.id) return -1;
+    if(b.id === state.profile?.id) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''),'ar');
+  });
+}
+
+permittedAssigneeUsers = function(){
+  const type = $('assignmentType')?.value || 'employees';
+  const sector = $('taskTargetSector')?.value || '';
+  const dept = $('taskTargetDepartment')?.value || '';
+
+  let rows = (state.users || []).filter(u => u.is_active !== false);
+
+  if(type === 'employees'){
+    rows = rows.filter(u => ['employee','department_manager'].includes(u.role));
+  }
+
+  if(type === 'department_managers'){
+    rows = rows.filter(u => u.role === 'department_manager');
+  }
+
+  if(type === 'sector_heads'){
+    rows = rows.filter(u => u.role === 'sector_head');
+  }
+
+  if(type === 'all_department' && dept){
+    rows = rows.filter(u => u.department_id === dept);
+  }
+
+  if(type === 'all_sector' && sector){
+    rows = rows.filter(u => u.sector_id === sector);
+  }
+
+  // عند اختيار قطاع فقط، تُعرض أسماء مستخدمي هذا القطاع.
+  if(['employees','department_managers'].includes(type) && sector){
+    rows = rows.filter(u => u.sector_id === sector);
+  }
+
+  // عند اختيار قسم، تُعرض أسماء مستخدمي هذا القسم فقط.
+  if(['employees','department_managers'].includes(type) && dept){
+    rows = rows.filter(u => u.department_id === dept);
+  }
+
+  if(isSectorHead() && !isAdmin() && type !== 'sector_heads'){
+    rows = rows.filter(u => u.sector_id === state.profile?.sector_id || u.id === state.profile?.id);
+  }
+
+  if(isDepartmentManager()){
+    rows = rows.filter(u => u.department_id === state.profile?.department_id || u.id === state.profile?.id);
+  }
+
+  if(currentRole()==='employee'){
+    rows = rows.filter(u => u.sector_id === state.profile?.sector_id || u.id === state.profile?.id);
+  }
+
+  // مهم: إظهار المستخدم الحالي حتى يستطيع إسناد المهمة لنفسه إذا احتاج.
+  if(type === 'employees'){
+    rows = addCurrentUserToRows(rows);
+  }else{
+    rows = [...new Map(rows.map(u => [u.id,u])).values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  }
+
+  return rows;
+};
+
+renderAssigneePicker = function(){
+  const type = $('assignmentType')?.value || 'employees';
+  const box = $('assigneePicker');
+  if(!box) return;
+
+  if(['all_company','all_sector','all_department'].includes(type)){
+    box.innerHTML = '<div class="meta">سيتم إسناد المهمة تلقائيًا حسب نطاق الاختيار.</div>';
+    return;
+  }
+
+  const users = permittedAssigneeUsers();
+  box.innerHTML = users.map(u => {
+    const selfLabel = u.id === state.profile?.id ? ' - أنت' : '';
+    return `<label class="checkbox-item"><input type="checkbox" value="${u.id}"> <span>${escapeHtml(u.name)}${selfLabel} <small class="meta">(${roleLabel(u.role)})</small></span></label>`;
+  }).join('') || '<div class="meta">لا يوجد مستخدمون مطابقون.</div>';
+};
+
+clearTaskForm = function(){
+  $('editTaskId').value = '';
+  $('taskModalTitle').textContent = 'إضافة مهمة';
+  $('taskTitle').value = '';
+  $('taskDescription').value = '';
+  $('taskPriority').value = 'عادية';
+  $('taskDue').value = '';
+  $('taskFiles').value = '';
+
+  if($('assignmentType')) $('assignmentType').disabled = false;
+  if($('taskTargetSector')) $('taskTargetSector').disabled = false;
+  if($('taskTargetDepartment')) $('taskTargetDepartment').disabled = false;
+
+  fillTaskTargetSectorSelect(false);
+  configureAssignmentOptions();
+  applyTargetRestrictions();
+  renderAssigneePicker();
+};
+
+openTaskModal = function(){
+  ensureFullHrFeatureDom();
+  clearTaskForm();
+  $('taskModal').classList.remove('hidden');
+};
+
+// تثبيت فلترة القسم عند التعديل أيضًا.
+const __fixedEditTask = editTask;
+editTask = function(taskId){
+  __fixedEditTask(taskId);
+  const t = state.tasks.find(x => x.id === taskId);
+  if(!t) return;
+  fillTaskTargetSectorSelect(true);
+  $('taskTargetSector').value = t.target_sector_id || t.owner_sector_id || $('taskTargetSector').value || '';
+  fillTaskTargetDepartmentSelect(false);
+  $('taskTargetDepartment').value = t.target_department_id || t.owner_department_id || '';
+  applyTargetRestrictions();
+  renderAssigneePicker();
+  const ids = getTaskAssignees(t.id).map(u => u.id);
+  [...$('assigneePicker').querySelectorAll('input')].forEach(i => i.checked = ids.includes(i.value));
+};
+
 init();
 </script>
 </body>
