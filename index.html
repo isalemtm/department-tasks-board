@@ -2367,9 +2367,29 @@ saveTask=async function(){
     // إذا أراد المنشئ إسناد المهمة لنفسه يختار نفسه من قائمة المسند إليهم مثل أي موظف آخر.
     const validationMessage=validateAssignment(type,selected); if(validationMessage) return showToast(validationMessage,'error');
     const files=await uploadFiles($('taskFiles').files,'tasks');
-    const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
-    const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
     const primary=(existing && selected.includes(existing.primary_responsible_id)) ? existing.primary_responsible_id : (selected[0] || state.profile.id);
+    const primaryUser=(state.users||[]).find(u=>u.id===primary) || (primary===state.profile?.id?state.profile:null);
+
+    // ربط القطاع والقسم بالمستخدم المسؤول الرئيسي تلقائيًا.
+    // إذا كان المسؤول رئيس قطاع فقد لا يكون لديه قسم، لذلك يبقى القسم فارغًا بشكل صحيح.
+    const inferredSectorFromResponsible = primaryUser?.sector_id || '';
+    const inferredDepartmentFromResponsible = primaryUser?.department_id || null;
+
+    let targetSector = inferredSectorFromResponsible || $('taskTargetSector').value || state.profile.sector_id || null;
+    let targetDept = inferredDepartmentFromResponsible || null;
+
+    // الاستثناءات حسب الصلاحية ونوع التكليف.
+    if(isSectorHead() && !isAdmin() && type!=='sector_heads'){
+      targetSector = state.profile.sector_id || targetSector;
+    }
+    if(isDepartmentManager()){
+      targetSector = state.profile.sector_id || targetSector;
+      targetDept = state.profile.department_id || targetDept;
+    }
+    if(currentRole()==='employee'){
+      targetSector = state.profile.sector_id || targetSector;
+      targetDept = inferredDepartmentFromResponsible || $('taskTargetDepartment').value || state.profile.department_id || null;
+    }
     const attachment_urls=files.urls.length?[...(existing?.attachment_urls||[]),...files.urls]:(existing?.attachment_urls||[]);
     const attachment_names=files.names.length?[...(existing?.attachment_names||[]),...files.names]:(existing?.attachment_names||[]);
     const payload={title,description:$('taskDescription').value.trim(),priority:$('taskPriority').value,owner_sector_id:existing?.owner_sector_id||state.profile.sector_id,owner_department_id:existing?.owner_department_id||state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,attachment_urls,attachment_names};
@@ -4036,6 +4056,55 @@ editTask = function(taskId){
   renderAssigneePicker();
   const ids = getTaskAssignees(t.id).map(u => u.id);
   [...$('assigneePicker').querySelectorAll('input')].forEach(i => i.checked = ids.includes(i.value));
+};
+
+
+/* === PATCH: ربط القطاع والقسم تلقائيًا بالمسند إليه عند إنشاء/تعديل المهمة ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   الهدف:
+   - عند اختيار المسند إليه، يتم ضبط القطاع والقسم من بياناته تلقائيًا.
+   - إذا كان المسند إليه رئيس قطاع بلا قسم، يبقى القسم فارغًا وهذا صحيح.
+   - عند حفظ المهمة، يتم اعتماد قطاع/قسم المسؤول الرئيسي حتى لا تظهر المهام في داشبورد الرئيس التنفيذي بقسم فارغ لموظف له قسم.
+*/
+function getCheckedAssigneeIdsFromPicker(){
+  return [...($('assigneePicker')?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(i=>i.value).filter(Boolean);
+}
+
+function getPrimaryUserFromCurrentAssigneeSelection(){
+  const selected = getCheckedAssigneeIdsFromPicker();
+  const primaryId = selected[0] || '';
+  return (state.users || []).find(u => u.id === primaryId) || null;
+}
+
+function syncTaskScopeFromPrimaryAssignee(){
+  const user = getPrimaryUserFromCurrentAssigneeSelection();
+  if(!user) return;
+
+  const sectorEl = $('taskTargetSector');
+  const deptEl = $('taskTargetDepartment');
+  if(!sectorEl || !deptEl) return;
+
+  if(user.sector_id && [...sectorEl.options].some(opt => opt.value === user.sector_id)){
+    sectorEl.value = user.sector_id;
+    fillTaskTargetDepartmentSelect(false);
+  }
+
+  if(user.department_id && [...deptEl.options].some(opt => opt.value === user.department_id)){
+    deptEl.value = user.department_id;
+  }else{
+    // رئيس القطاع أو أي مستخدم بلا قسم: نخلي القسم فارغًا بدل عرض قسم غير صحيح.
+    deptEl.value = '';
+  }
+}
+
+const __scopeLinkedRenderAssigneePicker = renderAssigneePicker;
+renderAssigneePicker = function(){
+  __scopeLinkedRenderAssigneePicker();
+  const box = $('assigneePicker');
+  if(!box) return;
+  box.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.addEventListener('change', syncTaskScopeFromPrimaryAssignee);
+  });
 };
 
 init();
