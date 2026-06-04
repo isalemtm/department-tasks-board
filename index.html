@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>لوحة متابعة مهام الإدارات</title>
+  <title>لوحة متابعة مهام الأقسام</title>
   <link rel="icon" href="dam-logo.png" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -129,8 +129,8 @@
         <img src="dam-logo.png" alt="شعار مجموعة دام القابضة" onerror="this.style.display='none'" />
       </div>
       <div class="title-box">
-        <h1>لوحة متابعة مهام الإدارات</h1>
-        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات والإدارات</p>
+        <h1>لوحة متابعة مهام الأقسام</h1>
+        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات والأقسام</p>
       </div>
       <div id="userBar" class="userbar hidden"><span id="userBadge" class="badge">—</span><button class="btn btn-sm" onclick="logout()">تسجيل الخروج</button></div>
     </div>
@@ -142,7 +142,7 @@
         <div id="authNotice" class="notice info"></div>
         <div class="tabs"><button id="loginTab" class="tab active" onclick="showAuthView('login')">تسجيل الدخول</button><button id="requestTab" class="tab" onclick="showAuthView('request')">طلب انضمام</button></div>
         <div id="loginView"><h2 class="auth-title">تسجيل الدخول</h2><div class="form-group"><label>البريد الإلكتروني</label><input id="loginEmail" type="email" placeholder="example@rasf.sa"></div><div class="form-group"><label>كلمة المرور</label><input id="loginPassword" type="password" placeholder="••••••••"></div><div class="actions"><button class="btn btn-primary" onclick="login()">دخول</button><button class="link" onclick="resetPassword()">نسيت كلمة المرور؟</button></div></div>
-        <div id="requestView" class="hidden"><h2 class="auth-title">طلب الانضمام</h2><div class="form-grid"><div class="form-group"><label>الاسم الكامل</label><input id="requestName"></div><div class="form-group"><label>البريد الإلكتروني</label><input id="requestEmail" type="email"></div><div class="form-group"><label>كلمة المرور</label><input id="requestPassword" type="password"></div><div class="form-group"><label>تأكيد كلمة المرور</label><input id="requestPassword2" type="password"></div><div class="form-group"><label>الدور المطلوب</label><select id="requestRole"><option value="employee">موظف</option><option value="department_manager">مدير إدارة</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option></select></div><div class="form-group"><label>القطاع</label><select id="requestSector" onchange="fillDepartmentSelect('requestDepartment', this.value, true)"></select></div><div class="form-group full"><label>الإدارة</label><select id="requestDepartment"></select></div></div><button class="btn btn-primary" onclick="submitJoinRequest()">إرسال طلب الانضمام</button></div>
+        <div id="requestView" class="hidden"><h2 class="auth-title">طلب الانضمام</h2><div class="form-grid"><div class="form-group"><label>الاسم الكامل</label><input id="requestName"></div><div class="form-group"><label>البريد الإلكتروني</label><input id="requestEmail" type="email"></div><div class="form-group"><label>كلمة المرور</label><input id="requestPassword" type="password"></div><div class="form-group"><label>تأكيد كلمة المرور</label><input id="requestPassword2" type="password"></div><div class="form-group"><label>الدور المطلوب</label><select id="requestRole"><option value="employee">موظف</option><option value="department_manager">مدير قسم</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option></select></div><div class="form-group"><label>القطاع</label><select id="requestSector" onchange="fillDepartmentSelect('requestDepartment', this.value, true)"></select></div><div class="form-group full"><label>القسم</label><select id="requestDepartment"></select></div></div><button class="btn btn-primary" onclick="submitJoinRequest()">إرسال طلب الانضمام</button></div>
       </div>
     </section>
 
@@ -185,7 +185,7 @@
 
         <section class="panel card">
           <h2>البحث والفلترة</h2>
-          <div class="filters"><input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()"><select id="filterSector" onchange="setupEmployeeFilter(); renderTasks()"></select><select id="filterDepartment" onchange="setupEmployeeFilter(); renderTasks()"></select><select id="filterAssignee" onchange="renderTasks()"><option value="">كل الموظفين</option></select><select id="filterStatus" onchange="renderTasks()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select></div>
+          <div class="filters"><input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()"><select id="filterSector" onchange="setupDepartmentFilter(); setupEmployeeFilter(); renderTasks()"></select><select id="filterDepartment" onchange="setupEmployeeFilter(); renderTasks()"></select><select id="filterAssignee" onchange="renderTasks()"><option value="">كل الموظفين</option></select><select id="filterStatus" onchange="renderTasks()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select></div>
         </section>
 
         <section class="panel card"><div class="section-head"><h2>قائمة المهام</h2><button class="btn btn-info btn-sm" onclick="exportTasksToExcel()">تصدير Excel</button></div><div id="tasksList"></div></section>
@@ -202,10 +202,10 @@
           <div class="form-grid">
             <div class="form-group"><label>الاسم الكامل</label><input id="adminInviteName" placeholder="مثال: محمد أحمد"></div>
             <div class="form-group"><label>البريد الإلكتروني</label><input id="adminInviteEmail" type="email" placeholder="example@rasf.sa"></div>
-            <div class="form-group"><label>الدور</label><select id="adminInviteRole"><option value="employee">موظف</option><option value="department_manager">مدير إدارة</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option><option value="admin">مدير النظام</option></select></div>
+            <div class="form-group"><label>الدور</label><select id="adminInviteRole"><option value="employee">موظف</option><option value="department_manager">مدير قسم</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option><option value="admin">مدير النظام</option></select></div>
             <div class="form-group"><label>المسمى الوظيفي</label><input id="adminInviteJobTitle" placeholder="اختياري"></div>
             <div class="form-group"><label>القطاع</label><select id="adminInviteSector" onchange="fillDepartmentSelect('adminInviteDepartment', this.value, true)"></select></div>
-            <div class="form-group"><label>الإدارة</label><select id="adminInviteDepartment"></select></div>
+            <div class="form-group"><label>القسم</label><select id="adminInviteDepartment"></select></div>
           </div>
           <div class="actions"><button class="btn btn-primary" onclick="inviteUserByAdmin()">إضافة المستخدم وإرسال الدعوة</button></div>
         </section>
@@ -262,14 +262,14 @@
               <select id="boardUsersImportSector" onchange="fillDepartmentSelect('boardUsersImportDepartment', this.value, true); renderBoardUsersImportPreview();"></select>
             </div>
             <div class="form-group">
-              <label>الإدارة الافتراضية للمستخدمين المستوردين</label>
+              <label>القسم الافتراضي للمستخدمين المستوردين</label>
               <select id="boardUsersImportDepartment" onchange="renderBoardUsersImportPreview()"></select>
             </div>
             <div class="form-group full">
               <label>الدور الافتراضي إذا لم يوجد دور واضح في الملف</label>
               <select id="boardUsersImportRole" onchange="renderBoardUsersImportPreview()">
                 <option value="employee" selected>موظف</option>
-                <option value="department_manager">مدير إدارة</option>
+                <option value="department_manager">مدير قسم</option>
                 <option value="sector_head">رئيس قطاع</option>
                 <option value="ceo">الرئيس التنفيذي</option>
                 <option value="admin">مدير النظام</option>
@@ -302,7 +302,7 @@
               <select id="boardTasksImportSector" onchange="fillDepartmentSelect('boardTasksImportDepartment', this.value, true); renderBoardTasksImportPreview();"></select>
             </div>
             <div class="form-group">
-              <label>الإدارة الافتراضية للمهام المستوردة</label>
+              <label>القسم الافتراضي للمهام المستوردة</label>
               <select id="boardTasksImportDepartment" onchange="renderBoardTasksImportPreview()"></select>
             </div>
             <div class="form-group full">
@@ -328,9 +328,9 @@
     <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle"></div>
     <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
     <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
-    <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء إدارات</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
+    <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
     <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
-    <div class="form-group"><label>الإدارة المستهدفة</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
+    <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
     <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
     <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription"></textarea></div>
     <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
@@ -402,7 +402,7 @@ function resolveConfirm(ok){
   if(resolve) resolve(Boolean(ok));
 }
 function showNotice(msg,type='info'){const n=$('authNotice');n.textContent=msg;n.className=`notice ${type} show`; if(type==='success'||type==='error') showToast(msg,type);}
-function roleLabel(r){return {admin:'مدير النظام',ceo:'الرئيس التنفيذي',sector_head:'رئيس قطاع',department_manager:'مدير إدارة',employee:'موظف'}[r]||r}
+function roleLabel(r){return {admin:'مدير النظام',ceo:'الرئيس التنفيذي',sector_head:'رئيس قطاع',department_manager:'مدير قسم',employee:'موظف'}[r]||r}
 function nameOfUser(id){const u=state.users.find(x=>x.id===id);return u?u.name:'—'}
 function nameOfSector(id){const s=state.sectors.find(x=>x.id===id);return s?s.name:'—'}
 function nameOfDept(id){const d=state.departments.find(x=>x.id===id);return d?d.name:'—'}
@@ -454,7 +454,7 @@ function setupEmployeeFilter(){
 function setupFilters(){
   fillSectorSelect('filterSector',true);
   $('filterSector').insertAdjacentHTML('afterbegin','<option value="" selected>كل القطاعات</option>');
-  $('filterDepartment').innerHTML='<option value="">كل الإدارات</option>'+state.departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  $('filterDepartment').innerHTML='<option value="">كل الأقسام</option>'+state.departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
   if($('filterStatus')) $('filterStatus').innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
   setupEmployeeFilter();
 }
@@ -510,8 +510,8 @@ function exportTasksToExcel(){
     const ws=XLSX.utils.json_to_sheet(rows);
     ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16}];
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'مهام الإدارات');
-    XLSX.writeFile(wb,`مهام_الإدارات_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb,ws,'مهام الأقسام');
+    XLSX.writeFile(wb,`مهام_الأقسام_${new Date().toISOString().slice(0,10)}.xlsx`);
     showToast('تم تصدير ملف Excel بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
 }
@@ -555,7 +555,7 @@ function openTaskModal(){
 function closeTaskModal(){ $('taskModal').classList.add('hidden'); }
 function allowedAssignmentTypes(){
   const all=[
-    ['employees','موظفون محددون'],['department_managers','مدراء إدارات'],['sector_heads','رؤساء قطاعات'],['all_department','كل إدارة'],['all_sector','كل قطاع'],['all_company','كل الشركة']
+    ['employees','موظفون محددون'],['department_managers','مدراء أقسام'],['sector_heads','رؤساء قطاعات'],['all_department','كل إدارة'],['all_sector','كل قطاع'],['all_company','كل الشركة']
   ];
   if(isAdminOrCeo()) return all;
   if(isSectorHead()) return all.filter(([v])=>['employees','sector_heads','all_sector'].includes(v));
@@ -592,14 +592,14 @@ function applyTargetRestrictions(){
       }
     }
   } else if(isDepartmentManager()){
-    // مدير الإدارة يبقى محصورًا داخل إدارته فقط.
+    // مدير القسم يبقى محصورًا داخل قسمه فقط.
     sectorEl.value=state.profile.sector_id||'';
     sectorEl.disabled=true;
     fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
     deptEl.value=state.profile.department_id||'';
     deptEl.disabled=true;
   } else if(currentRole()==='employee'){
-    // الموظف محصور داخل قطاعه، ويستطيع اختيار موظفين من الإدارات التابعة لنفس القطاع.
+    // الموظف محصور داخل قطاعه، ويستطيع اختيار موظفين من الأقسام التابعة لنفس القطاع.
     sectorEl.value=state.profile.sector_id||'';
     sectorEl.disabled=true;
     fillDepartmentSelect('taskTargetDepartment', state.profile.sector_id, true);
@@ -649,7 +649,7 @@ function validateAssignment(type,selected){
   }
   if(isDepartmentManager()){
     const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.department_id!==state.profile.department_id);
-    if(invalid.length) return 'مدير الإدارة يستطيع إسناد المهام داخل إدارته فقط.';
+    if(invalid.length) return 'مدير القسم يستطيع إسناد المهام داخل قسمه فقط.';
   }
   if(currentRole()==='employee'){
     const invalid=selected.map(id=>state.users.find(u=>u.id===id)).filter(u=>u && u.id!==state.profile.id && u.sector_id!==state.profile.sector_id);
@@ -848,7 +848,7 @@ function usersInDashboardScope(){
 }
 function renderEmployeePerformance(title,users){
   const body=users.map(u=>metricsRow(u.name, `${nameOfSector(u.sector_id)} / ${nameOfDept(u.department_id)}`, tasksForUser(u.id))).join('');
-  return `<section class="panel card"><div class="section-head"><h2>${escapeHtml(title)}</h2><button class="btn btn-info btn-sm" onclick="exportDashboardToExcel()">تصدير Excel</button></div><div class="table-wrap"><table><thead><tr><th>الموظف</th><th>القطاع / الإدارة</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
+  return `<section class="panel card"><div class="section-head"><h2>${escapeHtml(title)}</h2><button class="btn btn-info btn-sm" onclick="exportDashboardToExcel()">تصدير Excel</button></div><div class="table-wrap"><table><thead><tr><th>الموظف</th><th>القطاع / القسم</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
 }
 function renderDepartmentPerformance(){
   let depts=state.departments;
@@ -861,7 +861,7 @@ function renderDepartmentPerformance(){
     const rows=visibleTasks().filter(t=>deptTaskIds.has(t.id)||t.owner_department_id===d.id||t.target_department_id===d.id);
     return metricsRow(d.name,nameOfSector(d.sector_id),uniqueTasks(rows));
   }).join('');
-  return `<section class="panel card"><h2>أداء الإدارات</h2><div class="table-wrap"><table><thead><tr><th>الإدارة</th><th>القطاع</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
+  return `<section class="panel card"><h2>أداء الأقسام</h2><div class="table-wrap"><table><thead><tr><th>القسم</th><th>القطاع</th><th>إجمالي المهام</th><th>جديدة</th><th>قيد التنفيذ</th><th>مكتملة</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body||'<tr><td colspan="8">لا توجد بيانات.</td></tr>'}</tbody></table></div></section>`;
 }
 function renderSectorPerformance(){
   if(!(isAdminOrCeo())) return '';
@@ -1030,7 +1030,7 @@ function mapBoardUserImportRole(value){
   const v=String(value||'').trim().toLowerCase();
   const map={
     'موظف':'employee','employee':'employee','member':'employee','عضو':'employee',
-    'مدير إدارة':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
+    'مدير قسم':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
     'رئيس قطاع':'sector_head','sector_head':'sector_head','sector head':'sector_head',
     'الرئيس التنفيذي':'ceo','رئيس تنفيذي':'ceo','ceo':'ceo',
     'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin'
@@ -1089,15 +1089,15 @@ function resolveBoardUserImportRow(raw,index){
   const sector=state.sectors.find(sector=>sector.id===defaultSectorId) || null;
   const department=state.departments.find(dept=>dept.id===defaultDeptId) || null;
   if(!sector && !['admin','ceo'].includes(role)) errors.push('اختر القطاع الافتراضي');
-  if(defaultDeptId && !department) errors.push('الإدارة الافتراضية غير صحيحة');
-  if(department && sector && department.sector_id!==sector.id) errors.push('الإدارة المختارة لا تتبع القطاع المختار');
+  if(defaultDeptId && !department) errors.push('القسم الافتراضي غير صحيحة');
+  if(department && sector && department.sector_id!==sector.id) errors.push('القسم المختار لا تتبع القطاع المختار');
   if(isSectorHead()){
     if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع استيراد مستخدمين خارج قطاعه');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء إدارات فقط');
+    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   if(isDepartmentManager()){
-    if(!department || department.id!==state.profile.department_id) errors.push('مدير الإدارة يستطيع استيراد مستخدمين داخل إدارته فقط');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('مدير الإدارة يستطيع استيراد موظفين أو مدراء إدارات فقط');
+    if(!department || department.id!==state.profile.department_id) errors.push('مدير القسم يستطيع استيراد مستخدمين داخل قسمه فقط');
+    if(['admin','ceo','sector_head'].includes(role)) errors.push('مدير القسم يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   const duplicateUser=state.users.some(u=>String(u.email||'').toLowerCase()===email);
   const duplicatePending=state.pendingUserImports.some(u=>u.status==='pending' && String(u.email||'').toLowerCase()===email);
@@ -1136,7 +1136,7 @@ function renderBoardUsersImportPreview(){
   }
   const validCount=boardUsersImportRows.filter(r=>r.valid).length;
   const invalidCount=boardUsersImportRows.length-validCount;
-  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 function clearBoardUsersImport(){
   boardUsersImportRows=[];
@@ -1209,7 +1209,7 @@ function mapImportRole(value){
   const v=String(value||'').trim().toLowerCase();
   const map={
     'موظف':'employee','employee':'employee',
-    'مدير إدارة':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
+    'مدير قسم':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
     'رئيس قطاع':'sector_head','sector_head':'sector_head','sector head':'sector_head',
     'الرئيس التنفيذي':'ceo','رئيس تنفيذي':'ceo','ceo':'ceo',
     'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin'
@@ -1252,7 +1252,7 @@ function validateImportedUser(row, index){
   }
   if(isSectorHead()){
     if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع إضافة مستخدم خارج قطاعه');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء إدارات فقط');
+    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   return { row_number:index+2, name, email, job_title, role, role_label:roleLabel(role), sector_id:sector?.id||null, sector_name:sector?.name||sectorName, department_id:department?.id||null, department_name:department?.name||deptName, valid:errors.length===0, errors };
 }
@@ -1264,7 +1264,7 @@ function renderUsersImportPreview(){
   const invalidCount=usersImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
   <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل حفظ المستخدمين كحسابات نشطة بدون بريد، مثل الصفوف المكررة أو غير المطلوبة.</div>
-  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function removeImportedUserRow(index){
@@ -1304,8 +1304,8 @@ async function downloadUsersImportTemplate(){
     ];
 
     const rolesForCurrentUser = isSectorHead()
-      ? ['موظف','مدير إدارة']
-      : ['موظف','مدير إدارة','رئيس قطاع','الرئيس التنفيذي','مدير النظام'];
+      ? ['موظف','مدير قسم']
+      : ['موظف','مدير قسم','رئيس قطاع','الرئيس التنفيذي','مدير النظام'];
 
     const sectorsForCurrentUser = isSectorHead()
       ? state.sectors.filter(s=>s.id===state.profile?.sector_id)
@@ -1317,7 +1317,7 @@ async function downloadUsersImportTemplate(){
       : state.departments;
 
     if (!sectorsForCurrentUser.length || !departmentsForCurrentUser.length) {
-      showToast('قائمة القطاعات أو الإدارات فارغة. حدّث الصفحة وتأكد من تحميل بيانات القطاعات والإدارات قبل تنزيل النموذج.','error');
+      showToast('قائمة القطاعات أو الأقسام فارغة. حدّث الصفحة وتأكد من تحميل بيانات القطاعات والأقسام قبل تنزيل النموذج.','error');
       return;
     }
 
@@ -1327,7 +1327,7 @@ async function downloadUsersImportTemplate(){
     listSheet.getCell('B1').value = 'القطاعات';
     sectorsForCurrentUser.forEach((sector, index)=>{ listSheet.getCell(index + 2, 2).value = sector.name; });
 
-    listSheet.getCell('C1').value = 'الإدارات';
+    listSheet.getCell('C1').value = 'الأقسام';
     departmentsForCurrentUser.forEach((department, index)=>{ listSheet.getCell(index + 2, 3).value = department.name; });
 
     listSheet.getColumn(1).width = 24;
@@ -1530,7 +1530,7 @@ function renderPendingUserImports(){
   }
 
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">عدد المستخدمين الذين يحتاجون إشعار تعيين كلمة المرور: ${rows.length}</div>
-  <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>إجراء</th></tr></thead><tbody>${rows.map(u=>`<tr><td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td><button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار</button></td></tr>`).join('')}</tbody></table></div>`;
+  <div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>إجراء</th></tr></thead><tbody>${rows.map(u=>`<tr><td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td><button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
 async function deletePendingUserImport(id){
@@ -1783,7 +1783,7 @@ function resolveBoardTaskImportRow(rawRow,index){
   if(!sector_id) errors.push('اختر القطاع الافتراضي أو أضف القطاع في الملف');
   if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد المسؤول');
   if(isSectorHead() && sector_id!==state.profile.sector_id) errors.push('لا يمكن استيراد مهام خارج قطاعك');
-  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج إدارتك');
+  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج قسمك');
 
   return {
     row_number:index+2,
@@ -1856,7 +1856,7 @@ function renderBoardTasksImportPreview(){
   const validCount=boardTasksImportRows.filter(r=>r.valid).length;
   const invalidCount=boardTasksImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المهام: ${boardTasksImportRows.length} | صالح للاستيراد: ${validCount} | فيه أخطاء: ${invalidCount}</div>
-  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th></tr></thead><tbody>${boardTasksImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th></tr></thead><tbody>${boardTasksImportRows.map(r=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function clearBoardTasksImport(){
@@ -1874,7 +1874,7 @@ async function importBoardTasksFromExcel(){
 
     const ok=await askConfirm({
       title:'استيراد المهام',
-      message:`سيتم استيراد ${boardTasksImportRows.length} مهمة إلى لوحة الإدارات والقطاعات. روابط المرفقات ستضاف كنص داخل وصف المهمة ولن يتم نقل الملفات فعليًا. هل تريد المتابعة؟`,
+      message:`سيتم استيراد ${boardTasksImportRows.length} مهمة إلى لوحة الأقسام والقطاعات. روابط المرفقات ستضاف كنص داخل وصف المهمة ولن يتم نقل الملفات فعليًا. هل تريد المتابعة؟`,
       okText:'استيراد المهام',
       danger:false
     });
@@ -1925,7 +1925,7 @@ async function importBoardTasksFromExcel(){
   }catch(e){ console.error(e); showToast(e.message||'تعذر استيراد المهام.','error',7000); }
 }
 
-function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
+function renderRequests(){ if(!state.requests.length){$('requestsList').innerHTML='<div class="empty">لا توجد طلبات.</div>';return;} $('requestsList').innerHTML=`<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${state.requests.map(r=>`<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.email)}</td><td>${roleLabel(r.requested_role)}</td><td>${nameOfSector(r.requested_sector_id)}</td><td>${nameOfDept(r.requested_department_id)}</td><td>${r.status}</td><td>${r.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">اعتماد</button> <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">رفض</button>`:'—'}</td></tr>`).join('')}</tbody></table></div>`; }
 async function approveRequest(id){ const r=state.requests.find(x=>x.id===id); if(!r?.auth_user_id)return showToast('لا يوجد auth_user_id للطلب.','error'); const {error}=await supabaseClient.from('users').insert({id:r.auth_user_id,name:r.full_name,email:r.email,role:r.requested_role,sector_id:r.requested_sector_id,department_id:r.requested_department_id,is_active:true}).select(); if(error)return showToast(error.message,'error'); await supabaseClient.from('registration_requests').update({status:'approved',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم اعتماد طلب الانضمام.','success'); }
 async function rejectRequest(id){ await supabaseClient.from('registration_requests').update({status:'rejected',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',id); await loadAll(); renderAdmin(); showToast('تم رفض طلب الانضمام.','success'); }
 function renderUsers(){
@@ -1958,7 +1958,7 @@ function renderUsers(){
     ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>`
     : '';
 
-  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 
@@ -2075,7 +2075,7 @@ function ensureFullHrFeatureDom(){
       <section id="executiveSection" class="hidden">
         <section class="panel card">
           <div class="section-head">
-            <div><h2>داشبورد متابعة مهام الإدارات والقطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
+            <div><h2>داشبورد متابعة مهام الأقسام والقطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
             <span class="badge">عرض فقط</span>
           </div>
           <!-- FIX: executiveDirectStats container intentionally has no executive-stats class to avoid nested grid misalignment -->
@@ -2087,7 +2087,7 @@ function ensureFullHrFeatureDom(){
             <select id="executiveStatusFilter" onchange="renderExecutiveDirect()"><option value="">كل الحالات</option><option value="جديدة">جديدة</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select>
           </div>
           <p class="meta">مرّر الجدول يمينًا ويسارًا لعرض جميع الأعمدة.</p>
-          <div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody id="executiveTasksTable"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody id="executiveTasksTable"></tbody></table></div>
           <div id="executiveAllSectorsSections" style="margin-top:24px;"></div>
         </section>
       </section>`);
@@ -2315,7 +2315,7 @@ exportTasksToExcel=function(){
     const rows=[]; const tasks=getFilteredTasks();
     tasks.forEach(t=>{ const assignees=getTaskAssignees(t.id); const latest=latestCommentText(t.id); const base={'عنوان المهمة':t.title||'','وصف المهمة':t.description||'','الحالة':isLate(t)?'متأخرة':t.status,'الأولوية':t.priority||'عادية','القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),'المسند إليهم':assignees.map(u=>u.name).join('، '),'آخر تعليق':latest,'روابط مرفقات المهمة':(t.attachment_urls||[]).join(' | '),'أسماء مرفقات المهمة':(t.attachment_names||[]).join(' | '),'تاريخ الاستحقاق':formatDate(t.due_date),'هل المهمة متأخرة؟':isLate(t)?'نعم':'لا','حالة الاعتماد':isApprovedTask(t)?'معتمدة':(t.approval_status||'—'),'تاريخ الإنشاء':formatDate(t.created_at)}; if(assignees.length){assignees.forEach(u=>rows.push({...base,'الموظف':u.name,'بريد الموظف':u.email||'','دور الموظف':roleLabel(u.role),'قطاع الموظف':nameOfSector(u.sector_id),'إدارة الموظف':nameOfDept(u.department_id)}));} else rows.push(base); });
     if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
-    const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:30},{wch:70},{wch:14},{wch:12},{wch:24},{wch:24},{wch:24},{wch:40},{wch:60},{wch:60},{wch:16},{wch:14},{wch:14},{wch:16}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'تقرير تفصيلي للمهام'); XLSX.writeFile(wb,`تقرير_مهام_الإدارات_تفصيلي_${new Date().toISOString().slice(0,10)}.xlsx`); showToast('تم تصدير التقرير التفصيلي بنجاح.','success');
+    const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:30},{wch:70},{wch:14},{wch:12},{wch:24},{wch:24},{wch:24},{wch:40},{wch:60},{wch:60},{wch:16},{wch:14},{wch:14},{wch:16}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'تقرير تفصيلي للمهام'); XLSX.writeFile(wb,`تقرير_مهام_الأقسام_تفصيلي_${new Date().toISOString().slice(0,10)}.xlsx`); showToast('تم تصدير التقرير التفصيلي بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
 };
 exportDashboardToExcel=function(){ exportTasksToExcel(); };
@@ -2429,7 +2429,7 @@ loadExecutiveDirectDashboard = async function(){
     state.tasks=t.data||[];
     state.assignees=a.data||[];
     state.comments=c.data||[];
-    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام الإدارات والقطاعات';
+    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام الأقسام والقطاعات';
     if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent='عرض مباشر للرئيس التنفيذي: المؤشرات العامة، ثم عرض كل قطاع في قسم مستقل تحت بعض.';
     fillExecutiveFilters();
     renderExecutiveDirect();
@@ -2493,7 +2493,7 @@ function renderAllSectorDashboardSections(filteredRows){
           <span class="badge">${sectorRows.length} مهمة</span>
         </div>
         ${executiveMetricsHtml(sectorRows, '')}
-        <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+        <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
       </section>`;
     }).join('');
   box.innerHTML = sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
@@ -2599,7 +2599,7 @@ function resolveBoardTaskImportRow(rawRow,index){
   if(!sector_id) errors.push('لم يتم تحديد قطاع للمهمة؛ اختر القطاع الافتراضي أو طابق بريد/اسم المسؤول مع مستخدم له قطاع');
   if(!responsibleUser?.id) errors.push('اختر المسؤول الافتراضي أو تأكد من بريد/اسم المسؤول');
   if(isSectorHead() && sector_id!==state.profile.sector_id) errors.push('لا يمكن استيراد مهام خارج قطاعك');
-  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج إدارتك');
+  if(isDepartmentManager() && department_id!==state.profile.department_id) errors.push('لا يمكن استيراد مهام خارج قسمك');
 
   return {
     row_number:index+2,
@@ -2657,15 +2657,15 @@ function renderBoardTasksImportPreview(){
   const invalidCount=boardTasksImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المهام: ${boardTasksImportRows.length} | صالح للاستيراد: ${validCount} | فيه أخطاء: ${invalidCount}</div>
   <p class="meta">إذا كان ملف HR لا يحتوي قطاع أو إدارة، سيأخذ النظام القطاع والإدارة تلقائيًا من المستخدم المسؤول المطابق بالبريد. ويمكنك حذف أي صف غير مطلوب قبل الاستيراد.</p>
-  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardTasksImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardTaskImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardTasksImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardTaskImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
 
 /* === PATCH: تحويل المهام مع حصر تعطيل/حذف المستخدمين على مدير النظام فقط ===
-   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
    - مدير النظام فقط يستطيع تعطيل/أرشفة أو حذف المستخدمين.
-   - رئيس القطاع/مدير الإدارة/مدير النظام يستطيع تحويل المهمة مباشرة داخل نطاقه.
-   - الموظف يستطيع طلب تحويل المهمة، وتظهر كرغبة بانتظار اعتماد رئيس القطاع/مدير الإدارة/مدير النظام.
+   - رئيس القطاع/مدير القسم/مدير النظام يستطيع تحويل المهمة مباشرة داخل نطاقه.
+   - الموظف يستطيع طلب تحويل المهمة، وتظهر كرغبة بانتظار اعتماد رئيس القطاع/مدير القسم/مدير النظام.
 */
 function canManageUserInScope(user){
   // بناءً على طلبك: تعطيل/أرشفة وحذف المستخدمين محصور على مدير النظام فقط.
@@ -2839,7 +2839,7 @@ renderUsers = function(){
     return `<tr><td>${escapeHtml(u.name)}${archivedInfo}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${active?'نعم':'لا'}</td><td>${needsPassword?'نعم':'لا'}</td><td>${action}</td></tr>`;
   }).join('');
   const passwordNotice = getUsersNeedingPasswordSetup().length ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>` : '';
-  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${htmlRows}</tbody></table></div>`;
+  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${htmlRows}</tbody></table></div>`;
 };
 
 archiveUser = async function(userId,name){
@@ -2890,9 +2890,9 @@ deleteUserByAdmin = async function(userId,email,name){
 };
 
 /* === PATCH: حالات المهام الجديدة + اعتماد الإنجاز + ترتيب/إخفاء المكتمل ===
-   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
    - المهام الجديدة تُعرض ضمن قيد التنفيذ إلى أن تُعتمد مكتملة.
-   - طلب اكتمال الموظف لا يغير الحالة إلى مكتملة حتى يعتمدها رئيس القطاع/مدير الإدارة/مدير النظام.
+   - طلب اكتمال الموظف لا يغير الحالة إلى مكتملة حتى يعتمدها رئيس القطاع/مدير القسم/مدير النظام.
    - المكتمل يُخفى داخل قائمة منسدلة.
    - الترتيب حسب أقرب تاريخ استحقاق.
 */
@@ -2973,7 +2973,7 @@ function getCompletionRequests(){
 function ensureCompletionApprovalDom(){
   if(!$('adminPage') || $('completionRequestsPanel')) return;
   const target = $('transferRequestsPanel') || $('pendingTasksPanel') || $('requestsPanel');
-  const html = `<section id="completionRequestsPanel" class="panel card hidden"><h2>مهام مكتملة بانتظار الاعتماد</h2><p class="meta">عندما يختار الموظف أن المهمة مكتملة، تبقى ضمن قيد التنفيذ حتى يعتمدها مدير الإدارة أو رئيس القطاع أو مدير النظام.</p><div id="completionRequestsList"></div></section>`;
+  const html = `<section id="completionRequestsPanel" class="panel card hidden"><h2>مهام مكتملة بانتظار الاعتماد</h2><p class="meta">عندما يختار الموظف أن المهمة مكتملة، تبقى ضمن قيد التنفيذ حتى يعتمدها مدير القسم أو رئيس القطاع أو مدير النظام.</p><div id="completionRequestsList"></div></section>`;
   if(target) target.insertAdjacentHTML('beforebegin', html); else $('adminPage').insertAdjacentHTML('afterbegin', html);
 }
 function renderCompletionRequests(){
@@ -3109,7 +3109,7 @@ renderExecutiveDirect = function(){
   const parts=executiveCompletedDetails(rows);
   const tbody=$('executiveTasksTable');
   if(tbody){
-    tbody.innerHTML = parts.activeHtml + `<tr><td colspan="9" style="padding:0;border-bottom:0;"><details style="margin:10px;"><summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></td></tr>`;
+    tbody.innerHTML = parts.activeHtml + `<tr><td colspan="9" style="padding:0;border-bottom:0;"><details style="margin:10px;"><summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></td></tr>`;
   }
   renderAllSectorDashboardSections(rows);
 };
@@ -3122,7 +3122,7 @@ renderAllSectorDashboardSections = function(filteredRows){
   const sections=state.sectors.filter(s=>!selectedSector || s.id===selectedSector).map(sector=>{
     const sectorRows=sortTasksByDue(filteredRows.filter(t=>executiveTaskSectorId(t)===sector.id));
     const parts=executiveCompletedDetails(sectorRows);
-    return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;"><div class="section-head"><div><h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2><p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}. ملاحظة: مهام رئيس القطاع تُحسب له فقط إذا كان مسؤولًا أو مسندًا إليه.</p></div><span class="badge">${sectorRows.length} مهمة</span></div>${executiveMetricsHtml(sectorRows, '')}<div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div><details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></section>`;
+    return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;"><div class="section-head"><div><h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2><p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}. ملاحظة: مهام رئيس القطاع تُحسب له فقط إذا كان مسؤولًا أو مسندًا إليه.</p></div><span class="badge">${sectorRows.length} مهمة</span></div>${executiveMetricsHtml(sectorRows, '')}<div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div><details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></section>`;
   }).join('');
   box.innerHTML=sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
 };
@@ -3142,7 +3142,7 @@ taskMetrics = function(rows){
 
 
 /* === PATCH: توحيد مؤشرات الداشبورد إلى ثلاث حالات مع إبقاء إجمالي المهام وأكثر/أقل موظف ===
-   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
    الكروت المعتمدة للعرض:
    1) إجمالي المهام.
    2) قيد التنفيذ: كل مهمة غير مكتملة وغير متأخرة، وتشمل الجديدة وبانتظار اعتماد الإنجاز.
@@ -3303,7 +3303,7 @@ renderTasks = function(){
 
 
 /* === PATCH: فلترة الحالات الثلاث + فلترة الموظف حسب النطاق ===
-   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
    - إزالة حالة جديدة من الفلترة.
    - الحالات المعتمدة في الفلترة: قيد التنفيذ، مكتملة، متأخرة.
    - إضافة فلتر الموظف، ويعرض لكل مستخدم موظفي نطاقه.
@@ -3340,6 +3340,92 @@ renderTasks = function(){
   normalizeTaskStatusFilterOptions();
   setupEmployeeFilter();
   __employeeFilterOriginalRenderTasks();
+};
+
+
+/* === PATCH: تسميات الأقسام + فلترة مترابطة قطاع > قسم > موظف === */
+function scopedFilterSectors(){
+  let sectors = state.sectors || [];
+  if(isSectorHead() || isDepartmentManager() || currentRole()==='employee'){
+    sectors = sectors.filter(s => s.id === state.profile?.sector_id);
+  }
+  return sectors.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+}
+
+function setupSectorFilter(){
+  const el = $('filterSector');
+  if(!el) return;
+  const current = el.value;
+  const sectors = scopedFilterSectors();
+  el.innerHTML = '<option value="">كل القطاعات</option>' + sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if(current && sectors.some(s=>s.id===current)) el.value = current;
+  else if((isSectorHead() || isDepartmentManager() || currentRole()==='employee') && state.profile?.sector_id) el.value = state.profile.sector_id;
+}
+
+function setupDepartmentFilter(){
+  const el = $('filterDepartment');
+  if(!el) return;
+  const current = el.value;
+  const sectorId = $('filterSector')?.value || '';
+  let departments = state.departments || [];
+
+  if(isDepartmentManager()){
+    departments = departments.filter(d => d.id === state.profile?.department_id);
+  } else if(isSectorHead() || currentRole()==='employee'){
+    departments = departments.filter(d => d.sector_id === state.profile?.sector_id);
+  }
+
+  if(sectorId) departments = departments.filter(d => d.sector_id === sectorId);
+
+  departments = departments.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML = '<option value="">كل الأقسام</option>' + departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+  if(current && departments.some(d=>d.id===current)) el.value = current;
+  else el.value = '';
+}
+
+setupEmployeeFilter = function(){
+  const el = $('filterAssignee');
+  if(!el) return;
+  const current = el.value;
+  const sectorId = $('filterSector')?.value || '';
+  const deptId = $('filterDepartment')?.value || '';
+  let users = (state.users || []).filter(u => u.is_active !== false);
+
+  if(isSectorHead()) users = users.filter(u => u.sector_id === state.profile?.sector_id);
+  else if(isDepartmentManager()) users = users.filter(u => u.department_id === state.profile?.department_id);
+  else if(currentRole()==='employee') users = users.filter(u => u.id === state.profile?.id);
+
+  if(sectorId) users = users.filter(u => u.sector_id === sectorId);
+  if(deptId) users = users.filter(u => u.department_id === deptId);
+
+  users = users.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML = '<option value="">كل الموظفين</option>' + users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('');
+  if(current && users.some(u => u.id === current)) el.value = current;
+  else el.value = '';
+};
+
+function normalizeTaskStatusFilterOptions(){
+  const el=$('filterStatus');
+  if(!el) return;
+  const current=['قيد التنفيذ','مكتملة','متأخرة'].includes(el.value) ? el.value : '';
+  el.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
+  el.value=current;
+}
+
+setupFilters = function(){
+  setupSectorFilter();
+  setupDepartmentFilter();
+  normalizeTaskStatusFilterOptions();
+  setupEmployeeFilter();
+};
+
+const __sectionFilterOriginalRenderTasks = renderTasks;
+renderTasks = function(){
+  normalizeTaskStatusFilterOptions();
+  setupDepartmentFilter();
+  setupEmployeeFilter();
+  __sectionFilterOriginalRenderTasks();
 };
 
 init();
