@@ -3174,23 +3174,31 @@ renderExecutiveSummaryCards = function(){
   return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2>${workflowThreeCardsHtml(tasks)}</section>`;
 };
 
-// تعديل كروت صفحة المهام العلوية: إخفاء الإجمالي والجديدة، وإبقاء الحالات الثلاث فقط.
+// تعديل كروت صفحة المهام العلوية: إظهار 4 بطاقات متساوية: إجمالي المهام + قيد التنفيذ + مكتملة + متأخرة.
 renderStats = function(tasks=visibleTasks()){
   const m = workflowThreeMetrics(tasks || []);
+  const statsGrid = document.querySelector('.grid.stats');
+  if(statsGrid) statsGrid.classList.add('workflow-four-stats');
+
   if($('statTotal')) $('statTotal').textContent = m.total;
-  if($('statNew')) $('statNew').textContent = 0;
   if($('statProgress')) $('statProgress').textContent = m.progress;
   if($('statDone')) $('statDone').textContent = m.completed;
   if($('statLate')) $('statLate').textContent = m.late;
+
   const totalCard = $('statTotal')?.closest('.stat');
   const newCard = $('statNew')?.closest('.stat');
-  if(totalCard) totalCard.classList.add('hidden');
+  const progressCard = $('statProgress')?.closest('.stat');
+  const doneCard = $('statDone')?.closest('.stat');
+  const lateCard = $('statLate')?.closest('.stat');
+
+  [totalCard, progressCard, doneCard, lateCard].forEach(card=>card?.classList.remove('hidden'));
   if(newCard) newCard.classList.add('hidden');
 };
 
 // ضبط عناوين كروت صفحة المهام إن كانت موجودة.
 function normalizeWorkflowStatLabels(){
   const labels = [
+    ['statTotal','إجمالي المهام'],
     ['statProgress','قيد التنفيذ'],
     ['statDone','مكتملة'],
     ['statLate','متأخرة']
@@ -3227,6 +3235,31 @@ renderTasks = function(){
   __threeCardsOriginalRenderTasks();
 };
 
+
+
+(function injectFourTopStatsStyle(){
+  if(document.getElementById('workflowFourTopStatsStyle')) return;
+  const style=document.createElement('style');
+  style.id='workflowFourTopStatsStyle';
+  style.textContent=`
+    .stats.workflow-four-stats{
+      display:grid!important;
+      grid-template-columns:repeat(4,minmax(0,1fr))!important;
+      gap:16px!important;
+      width:100%!important;
+      margin-bottom:16px!important;
+    }
+    .stats.workflow-four-stats .stat{
+      min-height:110px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    @media(max-width:900px){.stats.workflow-four-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}
+    @media(max-width:560px){.stats.workflow-four-stats{grid-template-columns:1fr!important;}}
+  `;
+  document.head.appendChild(style);
+})();
 
 init();
 </script>
