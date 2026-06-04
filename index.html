@@ -3180,7 +3180,9 @@ taskMetrics = function(rows){
 */
 function getTaskCompletionApprovalDate(task){
   if(!task) return null;
-  const value = task.completion_reviewed_at || task.completed_at || task.closed_at || task.approved_at || null;
+  // نحسب "المهام المنجزة هذا الشهر" من تاريخ اعتماد الإكمال فقط.
+  // لا نستخدم approved_at لأنه تاريخ اعتماد إنشاء/استيراد المهمة، وليس تاريخ إنجازها.
+  const value = task.completion_reviewed_at || task.completed_at || task.closed_at || null;
   if(!value) return null;
   const date = new Date(value);
   return isNaN(date) ? null : date;
