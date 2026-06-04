@@ -3118,11 +3118,30 @@ function workflowThreeMetrics(rows){
 }
 
 function workflowThreeCardsHtml(rows){
-  const m = workflowThreeMetrics(rows || []);
+  const source = rows || [];
+  const m = workflowThreeMetrics(source);
+
+  // مهم: أكثر/أقل موظف هنا تُحسب حسب المهام المسندة للمستخدم أو التي هو مسؤولها فقط،
+  // وليس حسب كل مهام القطاع لمجرد أنه رئيس قطاع.
+  const counts = state.users
+    .filter(u => u.is_active !== false)
+    .map(u => ({
+      u,
+      count: source.filter(t => t.primary_responsible_id === u.id || getTaskAssignees(t.id).some(a => a.id === u.id)).length
+    }))
+    .filter(x => x.count > 0)
+    .sort((a,b) => b.count - a.count);
+  const most = counts[0];
+  const least = [...counts].sort((a,b) => a.count - b.count)[0];
+
   return `<div class="executive-stats executive-stats-three">
     <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${m.progress}</strong><small>تشمل الجديدة وبانتظار اعتماد الإنجاز${m.pendingCompletion ? ' | بانتظار اعتماد: ' + m.pendingCompletion : ''}</small></div>
     <div class="executive-stat-card"><span>متأخرة</span><strong>${m.late}</strong><small>غير مكتملة وتجاوزت تاريخ الاستحقاق</small></div>
     <div class="executive-stat-card"><span>مكتملة</span><strong>${m.completed}</strong><small>إجمالي المهام المعتمدة كمكتملة</small></div>
+    <div class="executive-employees-row">
+      <div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name || '—')}</strong><small>${most ? most.count + ' مهمة' : 'لا توجد مهام'}</small></div>
+      <div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name || '—')}</strong><small>${least ? least.count + ' مهمة' : 'لا توجد مهام'}</small></div>
+    </div>
   </div>`;
 }
 
@@ -3173,9 +3192,11 @@ function normalizeWorkflowStatLabels(){
 // تحسين شكل شبكة المؤشرات الثلاثية.
 const workflowStyle = document.createElement('style');
 workflowStyle.textContent = `
-  .executive-stats-three{grid-template-columns:repeat(3,minmax(180px,1fr))!important;max-width:760px;margin-left:auto!important;margin-right:auto!important;}
-  .sector-dashboard-section .executive-stats-three{grid-template-columns:repeat(3,minmax(180px,1fr))!important;max-width:760px;margin-left:auto!important;margin-right:auto!important;}
-  @media(max-width:768px){.executive-stats-three,.sector-dashboard-section .executive-stats-three{grid-template-columns:1fr!important;max-width:none;}}
+  .executive-stats-three{grid-template-columns:repeat(3,minmax(180px,1fr))!important;max-width:860px;margin-left:auto!important;margin-right:auto!important;}
+  .sector-dashboard-section .executive-stats-three{grid-template-columns:repeat(3,minmax(180px,1fr))!important;max-width:860px;margin-left:auto!important;margin-right:auto!important;}
+  .executive-stats-three .executive-employees-row{grid-column:1 / -1!important;display:grid!important;grid-template-columns:repeat(2,minmax(180px,1fr))!important;gap:14px!important;width:100%;max-width:560px;justify-self:center;margin-top:4px;}
+  .sector-dashboard-section .executive-stats-three .executive-employees-row{grid-column:1 / -1!important;max-width:560px;justify-self:center;}
+  @media(max-width:768px){.executive-stats-three,.sector-dashboard-section .executive-stats-three{grid-template-columns:1fr!important;max-width:none;}.executive-stats-three .executive-employees-row,.sector-dashboard-section .executive-stats-three .executive-employees-row{grid-template-columns:1fr!important;max-width:none;}}
 `;
 document.head.appendChild(workflowStyle);
 
