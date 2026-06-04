@@ -2820,6 +2820,257 @@ deleteUserByAdmin = async function(userId,email,name){
   }catch(e){ console.error(e); showToast(e.message || 'تعذر حذف المستخدم. إذا كانت دالة admin-delete-user مقيدة بمدير النظام فقط، أرسلها لي لأعدلها.','error',9000); }
 };
 
+/* === PATCH: حالات المهام الجديدة + اعتماد الإنجاز + ترتيب/إخفاء المكتمل ===
+   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   - المهام الجديدة تُعرض ضمن قيد التنفيذ إلى أن تُعتمد مكتملة.
+   - طلب اكتمال الموظف لا يغير الحالة إلى مكتملة حتى يعتمدها رئيس القطاع/مدير الإدارة/مدير النظام.
+   - المكتمل يُخفى داخل قائمة منسدلة.
+   - الترتيب حسب أقرب تاريخ استحقاق.
+*/
+function taskIsCompletionPending(task){
+  return task?.completion_status === 'pending';
+}
+function taskDisplayStatus(task){
+  if(taskIsCompletionPending(task)) return 'بانتظار اعتماد الإنجاز';
+  if(task?.status === 'مكتملة') return 'مكتملة';
+  if(isLate(task)) return 'متأخرة';
+  return 'قيد التنفيذ';
+}
+function taskBucket(task){
+  if(task?.status === 'مكتملة') return 'completed';
+  if(isLate(task)) return 'late';
+  return 'progress';
+}
+function taskDueTime(task){
+  if(!task?.due_date) return Number.MAX_SAFE_INTEGER;
+  const d = new Date(task.due_date);
+  return isNaN(d) ? Number.MAX_SAFE_INTEGER : d.getTime();
+}
+function sortTasksByDue(rows){
+  return [...(rows||[])].sort((a,b)=>{
+    const ad = taskDueTime(a), bd = taskDueTime(b);
+    if(ad !== bd) return ad - bd;
+    return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime();
+  });
+}
+function groupedTaskRows(rows){
+  const source = rows || [];
+  return {
+    progress: sortTasksByDue(source.filter(t=>taskBucket(t)==='progress')),
+    late: sortTasksByDue(source.filter(t=>taskBucket(t)==='late')),
+    completed: sortTasksByDue(source.filter(t=>taskBucket(t)==='completed'))
+  };
+}
+function workflowStatusChip(task){
+  const status = taskDisplayStatus(task);
+  if(status === 'مكتملة') return '<span class="chip done">مكتملة</span>';
+  if(status === 'متأخرة') return '<span class="chip late">متأخرة</span>';
+  if(status === 'بانتظار اعتماد الإنجاز') return '<span class="chip progress">بانتظار اعتماد الإنجاز</span>';
+  return '<span class="chip progress">قيد التنفيذ</span>';
+}
+function renderTaskGroup(title, rows, emptyText, collapsible=false, initiallyOpen=false){
+  const safeTitle = escapeHtml(title);
+  const body = rows.length ? rows.map(taskCard).join('') : `<div class="empty">${escapeHtml(emptyText||'لا توجد مهام.')}</div>`;
+  if(collapsible){
+    return `<details class="task-group-details" ${initiallyOpen?'open':''} style="margin-bottom:16px;"><summary class="card" style="padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;">${safeTitle} <span class="badge">${rows.length}</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+  }
+  return `<section style="margin-bottom:18px;"><div class="section-head"><h3 style="margin:0;color:var(--primary2);">${safeTitle}</h3><span class="badge">${rows.length}</span></div>${body}</section>`;
+}
+
+renderTasks = function(){
+  const rows = getFilteredTasks();
+  renderStats(rows);
+  if(!rows.length){ $('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>'; return; }
+  const groups = groupedTaskRows(rows);
+  $('tasksList').innerHTML =
+    renderTaskGroup('قيد التنفيذ', groups.progress, 'لا توجد مهام قيد التنفيذ.') +
+    renderTaskGroup('متأخرة', groups.late, 'لا توجد مهام متأخرة.') +
+    renderTaskGroup('مكتملة', groups.completed, 'لا توجد مهام مكتملة.', true, false);
+};
+
+statusChip = function(task){
+  if(typeof task === 'object') return workflowStatusChip(task);
+  const s = String(task||'');
+  const cls = s==='مكتملة'?'done':s==='متأخرة'?'late':'progress';
+  return `<span class="chip ${cls}">${escapeHtml(s)}</span>`;
+};
+
+function canApproveCompletion(task){
+  return task && (isAdminOrCeo() || (typeof canReviewTask === 'function' && canReviewTask(task)));
+}
+function getCompletionRequests(){
+  return visibleTasks().filter(t=>taskIsCompletionPending(t) && canApproveCompletion(t));
+}
+function ensureCompletionApprovalDom(){
+  if(!$('adminPage') || $('completionRequestsPanel')) return;
+  const target = $('transferRequestsPanel') || $('pendingTasksPanel') || $('requestsPanel');
+  const html = `<section id="completionRequestsPanel" class="panel card hidden"><h2>مهام مكتملة بانتظار الاعتماد</h2><p class="meta">عندما يختار الموظف أن المهمة مكتملة، تبقى ضمن قيد التنفيذ حتى يعتمدها مدير الإدارة أو رئيس القطاع أو مدير النظام.</p><div id="completionRequestsList"></div></section>`;
+  if(target) target.insertAdjacentHTML('beforebegin', html); else $('adminPage').insertAdjacentHTML('afterbegin', html);
+}
+function renderCompletionRequests(){
+  ensureCompletionApprovalDom();
+  const box = $('completionRequestsList');
+  if(!box) return;
+  const rows = getCompletionRequests();
+  if(!rows.length){ box.innerHTML='<div class="empty">لا توجد مهام مكتملة بانتظار الاعتماد حاليًا.</div>'; return; }
+  box.innerHTML = rows.map(t=>`<div class="task-card"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">طالب الإكمال: ${escapeHtml(nameOfUser(t.completion_requested_by)||'—')}<br>المسؤول: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}<br>تاريخ طلب الإكمال: ${formatDate(t.completion_requested_at)}</div></div><div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div><div class="actions"><button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${t.id}')">اعتماد الإكمال</button><button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${t.id}')">رفض الإكمال</button></div></div>`).join('');
+}
+async function approveTaskCompletion(taskId){
+  try{
+    const task = state.tasks.find(t=>t.id===taskId);
+    if(!canApproveCompletion(task)) return showToast('ليست لديك صلاحية اعتماد إكمال هذه المهمة.','error');
+    const {error}=await supabaseClient.from('tasks').update({
+      status:'مكتملة',
+      completion_status:'approved',
+      completion_reviewed_by:state.profile.id,
+      completion_reviewed_at:new Date().toISOString()
+    }).eq('id',taskId);
+    if(error) throw error;
+    await loadAll(); renderTasks(); renderDashboard(); renderAdmin();
+    showToast('تم اعتماد إكمال المهمة ونقلها إلى قسم مكتملة.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر اعتماد الإكمال.','error',7000); }
+}
+async function rejectTaskCompletion(taskId){
+  try{
+    const task = state.tasks.find(t=>t.id===taskId);
+    if(!canApproveCompletion(task)) return showToast('ليست لديك صلاحية رفض إكمال هذه المهمة.','error');
+    const ok=await askConfirm({title:'رفض إكمال المهمة',message:'ستبقى المهمة ضمن قيد التنفيذ. هل تريد المتابعة؟',okText:'رفض الإكمال',danger:true});
+    if(!ok) return;
+    const {error}=await supabaseClient.from('tasks').update({
+      completion_status:'rejected',
+      completion_reviewed_by:state.profile.id,
+      completion_reviewed_at:new Date().toISOString()
+    }).eq('id',taskId);
+    if(error) throw error;
+    await loadAll(); renderTasks(); renderDashboard(); renderAdmin();
+    showToast('تم رفض إكمال المهمة وبقيت ضمن قيد التنفيذ.','info');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر رفض الإكمال.','error',7000); }
+}
+
+const __workflowRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __workflowRenderAdmin();
+  ensureCompletionApprovalDom();
+  $('completionRequestsPanel')?.classList.toggle('hidden', !(isAdminOrCeo()||isSectorHead()||isDepartmentManager()));
+  renderCompletionRequests();
+};
+
+changeStatus = async function(taskId,status){
+  try{
+    const task = state.tasks.find(t=>t.id===taskId);
+    if(!task) return showToast('تعذر العثور على المهمة.','error');
+    if(status === 'مكتملة'){
+      if(canApproveCompletion(task) && currentRole() !== 'employee'){
+        const {error}=await supabaseClient.from('tasks').update({
+          status:'مكتملة',
+          completion_status:'approved',
+          completion_requested_by:state.profile.id,
+          completion_requested_at:new Date().toISOString(),
+          completion_reviewed_by:state.profile.id,
+          completion_reviewed_at:new Date().toISOString()
+        }).eq('id',taskId);
+        if(error) throw error;
+        await loadAll(); renderTasks(); renderDashboard(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin();
+        showToast('تم اعتماد المهمة كمكتملة.','success');
+        return;
+      }
+      const {error}=await supabaseClient.from('tasks').update({
+        completion_status:'pending',
+        completion_requested_by:state.profile.id,
+        completion_requested_at:new Date().toISOString()
+      }).eq('id',taskId);
+      if(error) throw error;
+      await loadAll(); renderTasks(); renderDashboard(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin();
+      showToast('تم إرسال طلب اعتماد إكمال المهمة. ستبقى ضمن قيد التنفيذ حتى الاعتماد.','success',7000);
+      return;
+    }
+    const {error}=await supabaseClient.from('tasks').update({status:'قيد التنفيذ',completion_status:'none'}).eq('id',taskId);
+    if(error) throw error;
+    await loadAll(); renderTasks(); renderDashboard(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin();
+    showToast('تم تحديث حالة المهمة.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تحديث حالة المهمة.','error',7000); }
+};
+
+taskCard = function(t){
+  const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—';
+  const com=getTaskComments(t.id);
+  const editBtn=(typeof canEditTask==='function' && canEditTask(t))?`<button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل</button>`:'';
+  const currentSelectValue = t.status === 'مكتملة' ? 'مكتملة' : 'قيد التنفيذ';
+  const completionNote = taskIsCompletionPending(t) ? '<div class="notice info show" style="margin-top:10px;">هذه المهمة بانتظار اعتماد الإكمال من المسؤول المختص.</div>' : '';
+  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${workflowStatusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${completionNote}${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="قيد التنفيذ" ${currentSelectValue==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${currentSelectValue==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
+};
+
+renderMyTasksSummary = function(){
+  const currentUserId=state.profile?.id;
+  let rows=visibleTasks();
+  if(!isAdminOrCeo()){
+    const myTaskIds=new Set(state.assignees.filter(a=>a.user_id===currentUserId).map(a=>a.task_id));
+    rows=rows.filter(t=>myTaskIds.has(t.id)||t.primary_responsible_id===currentUserId||t.created_by===currentUserId);
+  }
+  const groups=groupedTaskRows(rows);
+  function summaryRows(items){
+    return items.length?items.map(t=>`<tr class="summary-task-row ${isDueSoon(t)?'task-due-soon':''}" onclick="openTaskFromSummary('${t.id}')"><td>${escapeHtml(t.title||'بدون عنوان')}</td><td>${escapeHtml(taskDisplayStatus(t))}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}</td><td>${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</td><td>${escapeHtml(getLatestTaskComment(t.id)?.comment_text||'—')}</td></tr>`).join(''):'<tr><td colspan="6">لا توجد مهام.</td></tr>';
+  }
+  const tableHead='<div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>المسند إليهم</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>';
+  return `<section class="panel card"><h2>${isAdminOrCeo()?'جدول مختصر بالمهام المعتمدة':'مهامي الحالية'}</h2><p class="meta">المهام مرتبة حسب أقرب تاريخ استحقاق، والمهام المكتملة داخل قائمة قابلة للفتح.</p><h3>قيد التنفيذ</h3>${tableHead}${summaryRows(groups.progress)}</tbody></table></div><h3 style="margin-top:18px;">متأخرة</h3>${tableHead}${summaryRows(groups.late)}</tbody></table></div><details style="margin-top:18px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);">مكتملة <span class="badge">${groups.completed.length}</span></summary><div style="margin-top:10px;">${tableHead}${summaryRows(groups.completed)}</tbody></table></div></details></section>`;
+};
+
+function executiveVisibleRowsForUser(user){
+  if(!user) return [];
+  return visibleTasks().filter(t=>t.primary_responsible_id===user.id || getTaskAssignees(t.id).some(a=>a.id===user.id));
+}
+executiveTaskStatus = function(task){ return taskDisplayStatus(task); };
+executiveSortTasks = function(rows){ return sortTasksByDue(rows); };
+function executiveCompletedDetails(rows){
+  const groups=groupedTaskRows(rows);
+  const activeRows=[...groups.late,...groups.progress];
+  const activeHtml=activeRows.length ? activeRows.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام قيد التنفيذ أو متأخرة.</td></tr>';
+  const completedHtml=groups.completed.length ? groups.completed.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام مكتملة.</td></tr>';
+  return {activeHtml, completedHtml, completedCount:groups.completed.length};
+}
+renderExecutiveDirect = function(){
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
+  const fs=$('executiveSectorFilter')?.value||'';
+  const fu=$('executiveAssigneeFilter')?.value||'';
+  const st=$('executiveStatusFilter')?.value||'';
+  let rows=visibleTasks().filter(t=>(!fs||executiveTaskSectorId(t)===fs)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||executiveTaskStatus(t)===st)&&(!q||executiveTaskSearchText(t).includes(q)));
+  rows=sortTasksByDue(rows);
+  const statsBox=$('executiveDirectStats');
+  if(statsBox) statsBox.innerHTML=executiveMetricsHtml(rows);
+  const parts=executiveCompletedDetails(rows);
+  const tbody=$('executiveTasksTable');
+  if(tbody){
+    tbody.innerHTML = parts.activeHtml + `<tr><td colspan="9" style="padding:0;border-bottom:0;"><details style="margin:10px;"><summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></td></tr>`;
+  }
+  renderAllSectorDashboardSections(rows);
+};
+
+renderAllSectorDashboardSections = function(filteredRows){
+  const box=$('executiveAllSectorsSections');
+  if(!box) return;
+  const q=($('executiveSearchInput')?.value||'').trim();
+  const selectedSector=$('executiveSectorFilter')?.value||'';
+  const sections=state.sectors.filter(s=>!selectedSector || s.id===selectedSector).map(sector=>{
+    const sectorRows=sortTasksByDue(filteredRows.filter(t=>executiveTaskSectorId(t)===sector.id));
+    const parts=executiveCompletedDetails(sectorRows);
+    return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;"><div class="section-head"><div><h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2><p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}. ملاحظة: مهام رئيس القطاع تُحسب له فقط إذا كان مسؤولًا أو مسندًا إليه.</p></div><span class="badge">${sectorRows.length} مهمة</span></div>${executiveMetricsHtml(sectorRows, '')}<div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div><details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></section>`;
+  }).join('');
+  box.innerHTML=sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
+};
+
+const __workflowOriginalTaskMetrics = taskMetrics;
+taskMetrics = function(rows){
+  const source = rows || [];
+  const total=source.length;
+  const done=source.filter(t=>t.status==='مكتملة').length;
+  const late=source.filter(t=>t.status!=='مكتملة' && isLate(t)).length;
+  const progress=source.filter(t=>t.status!=='مكتملة' && !isLate(t)).length;
+  const fresh=progress;
+  const rate=total?Math.round(done/total*100):0;
+  return {total,done,progress,fresh,late,rate};
+};
+
+
 init();
 </script>
 </body>
