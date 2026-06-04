@@ -435,19 +435,45 @@ async function submitJoinRequest(){ const name=$('requestName').value.trim(), em
 
 function fillSectorSelect(id,includeEmpty=false){ const el=$(id); el.innerHTML=(includeEmpty?'<option value="">بدون تحديد</option>':'')+state.sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join(''); }
 function fillDepartmentSelect(id,sectorId,includeEmpty=false){ const el=$(id); const rows=state.departments.filter(d=>!sectorId||d.sector_id===sectorId); el.innerHTML=(includeEmpty?'<option value="">بدون تحديد</option>':'')+rows.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join(''); }
+function taskMatchesCurrentOrgFiltersForEmployeeList(task, sectorId, deptId){
+  const assignees=getTaskAssignees(task.id);
+  const taskSector=task.target_sector_id || task.owner_sector_id || '';
+  const taskDept=task.target_department_id || task.owner_department_id || '';
+  const matchesSector=!sectorId || taskSector===sectorId || assignees.some(u=>u.sector_id===sectorId);
+  const matchesDept=!deptId || taskDept===deptId || assignees.some(u=>u.department_id===deptId);
+  return matchesSector && matchesDept;
+}
 function setupEmployeeFilter(){
   const el=$('filterAssignee');
   if(!el) return;
   const current=el.value;
   const sectorId=$('filterSector')?.value||'';
   const deptId=$('filterDepartment')?.value||'';
-  let users=state.users.filter(u=>u.is_active!==false);
-  if(isSectorHead()) users=users.filter(u=>u.sector_id===state.profile.sector_id);
-  else if(isDepartmentManager()) users=users.filter(u=>u.department_id===state.profile.department_id);
-  else if(currentRole()==='employee') users=users.filter(u=>u.id===state.profile.id);
-  if(sectorId) users=users.filter(u=>u.sector_id===sectorId);
-  if(deptId) users=users.filter(u=>u.department_id===deptId || u.id===state.profile?.id);
-  users=users.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  // القائمة الأساسية حسب الصلاحية التنظيمية
+  let baseUsers=state.users.filter(u=>u.is_active!==false);
+  if(isSectorHead()) baseUsers=baseUsers.filter(u=>u.sector_id===state.profile.sector_id);
+  else if(isDepartmentManager()) baseUsers=baseUsers.filter(u=>u.department_id===state.profile.department_id);
+  else if(currentRole()==='employee') baseUsers=baseUsers.filter(u=>u.id===state.profile.id);
+
+  if(sectorId) baseUsers=baseUsers.filter(u=>u.sector_id===sectorId);
+  if(deptId) baseUsers=baseUsers.filter(u=>u.department_id===deptId);
+
+  // إضافة أي مستخدم خارج النطاق التنظيمي لكنه مشارك في مهمة ظاهرة للمستخدم الحالي.
+  // هذا يعالج حالة أن رئيس قطاع يسند مهمة لرئيس قطاع آخر، فيظهر اسم الطرف الآخر في الفلترة.
+  const visibleRows=visibleTasks().filter(t=>taskMatchesCurrentOrgFiltersForEmployeeList(t, sectorId, deptId));
+  const relatedUserIds=new Set();
+  visibleRows.forEach(t=>{
+    if(t.primary_responsible_id) relatedUserIds.add(t.primary_responsible_id);
+    if(t.created_by) relatedUserIds.add(t.created_by);
+    getTaskAssignees(t.id).forEach(u=>relatedUserIds.add(u.id));
+  });
+
+  const relatedUsers=state.users.filter(u=>u.is_active!==false && relatedUserIds.has(u.id));
+  const map=new Map();
+  [...baseUsers, ...relatedUsers].forEach(u=>{ if(u?.id) map.set(u.id,u); });
+  let users=[...map.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
   el.innerHTML='<option value="">كل الموظفين</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('');
   if(current && users.some(u=>u.id===current)) el.value=current;
 }
