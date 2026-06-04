@@ -959,8 +959,9 @@ function renderExecutiveSummaryCards(){
   const doneTotal=tasks.filter(t=>t.status==='مكتملة').length;
   const now=new Date();
   const doneMonth=tasks.filter(t=>{
-    const d=new Date(t.approved_at||t.created_at||t.due_date);
-    return t.status==='مكتملة' && !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+    if(t.status!=='مكتملة' || !t.due_date) return false;
+    const d=new Date(t.due_date);
+    return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
   }).length;
   const inProgress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length;
   const fresh=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
@@ -968,7 +969,7 @@ function renderExecutiveSummaryCards(){
   const users=usersInDashboardScope();
   const counts=users.map(u=>({u,count:tasksForUser(u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
   const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
-  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2><div class="executive-stats"><div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن الصلاحية</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ آخر اعتماد/إنشاء</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div></div></section>`;
+  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2><div class="executive-stats"><div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن الصلاحية</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ الاستحقاق</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div></div></section>`;
 }
 function renderEmployeeCards(users){
   const cards=users.map(u=>{
@@ -2229,7 +2230,7 @@ function renderExecutiveDirect(){
 }
 function renderExecutiveDirectStats(rows){
   const tasks=rows||visibleTasks(); const total=tasks.length, done=tasks.filter(t=>t.status==='مكتملة').length, late=tasks.filter(isLate).length, progress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length, fresh=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
-  const now=new Date(); const doneMonth=tasks.filter(t=>{const d=new Date(t.approved_at||t.created_at||t.due_date); return t.status==='مكتملة'&&!isNaN(d)&&d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();}).length;
+  const now=new Date(); const doneMonth=tasks.filter(t=>{if(t.status!=='مكتملة' || !t.due_date) return false; const d=new Date(t.due_date); return !isNaN(d)&&d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();}).length;
   const counts=state.users.map(u=>({u,count:tasks.filter(t=>getTaskAssignees(t.id).some(a=>a.id===u.id)||t.primary_responsible_id===u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count); const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
   $('executiveDirectStats').innerHTML=`<div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${done}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>خلال الشهر الحالي</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div>`;
 }
@@ -3192,8 +3193,10 @@ function workflowThreeCardsHtml(rows){
   const now = new Date();
   const completedThisMonth = source.filter(t => {
     if(t.status !== 'مكتملة') return false;
-    const rawDate = t.completion_reviewed_at || t.approved_at || t.updated_at || t.created_at || t.due_date;
-    const d = new Date(rawDate);
+    // تحسب بطاقة "المهام المنجزة هذا الشهر" حسب تاريخ الاستحقاق فقط،
+    // وليس تاريخ الإنشاء أو الاعتماد أو تحديث الحالة.
+    if(!t.due_date) return false;
+    const d = new Date(t.due_date);
     return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   }).length;
 
@@ -3213,7 +3216,7 @@ function workflowThreeCardsHtml(rows){
   return `<div class="executive-stats executive-stats-old-layout">
     <div class="executive-stat-card"><span>إجمالي المهام</span><strong>${m.total}</strong><small>كل المهام المعتمدة ضمن نطاق العرض</small></div>
     <div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${m.completed}</strong><small>إجمالي المكتمل</small></div>
-    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${completedThisMonth}</strong><small>خلال الشهر الحالي</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${completedThisMonth}</strong><small>حسب تاريخ الاستحقاق خلال الشهر الحالي</small></div>
     <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${m.progress}</strong><small>مهام تحت المعالجة${m.pendingCompletion ? ' | بانتظار اعتماد: ' + m.pendingCompletion : ''}</small></div>
     <div class="executive-stat-card"><span>المهام المكتملة</span><strong>${m.completed}</strong><small>بدل بطاقة المهام الجديدة</small></div>
     <div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${m.late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
