@@ -3693,6 +3693,38 @@ renderAllSectorDashboardSections = function(filteredRows){
   box.innerHTML=sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
 };
 
+
+
+/* === PATCH: جعل أقسام قائمة المهام قابلة للفتح والإغلاق ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   المطلوب: قيد التنفيذ + متأخرة + مكتملة تظهر كقوائم منسدلة مغلقة، مثل فكرة المكتملة.
+*/
+function renderTaskGroup(title, rows, emptyText, collapsible=true, initiallyOpen=false){
+  const safeTitle = escapeHtml(title);
+  const body = rows.length ? rows.map(taskCard).join('') : `<div class="empty">${escapeHtml(emptyText||'لا توجد مهام.')}</div>`;
+  return `<details class="task-group-details" ${initiallyOpen?'open':''} style="margin-bottom:16px;">
+    <summary class="card" style="padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span>${safeTitle}</span>
+      <span class="badge">${rows.length} مهمة</span>
+    </summary>
+    <div style="margin-top:12px;">${body}</div>
+  </details>`;
+}
+
+renderTasks = function(){
+  const rows = getFilteredTasks();
+  renderStats(rows);
+  if(!rows.length){
+    $('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>';
+    return;
+  }
+  const groups = groupedTaskRows(rows);
+  $('tasksList').innerHTML =
+    renderTaskGroup('قيد التنفيذ', groups.progress, 'لا توجد مهام قيد التنفيذ.', true, false) +
+    renderTaskGroup('متأخرة', groups.late, 'لا توجد مهام متأخرة.', true, false) +
+    renderTaskGroup('مكتملة', groups.completed, 'لا توجد مهام مكتملة.', true, false);
+};
+
 init();
 </script>
 </body>
