@@ -3101,12 +3101,15 @@ taskMetrics = function(rows){
 
 
 
-/* === PATCH: توحيد مؤشرات الداشبورد إلى ثلاث حالات فقط ===
+/* === PATCH: توحيد مؤشرات الداشبورد إلى ثلاث حالات مع إبقاء إجمالي المهام وأكثر/أقل موظف ===
    خاص بلوحة مهام الإدارات والقطاعات فقط.
-   الحالات المعتمدة للعرض:
-   1) قيد التنفيذ: كل مهمة غير مكتملة وغير متأخرة، وتشمل الجديدة وبانتظار اعتماد الإنجاز.
-   2) متأخرة: كل مهمة غير مكتملة وتجاوزت تاريخ الاستحقاق.
-   3) مكتملة: المهام المعتمدة مكتملة.
+   الكروت المعتمدة للعرض:
+   1) إجمالي المهام.
+   2) قيد التنفيذ: كل مهمة غير مكتملة وغير متأخرة، وتشمل الجديدة وبانتظار اعتماد الإنجاز.
+   3) متأخرة: كل مهمة غير مكتملة وتجاوزت تاريخ الاستحقاق.
+   4) مكتملة: المهام المعتمدة مكتملة.
+   5) أكثر موظف لديه مهام.
+   6) أقل موظف لديه مهام.
 */
 function workflowThreeMetrics(rows){
   const source = rows || [];
@@ -3135,6 +3138,7 @@ function workflowThreeCardsHtml(rows){
   const least = [...counts].sort((a,b) => a.count - b.count)[0];
 
   return `<div class="executive-stats executive-stats-three">
+    <div class="executive-stat-card"><span>إجمالي المهام</span><strong>${m.total}</strong><small>كل المهام المعتمدة ضمن نطاق العرض</small></div>
     <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${m.progress}</strong><small>تشمل الجديدة وبانتظار اعتماد الإنجاز${m.pendingCompletion ? ' | بانتظار اعتماد: ' + m.pendingCompletion : ''}</small></div>
     <div class="executive-stat-card"><span>متأخرة</span><strong>${m.late}</strong><small>غير مكتملة وتجاوزت تاريخ الاستحقاق</small></div>
     <div class="executive-stat-card"><span>مكتملة</span><strong>${m.completed}</strong><small>إجمالي المهام المعتمدة كمكتملة</small></div>
@@ -3145,7 +3149,7 @@ function workflowThreeCardsHtml(rows){
   </div>`;
 }
 
-// تعديل كروت داشبورد الرئيس التنفيذي والقطاعات إلى 3 مؤشرات فقط.
+// تعديل كروت داشبورد الرئيس التنفيذي والقطاعات إلى إجمالي المهام + 3 حالات + أكثر/أقل موظف.
 executiveMetricsHtml = function(rows, titlePrefix=''){
   return workflowThreeCardsHtml(rows || []);
 };
@@ -3155,7 +3159,7 @@ renderExecutiveDirectStats = function(rows){
   if(box) box.innerHTML = workflowThreeCardsHtml(rows || visibleTasks());
 };
 
-// تعديل كروت الداشبورد الداخلي كذلك إلى نفس التصنيف الثلاثي.
+// تعديل كروت الداشبورد الداخلي كذلك إلى إجمالي المهام + نفس التصنيف الثلاثي.
 renderExecutiveSummaryCards = function(){
   const tasks = visibleTasks();
   return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2>${workflowThreeCardsHtml(tasks)}</section>`;
