@@ -969,7 +969,7 @@ function renderExecutiveSummaryCards(){
   const users=usersInDashboardScope();
   const counts=users.map(u=>({u,count:tasksForUser(u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
   const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
-  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2><div class="executive-stats"><div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن الصلاحية</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ الاستحقاق</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div></div></section>`;
+  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2><div class="executive-stats"><div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن الصلاحية</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ اعتماد الإكمال</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div></div></section>`;
 }
 function renderEmployeeCards(users){
   const cards=users.map(u=>{
@@ -2230,7 +2230,7 @@ function renderExecutiveDirect(){
 }
 function renderExecutiveDirectStats(rows){
   const tasks=rows||visibleTasks(); const total=tasks.length, done=tasks.filter(t=>t.status==='مكتملة').length, late=tasks.filter(isLate).length, progress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length, fresh=tasks.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
-  const now=new Date(); const doneMonth=tasks.filter(t=>{if(t.status!=='مكتملة' || !t.due_date) return false; const d=new Date(t.due_date); return !isNaN(d)&&d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();}).length;
+  const now=new Date(); const doneMonth=tasks.filter(t=>isCompletedInCurrentMonthByApproval(t, now)).length;
   const counts=state.users.map(u=>({u,count:tasks.filter(t=>getTaskAssignees(t.id).some(a=>a.id===u.id)||t.primary_responsible_id===u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count); const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
   $('executiveDirectStats').innerHTML=`<div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${done}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>خلال الشهر الحالي</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div>`;
 }
@@ -2413,7 +2413,7 @@ function executiveMetricsHtml(rows, titlePrefix=''){
   const total=rows.length;
   const done=rows.filter(t=>t.status==='مكتملة').length;
   const now=new Date();
-  const doneMonth=rows.filter(t=>t.status==='مكتملة' && t.created_at && new Date(t.created_at).getFullYear()===now.getFullYear() && new Date(t.created_at).getMonth()===now.getMonth()).length;
+  const doneMonth=rows.filter(t=>isCompletedInCurrentMonthByApproval(t, now)).length;
   const progress=rows.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length;
   const fresh=rows.filter(t=>t.status==='جديدة'&&!isLate(t)).length;
   const late=rows.filter(isLate).length;
@@ -3178,6 +3178,28 @@ taskMetrics = function(rows){
    5) أكثر موظف لديه مهام.
    6) أقل موظف لديه مهام.
 */
+function getTaskCompletionApprovalDate(task){
+  if(!task) return null;
+  const value = task.completion_reviewed_at || task.completed_at || task.closed_at || task.approved_at || null;
+  if(!value) return null;
+  const date = new Date(value);
+  return isNaN(date) ? null : date;
+}
+
+function isCompletedInCurrentMonthByApproval(task, referenceDate = new Date()){
+  if(!task || task.status !== 'مكتملة') return false;
+  const date = getTaskCompletionApprovalDate(task);
+  if(!date) return false;
+  return date.getFullYear() === referenceDate.getFullYear() && date.getMonth() === referenceDate.getMonth();
+}
+
+function isDueInCurrentMonth(task, referenceDate = new Date()){
+  if(!task || !task.due_date) return false;
+  const due = new Date(task.due_date);
+  if(isNaN(due)) return false;
+  return due.getFullYear() === referenceDate.getFullYear() && due.getMonth() === referenceDate.getMonth();
+}
+
 function workflowThreeMetrics(rows){
   const source = rows || [];
   const completed = source.filter(t => t.status === 'مكتملة').length;
@@ -3191,14 +3213,8 @@ function workflowThreeCardsHtml(rows){
   const source = rows || [];
   const m = workflowThreeMetrics(source);
   const now = new Date();
-  const completedThisMonth = source.filter(t => {
-    if(t.status !== 'مكتملة') return false;
-    // تحسب بطاقة "المهام المنجزة هذا الشهر" حسب تاريخ الاستحقاق فقط،
-    // وليس تاريخ الإنشاء أو الاعتماد أو تحديث الحالة.
-    if(!t.due_date) return false;
-    const d = new Date(t.due_date);
-    return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  }).length;
+  const completedThisMonth = source.filter(t => isCompletedInCurrentMonthByApproval(t, now)).length;
+  const dueThisMonth = source.filter(t => isDueInCurrentMonth(t, now)).length;
 
   // مهم: أكثر/أقل موظف هنا تُحسب حسب المهام المسندة للمستخدم أو التي هو مسؤولها فقط،
   // وليس حسب كل مهام القطاع لمجرد أنه رئيس قطاع.
@@ -3216,7 +3232,8 @@ function workflowThreeCardsHtml(rows){
   return `<div class="executive-stats executive-stats-old-layout">
     <div class="executive-stat-card"><span>إجمالي المهام</span><strong>${m.total}</strong><small>كل المهام المعتمدة ضمن نطاق العرض</small></div>
     <div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${m.completed}</strong><small>إجمالي المكتمل</small></div>
-    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${completedThisMonth}</strong><small>حسب تاريخ الاستحقاق خلال الشهر الحالي</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${completedThisMonth}</strong><small>حسب تاريخ اعتماد الإكمال خلال الشهر الحالي</small></div>
+    <div class="executive-stat-card"><span>المهام المستحقة هذا الشهر</span><strong>${dueThisMonth}</strong><small>حسب تاريخ الاستحقاق خلال الشهر الحالي</small></div>
     <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${m.progress}</strong><small>مهام تحت المعالجة${m.pendingCompletion ? ' | بانتظار اعتماد: ' + m.pendingCompletion : ''}</small></div>
     <div class="executive-stat-card"><span>المهام المكتملة</span><strong>${m.completed}</strong><small>بدل بطاقة المهام الجديدة</small></div>
     <div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${m.late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
@@ -3227,7 +3244,7 @@ function workflowThreeCardsHtml(rows){
   </div>`;
 }
 
-// تعديل كروت داشبورد الرئيس التنفيذي والقطاعات إلى إجمالي المهام + 3 حالات + أكثر/أقل موظف.
+// تعديل كروت داشبورد الرئيس التنفيذي والقطاعات إلى إجمالي المهام + المنجز/المستحق هذا الشهر + الحالات + أكثر/أقل موظف.
 executiveMetricsHtml = function(rows, titlePrefix=''){
   return workflowThreeCardsHtml(rows || []);
 };
@@ -3282,10 +3299,10 @@ function normalizeWorkflowStatLabels(){
 // تحسين شكل شبكة المؤشرات بنفس تخطيط الداشبورد القديم: 6 كروت بالأعلى وكرتا أكثر/أقل موظف في الوسط.
 const workflowStyle = document.createElement('style');
 workflowStyle.textContent = `
-  .executive-stats-old-layout{display:grid!important;grid-template-columns:repeat(6,minmax(150px,1fr))!important;gap:14px!important;align-items:stretch!important;max-width:none!important;margin:0 0 18px!important;}
-  .sector-dashboard-section .executive-stats-old-layout{display:grid!important;grid-template-columns:repeat(6,minmax(150px,1fr))!important;gap:14px!important;max-width:none!important;margin:18px auto!important;}
-  .executive-stats-old-layout .executive-employees-row{grid-column:3 / 5!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;width:100%!important;max-width:none!important;justify-self:center!important;margin-top:4px!important;}
-  .sector-dashboard-section .executive-stats-old-layout .executive-employees-row{grid-column:3 / 5!important;max-width:none!important;justify-self:center!important;}
+  .executive-stats-old-layout{display:grid!important;grid-template-columns:repeat(7,minmax(130px,1fr))!important;gap:14px!important;align-items:stretch!important;max-width:none!important;margin:0 0 18px!important;}
+  .sector-dashboard-section .executive-stats-old-layout{display:grid!important;grid-template-columns:repeat(7,minmax(130px,1fr))!important;gap:14px!important;max-width:none!important;margin:18px auto!important;}
+  .executive-stats-old-layout .executive-employees-row{grid-column:3 / 6!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;width:100%!important;max-width:none!important;justify-self:center!important;margin-top:4px!important;}
+  .sector-dashboard-section .executive-stats-old-layout .executive-employees-row{grid-column:3 / 6!important;max-width:none!important;justify-self:center!important;}
   @media(max-width:992px){.executive-stats-old-layout,.sector-dashboard-section .executive-stats-old-layout{grid-template-columns:repeat(3,minmax(0,1fr))!important;}.executive-stats-old-layout .executive-employees-row,.sector-dashboard-section .executive-stats-old-layout .executive-employees-row{grid-column:1 / -1!important;max-width:520px!important;}}
   @media(max-width:768px){.executive-stats-old-layout,.sector-dashboard-section .executive-stats-old-layout{grid-template-columns:1fr!important;max-width:none!important;}.executive-stats-old-layout .executive-employees-row,.sector-dashboard-section .executive-stats-old-layout .executive-employees-row{grid-template-columns:1fr!important;max-width:none!important;}}
 `;
