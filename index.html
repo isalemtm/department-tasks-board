@@ -2367,29 +2367,9 @@ saveTask=async function(){
     // إذا أراد المنشئ إسناد المهمة لنفسه يختار نفسه من قائمة المسند إليهم مثل أي موظف آخر.
     const validationMessage=validateAssignment(type,selected); if(validationMessage) return showToast(validationMessage,'error');
     const files=await uploadFiles($('taskFiles').files,'tasks');
+    const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
+    const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
     const primary=(existing && selected.includes(existing.primary_responsible_id)) ? existing.primary_responsible_id : (selected[0] || state.profile.id);
-    const primaryUser=(state.users||[]).find(u=>u.id===primary) || (primary===state.profile?.id?state.profile:null);
-
-    // ربط القطاع والقسم بالمستخدم المسؤول الرئيسي تلقائيًا.
-    // إذا كان المسؤول رئيس قطاع فقد لا يكون لديه قسم، لذلك يبقى القسم فارغًا بشكل صحيح.
-    const inferredSectorFromResponsible = primaryUser?.sector_id || '';
-    const inferredDepartmentFromResponsible = primaryUser?.department_id || null;
-
-    let targetSector = inferredSectorFromResponsible || $('taskTargetSector').value || state.profile.sector_id || null;
-    let targetDept = inferredDepartmentFromResponsible || null;
-
-    // الاستثناءات حسب الصلاحية ونوع التكليف.
-    if(isSectorHead() && !isAdmin() && type!=='sector_heads'){
-      targetSector = state.profile.sector_id || targetSector;
-    }
-    if(isDepartmentManager()){
-      targetSector = state.profile.sector_id || targetSector;
-      targetDept = state.profile.department_id || targetDept;
-    }
-    if(currentRole()==='employee'){
-      targetSector = state.profile.sector_id || targetSector;
-      targetDept = inferredDepartmentFromResponsible || $('taskTargetDepartment').value || state.profile.department_id || null;
-    }
     const attachment_urls=files.urls.length?[...(existing?.attachment_urls||[]),...files.urls]:(existing?.attachment_urls||[]);
     const attachment_names=files.names.length?[...(existing?.attachment_names||[]),...files.names]:(existing?.attachment_names||[]);
     const payload={title,description:$('taskDescription').value.trim(),priority:$('taskPriority').value,owner_sector_id:existing?.owner_sector_id||state.profile.sector_id,owner_department_id:existing?.owner_department_id||state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,attachment_urls,attachment_names};
@@ -4059,52 +4039,205 @@ editTask = function(taskId){
 };
 
 
-/* === PATCH: ربط القطاع والقسم تلقائيًا بالمسند إليه عند إنشاء/تعديل المهمة ===
+/* === PATCH: تثبيت نهائي لربط قطاع/قسم المهمة بالمسؤول الرئيسي عند الحفظ ===
    خاص بلوحة مهام الأقسام والقطاعات فقط.
-   الهدف:
-   - عند اختيار المسند إليه، يتم ضبط القطاع والقسم من بياناته تلقائيًا.
-   - إذا كان المسند إليه رئيس قطاع بلا قسم، يبقى القسم فارغًا وهذا صحيح.
-   - عند حفظ المهمة، يتم اعتماد قطاع/قسم المسؤول الرئيسي حتى لا تظهر المهام في داشبورد الرئيس التنفيذي بقسم فارغ لموظف له قسم.
+   يعالج حالة ظهور القطاع صحيحًا والقسم فارغًا رغم أن المسؤول الرئيسي لديه department_id.
 */
-function getCheckedAssigneeIdsFromPicker(){
-  return [...($('assigneePicker')?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(i=>i.value).filter(Boolean);
+function getSelectedAssigneeIdsFinal(){
+  return [...($('assigneePicker')?.querySelectorAll('input[type="checkbox"]:checked') || [])]
+    .map(input => input.value)
+    .filter(Boolean);
 }
 
-function getPrimaryUserFromCurrentAssigneeSelection(){
-  const selected = getCheckedAssigneeIdsFromPicker();
-  const primaryId = selected[0] || '';
-  return (state.users || []).find(u => u.id === primaryId) || null;
+function getUserByIdFinal(userId){
+  return (state.users || []).find(u => u.id === userId) || (state.profile?.id === userId ? state.profile : null);
 }
 
-function syncTaskScopeFromPrimaryAssignee(){
-  const user = getPrimaryUserFromCurrentAssigneeSelection();
-  if(!user) return;
+function inferTaskScopeFromPrimaryUser(primaryUser, fallbackSectorId, fallbackDepartmentId){
+  const sectorId = primaryUser?.sector_id || fallbackSectorId || state.profile?.sector_id || null;
+
+  // إذا كان المسؤول الرئيسي لديه قسم، فهذا هو المصدر المعتمد للقسم.
+  // إذا كان رئيس قطاع أو حساب بلا قسم، يبقى القسم فارغًا بشكل صحيح.
+  let departmentId = primaryUser?.department_id || null;
+
+  if(!departmentId && primaryUser?.role !== 'sector_head'){
+    departmentId = fallbackDepartmentId || null;
+  }
+
+  return { sectorId, departmentId };
+}
+
+function syncTaskScopeFromSelectedPrimaryFinal(){
+  const selected = getSelectedAssigneeIdsFinal();
+  const primaryUser = getUserByIdFinal(selected[0]);
+  if(!primaryUser) return;
 
   const sectorEl = $('taskTargetSector');
   const deptEl = $('taskTargetDepartment');
   if(!sectorEl || !deptEl) return;
 
-  if(user.sector_id && [...sectorEl.options].some(opt => opt.value === user.sector_id)){
-    sectorEl.value = user.sector_id;
+  if(primaryUser.sector_id && [...sectorEl.options].some(opt => opt.value === primaryUser.sector_id)){
+    sectorEl.value = primaryUser.sector_id;
     fillTaskTargetDepartmentSelect(false);
   }
 
-  if(user.department_id && [...deptEl.options].some(opt => opt.value === user.department_id)){
-    deptEl.value = user.department_id;
+  if(primaryUser.department_id && [...deptEl.options].some(opt => opt.value === primaryUser.department_id)){
+    deptEl.value = primaryUser.department_id;
   }else{
-    // رئيس القطاع أو أي مستخدم بلا قسم: نخلي القسم فارغًا بدل عرض قسم غير صحيح.
     deptEl.value = '';
   }
 }
 
-const __scopeLinkedRenderAssigneePicker = renderAssigneePicker;
+const __finalScopeRenderAssigneePicker = renderAssigneePicker;
 renderAssigneePicker = function(){
-  __scopeLinkedRenderAssigneePicker();
+  __finalScopeRenderAssigneePicker();
   const box = $('assigneePicker');
   if(!box) return;
   box.querySelectorAll('input[type="checkbox"]').forEach(input => {
-    input.addEventListener('change', syncTaskScopeFromPrimaryAssignee);
+    input.addEventListener('change', syncTaskScopeFromSelectedPrimaryFinal);
   });
+};
+
+saveTask = async function(){
+  try{
+    const title = $('taskTitle').value.trim();
+    if(!title) return showToast('اكتب عنوان المهمة.','error');
+
+    const editId = $('editTaskId').value || '';
+    const existing = editId ? state.tasks.find(t => t.id === editId) : null;
+
+    if(editId && !existing) return showToast('تعذر العثور على المهمة المراد تعديلها.','error');
+    if(existing && !canEditTask(existing)) return showToast('ليست لديك صلاحية تعديل هذه المهمة.','error');
+
+    const type = $('assignmentType').value;
+    let selected = getSelectedAssigneeIdsFinal();
+
+    if(type === 'all_company'){
+      selected = state.users.filter(u => u.is_active !== false).map(u => u.id);
+    }
+    if(type === 'all_sector'){
+      const sectorId = $('taskTargetSector').value || state.profile?.sector_id || '';
+      selected = state.users.filter(u => u.is_active !== false && (!sectorId || u.sector_id === sectorId)).map(u => u.id);
+    }
+    if(type === 'all_department'){
+      const departmentId = $('taskTargetDepartment').value || state.profile?.department_id || '';
+      selected = state.users.filter(u => u.is_active !== false && (!departmentId || u.department_id === departmentId)).map(u => u.id);
+    }
+
+    selected = [...new Set(selected)].filter(Boolean);
+
+    if(type !== 'all_company' && !selected.length){
+      return showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error');
+    }
+
+    const validationMessage = validateAssignment(type, selected);
+    if(validationMessage) return showToast(validationMessage,'error');
+
+    const files = await uploadFiles($('taskFiles').files, 'tasks');
+
+    const primary = (existing && selected.includes(existing.primary_responsible_id))
+      ? existing.primary_responsible_id
+      : (selected[0] || state.profile.id);
+
+    const primaryUser = getUserByIdFinal(primary);
+
+    const inferred = inferTaskScopeFromPrimaryUser(
+      primaryUser,
+      $('taskTargetSector').value || existing?.target_sector_id || existing?.owner_sector_id || state.profile?.sector_id || null,
+      $('taskTargetDepartment').value || existing?.target_department_id || existing?.owner_department_id || null
+    );
+
+    let targetSector = inferred.sectorId;
+    let targetDept = inferred.departmentId;
+
+    // حدود الصلاحيات التنظيمية، مع بقاء قسم المسؤول الرئيسي هو المرجع إذا كان موجودًا.
+    if(isSectorHead() && !isAdmin() && type !== 'sector_heads'){
+      targetSector = state.profile.sector_id || targetSector;
+    }
+
+    if(isDepartmentManager()){
+      targetSector = state.profile.sector_id || targetSector;
+      // مدير القسم محصور في قسمه.
+      targetDept = state.profile.department_id || targetDept;
+    }
+
+    if(currentRole() === 'employee'){
+      targetSector = state.profile.sector_id || targetSector;
+      targetDept = primaryUser?.department_id || $('taskTargetDepartment').value || state.profile.department_id || null;
+    }
+
+    const attachment_urls = files.urls.length
+      ? [...(existing?.attachment_urls || []), ...files.urls]
+      : (existing?.attachment_urls || []);
+
+    const attachment_names = files.names.length
+      ? [...(existing?.attachment_names || []), ...files.names]
+      : (existing?.attachment_names || []);
+
+    const payload = {
+      title,
+      description: $('taskDescription').value.trim(),
+      priority: $('taskPriority').value,
+      owner_sector_id: existing?.owner_sector_id || state.profile.sector_id,
+      owner_department_id: existing?.owner_department_id || state.profile.department_id,
+      target_sector_id: targetSector,
+      target_department_id: targetDept,
+      primary_responsible_id: primary,
+      assignment_type: type,
+      task_level: type === 'sector_heads' ? 'executive' : type === 'all_sector' ? 'sector' : type === 'department_managers' ? 'manager' : type === 'all_department' ? 'department' : 'employee',
+      due_date: $('taskDue').value || null,
+      attachment_urls,
+      attachment_names
+    };
+
+    let taskId = editId;
+
+    if(editId){
+      const {error} = await supabaseClient.from('tasks').update(payload).eq('id', editId);
+      if(error) throw error;
+      const del = await supabaseClient.from('task_assignees').delete().eq('task_id', editId);
+      if(del.error) throw del.error;
+    }else{
+      Object.assign(payload, {
+        status: 'جديدة',
+        created_by: state.profile.id,
+        approval_status: currentRole() === 'employee' ? 'pending' : 'approved'
+      });
+
+      if(payload.approval_status === 'approved'){
+        payload.approved_by = state.profile.id;
+        payload.approved_at = new Date().toISOString();
+      }
+
+      const {data,error} = await supabaseClient.from('tasks').insert(payload).select().single();
+      if(error) throw error;
+      taskId = data.id;
+    }
+
+    const assigneeRows = selected.map(uid => ({
+      task_id: taskId,
+      user_id: uid,
+      assigned_by: state.profile.id,
+      assignment_role: uid === primary ? 'primary' : 'assignee'
+    }));
+
+    if(assigneeRows.length){
+      const inserted = await supabaseClient.from('task_assignees').insert(assigneeRows);
+      if(inserted.error) throw inserted.error;
+    }
+
+    closeTaskModal();
+    await loadAll();
+    setupFilters();
+    renderTasks();
+    if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+    if($('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
+
+    showToast(editId ? 'تم تحديث المهمة بنجاح.' : (currentRole()==='employee' ? 'تم إرسال المهمة للاعتماد.' : 'تم حفظ المهمة بنجاح.'), 'success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر حفظ المهمة.','error');
+  }
 };
 
 init();
