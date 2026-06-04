@@ -2591,6 +2591,235 @@ function renderBoardTasksImportPreview(){
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>الإدارة</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardTasksImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardTaskImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
+
+/* === PATCH: تحويل المهام مع حصر تعطيل/حذف المستخدمين على مدير النظام فقط ===
+   خاص بلوحة مهام الإدارات والقطاعات فقط.
+   - مدير النظام فقط يستطيع تعطيل/أرشفة أو حذف المستخدمين.
+   - رئيس القطاع/مدير الإدارة/مدير النظام يستطيع تحويل المهمة مباشرة داخل نطاقه.
+   - الموظف يستطيع طلب تحويل المهمة، وتظهر كرغبة بانتظار اعتماد رئيس القطاع/مدير الإدارة/مدير النظام.
+*/
+function canManageUserInScope(user){
+  // بناءً على طلبك: تعطيل/أرشفة وحذف المستخدمين محصور على مدير النظام فقط.
+  if(!state.profile || !user || user.id === state.profile.id) return false;
+  return isAdmin();
+}
+function canArchiveUserInScope(user){ return canManageUserInScope(user); }
+function canDeleteUserInScope(user){ return canManageUserInScope(user); }
+
+function isTaskInReviewerScope(task){
+  if(!state.profile || !task) return false;
+  if(isAdminOrCeo()) return true;
+  if(isSectorHead()) return task.owner_sector_id === state.profile.sector_id || task.target_sector_id === state.profile.sector_id;
+  if(isDepartmentManager()) return task.owner_department_id === state.profile.department_id || task.target_department_id === state.profile.department_id;
+  return false;
+}
+
+function isTaskRelatedToCurrentUser(task){
+  if(!state.profile || !task) return false;
+  return task.primary_responsible_id === state.profile.id
+    || task.created_by === state.profile.id
+    || getTaskAssignees(task.id).some(u => u.id === state.profile.id);
+}
+
+canDirectTransferTask = function(t){
+  if(!state.profile || !t || t.is_archived === true) return false;
+  return isTaskInReviewerScope(t);
+};
+
+canRequestTransferTask = function(t){
+  if(!state.profile || !t || t.is_archived === true) return false;
+  if(canDirectTransferTask(t)) return true;
+  return isTaskRelatedToCurrentUser(t);
+};
+
+transferCandidates = function(t){
+  const currentIds = new Set(getTaskAssignees(t.id).map(u=>u.id));
+  let rows = state.users.filter(u => u.is_active && u.id !== state.profile?.id && !currentIds.has(u.id));
+  const sectorId = t.target_sector_id || t.owner_sector_id || state.profile?.sector_id;
+  const departmentId = t.target_department_id || t.owner_department_id || state.profile?.department_id;
+
+  if(isAdminOrCeo()) return rows;
+  if(isSectorHead()) return rows.filter(u => u.sector_id === state.profile.sector_id && !['admin','ceo'].includes(u.role));
+  if(isDepartmentManager()) return rows.filter(u => u.department_id === state.profile.department_id && u.role === 'employee');
+  return rows.filter(u => u.sector_id === sectorId && !['admin','ceo','sector_head'].includes(u.role));
+};
+
+renderTransferChooser = function(t){
+  if(!canRequestTransferTask(t)) return '';
+  const options = transferCandidates(t);
+  const direct = canDirectTransferTask(t);
+  if(!options.length) return `<div id="transferChooser-${t.id}" class="transfer-inline hidden"><span class="meta">لا يوجد مستخدمون نشطون متاحون للتحويل ضمن النطاق.</span></div>`;
+  return `<div id="transferChooser-${t.id}" class="transfer-inline hidden">
+    <select id="transferSelect-${t.id}"><option value="">اختر الموظف الجديد</option>${options.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('')}</select>
+    <button class="btn btn-primary btn-sm" onclick="confirmTaskTransfer('${t.id}')">${direct?'تحويل مباشر':'إرسال طلب التحويل'}</button>
+    <button class="btn btn-sm" onclick="cancelTransferChooser('${t.id}')">إلغاء</button>
+    ${direct?'':`<textarea id="transferReason-${t.id}" placeholder="سبب طلب التحويل، اختياري"></textarea>`}
+  </div>`;
+};
+
+requestTaskTransfer = async function(taskId,toUserId,reason=''){
+  try{
+    const task=state.tasks.find(t=>t.id===taskId);
+    if(!task || !isTaskRelatedToCurrentUser(task)) return showToast('لا تملك صلاحية طلب تحويل هذه المهمة.','error');
+    if(canDirectTransferTask(task)) return directTransferTask(taskId,toUserId);
+    const {error}=await supabaseClient.from('task_transfer_requests').insert({
+      task_id:taskId,
+      requested_by:state.profile.id,
+      from_user_id:state.profile.id,
+      to_user_id:toUserId,
+      reason:reason || 'طلب تحويل من الموظف',
+      status:'pending'
+    });
+    if(error) throw error;
+    cancelTransferChooser(taskId);
+    showToast('تم إرسال طلب تحويل المهمة، وسيظهر بانتظار اعتماد رئيس القطاع أو مدير النظام.','success');
+    await loadAll();
+    if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin();
+  }catch(e){ console.error(e); showToast(e.message||'تعذر إرسال طلب التحويل.','error',7000); }
+};
+
+applyTaskTransfer = async function(taskId,fromUserId,toUserId){
+  const task=state.tasks.find(t=>t.id===taskId);
+  if(!task) throw new Error('لم يتم العثور على المهمة.');
+  const updatePayload={primary_responsible_id:toUserId};
+  const {error:updateError}=await supabaseClient.from('tasks').update(updatePayload).eq('id',taskId);
+  if(updateError) throw updateError;
+
+  if(fromUserId){
+    const {error:deleteError}=await supabaseClient.from('task_assignees').delete().eq('task_id',taskId).eq('user_id',fromUserId);
+    if(deleteError) throw deleteError;
+  }
+
+  const already=state.assignees.some(a=>a.task_id===taskId && a.user_id===toUserId);
+  if(!already){
+    const {error:insertError}=await supabaseClient.from('task_assignees').insert({task_id:taskId,user_id:toUserId,assigned_by:state.profile.id,assignment_role:'primary'});
+    if(insertError) throw insertError;
+  }
+};
+
+directTransferTask = async function(taskId,toUserId){
+  try{
+    const task=state.tasks.find(t=>t.id===taskId);
+    if(!canDirectTransferTask(task)) return showToast('ليست لديك صلاحية تحويل هذه المهمة مباشرة.','error');
+    const fromUserId = task.primary_responsible_id || getTaskAssignees(task.id)[0]?.id || null;
+    const ok=await askConfirm({title:'تحويل المهمة مباشرة',message:`سيتم تحويل المهمة إلى: ${nameOfUser(toUserId)}.\n\nهذا الإجراء مباشر لأنه ضمن صلاحيتك كرئيس قطاع/مدير. هل تريد المتابعة؟`,okText:'تحويل مباشر',danger:false});
+    if(!ok) return;
+    await applyTaskTransfer(taskId,fromUserId,toUserId);
+    await loadAll(); renderTasks(); renderDashboard(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin();
+    showToast('تم تحويل المهمة مباشرة بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تحويل المهمة.','error',7000); }
+};
+
+renderTransferRequests = function(){
+  const box=$('transferRequestsList'); if(!box) return;
+  const rows=(state.transferRequests||[]).filter(r=>r.status==='pending').filter(r=>{
+    const t=state.tasks.find(x=>x.id===r.task_id);
+    return t && isTaskInReviewerScope(t);
+  });
+  if(!rows.length){ box.innerHTML='<div class="empty">لا توجد طلبات تحويل مهام معلقة ضمن نطاق صلاحيتك حالياً.</div>'; return; }
+  box.innerHTML=rows.map(r=>{ const t=state.tasks.find(x=>x.id===r.task_id); return `<div class="request-card task-card"><div class="request-top"><div><h4 class="request-title">${escapeHtml(t?.title||'مهمة غير موجودة')}</h4><div class="meta">طالب التحويل: ${escapeHtml(nameOfUser(r.requested_by))}<br>من: ${escapeHtml(nameOfUser(r.from_user_id))}<br>إلى: ${escapeHtml(nameOfUser(r.to_user_id))}<br>السبب: ${escapeHtml(r.reason||'—')}<br>تاريخ الطلب: ${formatDate(r.created_at)}</div></div><span class="chip progress">${transferStatusLabel(r.status)}</span></div><div class="actions"><button class="btn btn-success btn-sm" onclick="approveTransferRequest('${r.id}')">اعتماد التحويل</button><button class="btn btn-danger btn-sm" onclick="rejectTransferRequest('${r.id}')">رفض</button></div></div>`; }).join('');
+};
+
+approveTransferRequest = async function(requestId){
+  try{
+    const req=state.transferRequests.find(r=>r.id===requestId);
+    if(!req) return showToast('لم يتم العثور على طلب التحويل.','error');
+    const task=state.tasks.find(t=>t.id===req.task_id);
+    if(!isTaskInReviewerScope(task)) return showToast('لا تملك صلاحية اعتماد هذا الطلب.','error');
+    await applyTaskTransfer(req.task_id,req.from_user_id,req.to_user_id);
+    const {error}=await supabaseClient.from('task_transfer_requests').update({status:'approved',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',requestId);
+    if(error) throw error;
+    await loadAll(); renderTasks(); renderDashboard(); renderAdmin();
+    showToast('تم اعتماد تحويل المهمة.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر اعتماد طلب التحويل.','error',7000); }
+};
+
+rejectTransferRequest = async function(requestId){
+  try{
+    const req=state.transferRequests.find(r=>r.id===requestId);
+    const task=state.tasks.find(t=>t.id===req?.task_id);
+    if(!isTaskInReviewerScope(task)) return showToast('لا تملك صلاحية رفض هذا الطلب.','error');
+    const {error}=await supabaseClient.from('task_transfer_requests').update({status:'rejected',reviewed_by:state.profile.id,reviewed_at:new Date().toISOString()}).eq('id',requestId);
+    if(error) throw error;
+    await loadAll(); renderAdmin();
+    showToast('تم رفض طلب التحويل.','info');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر رفض طلب التحويل.','error',7000); }
+};
+
+renderUsers = function(){
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
+  let rows = state.users;
+  if(isSectorHead()) rows = rows.filter(u => u.sector_id === state.profile.sector_id || u.id === state.profile.id);
+  if(isDepartmentManager()) rows = rows.filter(u => u.department_id === state.profile.department_id || u.id === state.profile.id);
+
+  const htmlRows=rows.map(u=>{
+    const active=u.is_active!==false;
+    const needsPassword=u.must_set_password===true;
+    const archivedInfo=!active ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>` : '';
+    const notifyButton = active && needsPassword && canNotify ? `<button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار تعيين كلمة المرور</button>` : '';
+    let action='—';
+    if(u.id===state.profile.id){
+      action='<span class="meta">حسابك الحالي</span>';
+    }else if(isAdmin()){
+      action=active
+        ? `${notifyButton} <button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`
+        : '<span class="chip late">معطل ومؤرشف</span>';
+    }else{
+      action=notifyButton || '<span class="meta">لا توجد صلاحية</span>';
+    }
+    return `<tr><td>${escapeHtml(u.name)}${archivedInfo}</td><td>${escapeHtml(u.email)}</td><td>${roleLabel(u.role)}</td><td>${nameOfSector(u.sector_id)}</td><td>${nameOfDept(u.department_id)}</td><td>${active?'نعم':'لا'}</td><td>${needsPassword?'نعم':'لا'}</td><td>${action}</td></tr>`;
+  }).join('');
+  const passwordNotice = getUsersNeedingPasswordSetup().length ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>` : '';
+  $('usersTable').innerHTML=`${passwordNotice}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>الإدارة</th><th>نشط</th><th>يحتاج تعيين كلمة مرور</th><th>إجراء</th></tr></thead><tbody>${htmlRows}</tbody></table></div>`;
+};
+
+archiveUser = async function(userId,name){
+  const user=state.users.find(u=>u.id===userId);
+  if(!isAdmin()) return showToast('تعطيل وأرشفة المستخدم من صلاحية مدير النظام فقط.','error');
+  if(!canArchiveUserInScope(user)) return showToast('لا تملك صلاحية تعطيل وأرشفة هذا المستخدم.','error');
+  if(user.id===state.profile.id) return showToast('لا يمكن تعطيل حسابك الحالي.','error');
+  const reason=window.prompt(`اكتب سبب تعطيل وأرشفة المستخدم: ${name || user.name || ''}`,'ترك الشركة');
+  if(reason===null) return;
+  const ok=await askConfirm({title:'تعطيل وأرشفة المستخدم',message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد والداشبورد.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم إزالة المستخدم من المهام المشتركة، وأرشفة مهامه الفردية غير المكتملة. هل تريد المتابعة؟`,okText:'تعطيل وأرشفة',danger:true,requireText:'تعطيل',inputLabel:'للتأكيد اكتب كلمة تعطيل'});
+  if(!ok) return;
+  try{
+    const now=new Date().toISOString();
+    const affected=state.tasks.filter(t=>t.is_archived!==true && t.status!=='مكتملة' && (t.primary_responsible_id===userId || state.assignees.some(a=>a.task_id===t.id && a.user_id===userId)));
+    for(const task of affected){
+      const assigneeRows=state.assignees.filter(a=>a.task_id===task.id);
+      const remaining=assigneeRows.filter(a=>a.user_id!==userId).map(a=>a.user_id);
+      const del=await supabaseClient.from('task_assignees').delete().eq('task_id',task.id).eq('user_id',userId);
+      if(del.error) throw del.error;
+      if(!remaining.length){
+        const upd=await supabaseClient.from('tasks').update({is_archived:true,archived_at:now,archived_by:state.profile.id,archived_reason:reason || 'ترك الشركة'}).eq('id',task.id);
+        if(upd.error) throw upd.error;
+      }else if(task.primary_responsible_id===userId){
+        const upd=await supabaseClient.from('tasks').update({primary_responsible_id:remaining[0]}).eq('id',task.id);
+        if(upd.error) throw upd.error;
+      }
+    }
+    const userUpdate=await supabaseClient.from('users').update({is_active:false,archived_at:now,archived_by:state.profile.id,archived_reason:reason || 'ترك الشركة'}).eq('id',userId);
+    if(userUpdate.error) throw userUpdate.error;
+    await loadAll(); setupFilters(); renderAdmin(); renderTasks(); renderDashboard();
+    showToast('تم تعطيل المستخدم وأرشفته بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message || 'تعذر تعطيل وأرشفة المستخدم.','error',7000); }
+};
+
+deleteUserByAdmin = async function(userId,email,name){
+  const user=state.users.find(u=>u.id===userId);
+  if(!canDeleteUserInScope(user)) return showToast('لا تملك صلاحية حذف هذا المستخدم.','error');
+  const msg = `سيتم حذف المستخدم نهائيًا من النظام ومن Authentication مع بياناته المرتبطة.\n\nالاسم: ${name || '—'}\nالبريد: ${email || '—'}\n\nلن يستطيع الدخول، ويمكن إعادة تسجيل نفس البريد لاحقًا.`;
+  const ok=await askConfirm({title:'حذف المستخدم نهائيًا',message:msg,okText:'حذف نهائي',danger:true,requireText:'حذف',inputLabel:'للتأكيد اكتب كلمة حذف'});
+  if(!ok){ showToast('تم إلغاء عملية الحذف.','info'); return; }
+  try{
+    const {data,error}=await supabaseClient.functions.invoke('admin-delete-user',{body:{user_id:userId,email}});
+    if(error) throw error;
+    if(data && data.error) throw new Error(data.error);
+    showToast(data?.message || 'تم حذف المستخدم نهائيًا بنجاح.','success');
+    await loadAll(); renderAdmin(); renderTasks(); renderDashboard();
+  }catch(e){ console.error(e); showToast(e.message || 'تعذر حذف المستخدم. إذا كانت دالة admin-delete-user مقيدة بمدير النظام فقط، أرسلها لي لأعدلها.','error',9000); }
+};
+
 init();
 </script>
 </body>
