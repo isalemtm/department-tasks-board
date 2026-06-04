@@ -3617,6 +3617,82 @@ renderExecutiveDirect = function(){
   renderAllSectorDashboardSections(rows);
 };
 
+
+/* === PATCH: جعل لوحات القطاعات في داشبورد الرئيس التنفيذي مغلقة افتراضيًا ===
+   يبقى داشبورد متابعة مهام الأقسام والقطاعات العام ظاهرًا مباشرة،
+   وتظهر كل لوحة قطاع داخل قائمة قابلة للفتح عند الضغط.
+*/
+(function addExecutiveSectorAccordionStyles(){
+  if(document.getElementById('executiveSectorAccordionStyles')) return;
+  const style=document.createElement('style');
+  style.id='executiveSectorAccordionStyles';
+  style.textContent=`
+    .sector-dashboard-accordion{
+      margin-top:16px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      box-shadow:none;
+      overflow:hidden;
+    }
+    .sector-dashboard-accordion > summary{
+      list-style:none;
+      cursor:pointer;
+      padding:16px 18px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color:var(--primary2);
+      font-weight:900;
+      background:linear-gradient(180deg,#fff 0%,#fbf7f3 100%);
+    }
+    .sector-dashboard-accordion > summary::-webkit-details-marker{display:none;}
+    .sector-dashboard-accordion > summary:before{
+      content:'▸';
+      font-size:16px;
+      color:var(--primary);
+      transition:.2s ease;
+      margin-inline-end:6px;
+    }
+    .sector-dashboard-accordion[open] > summary:before{transform:rotate(90deg);}
+    .sector-dashboard-summary-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .sector-dashboard-summary-title h2{margin:0;color:var(--primary2);font-size:21px;}
+    .sector-dashboard-summary-note{font-weight:400;color:var(--muted);font-size:13px;margin-top:3px;}
+    .sector-dashboard-accordion-body{padding:16px 18px 18px;border-top:1px solid var(--line);}
+  `;
+  document.head.appendChild(style);
+})();
+
+renderAllSectorDashboardSections = function(filteredRows){
+  const box=$('executiveAllSectorsSections');
+  if(!box) return;
+  const q=($('executiveSearchInput')?.value||'').trim();
+  const selectedSector=$('executiveSectorFilter')?.value||'';
+  const sectors=(state.sectors||[]).filter(s=>!selectedSector || s.id===selectedSector);
+  const sections=sectors.map(sector=>{
+    const sectorRows=sortTasksByDue((filteredRows||[]).filter(t=>executiveTaskSectorId(t)===sector.id));
+    const parts=executiveCompletedDetails(sectorRows);
+    return `<details class="sector-dashboard-accordion sector-dashboard-section">
+      <summary>
+        <div class="sector-dashboard-summary-title">
+          <div>
+            <h2>${escapeHtml(sector.name)}</h2>
+            <div class="sector-dashboard-summary-note">اضغط لعرض مؤشرات وجدول هذا القطاع${q?' حسب البحث الحالي':''}.</div>
+          </div>
+        </div>
+        <span class="badge">${sectorRows.length} مهمة</span>
+      </summary>
+      <div class="sector-dashboard-accordion-body">
+        ${executiveMetricsHtml(sectorRows, '')}
+        <div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div>
+        <details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details>
+      </div>
+    </details>`;
+  }).join('');
+  box.innerHTML=sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
+};
+
 init();
 </script>
 </body>
