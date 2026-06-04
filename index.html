@@ -1,4 +1,12 @@
 <!doctype html>
+<!--
+  نسخة منظّفة ومثبتة - لوحة مهام الأقسام والقطاعات
+  تاريخ الإعداد: 2026-06-04
+  ملاحظات:
+  - هذه نسخة تثبيت قبل إضافة مزايا جديدة.
+  - تم الحفاظ على ربط Supabase الحالي دون تغيير.
+  - تم تثبيت آخر سلوك معتمد: ثلاث حالات تشغيلية، فلترة متسلسلة، داشبورد الرئيس التنفيذي، أقسام المهام القابلة للفتح والإغلاق.
+-->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -31,7 +39,7 @@
     .task-card.due-soon{border-color:#c75b5b;box-shadow:0 10px 28px rgba(199,91,91,.16)}
     .task-card.due-soon .task-title:before{content:"تنبيه قريب الاستحقاق";display:inline-block;background:#fdeaea;color:#8b2f2f;border-radius:999px;padding:3px 9px;font-size:11px;margin-left:8px;vertical-align:middle}
     table{font-size:15px}th{font-weight:900}
-    .grid{display:grid;gap:16px}.stats{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:16px}.stat{padding:17px;text-align:center}.stat span{color:var(--muted);font-size:13px}.stat strong{display:block;font-size:32px;color:var(--primary2);line-height:1.2}.panel{padding:20px;margin-bottom:18px}.panel h2,.panel h3{margin:0 0 15px;color:var(--primary2)}.filters{display:grid;grid-template-columns:1fr 190px 190px 190px 190px;gap:12px;margin-bottom:15px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}table{width:100%;border-collapse:collapse;min-width:900px}th,td{padding:12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}th{background:#f1e9e2;color:var(--primary2);white-space:nowrap}.chip{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;background:#eef2f7;color:#35516a}.chip.done{background:#e9f8f4;color:#166c61}.chip.progress{background:#fff0d8;color:#935c1b}.chip.late{background:#fdeaea;color:#8b2f2f}.chip.high{background:#fdeaea;color:#8b2f2f}.chip.medium{background:#f4f0ec;color:#61463b}.chip.low{background:#e9f8f4;color:#166c61}.task-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff;margin-bottom:14px}.task-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.task-title{font-size:21px;color:var(--primary2);font-weight:900}.meta{color:var(--muted);font-size:14px}.task-desc{white-space:pre-wrap;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.comment-box{background:#fbf8f5;border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}.comment{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}.comment-head{display:flex;justify-content:space-between;color:var(--muted);font-size:13px}.attachments a{display:inline-block;margin:4px 0 4px 8px;color:#174ea6}.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;border:1px solid #d8cac0;border-radius:12px;padding:10px;background:#fff}.checkbox-item{display:flex;align-items:center;gap:8px;background:#fbf8f5;border:1px solid var(--line);border-radius:10px;padding:8px}.checkbox-item input{width:auto}.empty{padding:25px;text-align:center;color:var(--muted);border:1px dashed #d8cac0;border-radius:14px;background:#fff}.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:18px}.modal{background:#fff;border-radius:22px;width:min(900px,100%);max-height:92vh;overflow:auto;padding:22px}.modal-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px;align-items:center}.confirm-text{white-space:pre-wrap;color:var(--text);margin:0 0 14px}.confirm-input{margin-top:10px}.link{background:none;border:0;color:var(--primary);text-decoration:underline;cursor:pointer;font-family:inherit}
+    .grid{display:grid;gap:16px}.stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:16px}.stat{padding:17px;text-align:center}.stat span{color:var(--muted);font-size:13px}.stat strong{display:block;font-size:32px;color:var(--primary2);line-height:1.2}.panel{padding:20px;margin-bottom:18px}.panel h2,.panel h3{margin:0 0 15px;color:var(--primary2)}.filters{display:grid;grid-template-columns:1fr 190px 190px 190px 190px;gap:12px;margin-bottom:15px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}table{width:100%;border-collapse:collapse;min-width:900px}th,td{padding:12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}th{background:#f1e9e2;color:var(--primary2);white-space:nowrap}.chip{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;background:#eef2f7;color:#35516a}.chip.done{background:#e9f8f4;color:#166c61}.chip.progress{background:#fff0d8;color:#935c1b}.chip.late{background:#fdeaea;color:#8b2f2f}.chip.high{background:#fdeaea;color:#8b2f2f}.chip.medium{background:#f4f0ec;color:#61463b}.chip.low{background:#e9f8f4;color:#166c61}.task-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff;margin-bottom:14px}.task-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.task-title{font-size:21px;color:var(--primary2);font-weight:900}.meta{color:var(--muted);font-size:14px}.task-desc{white-space:pre-wrap;margin:12px 0}.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.comment-box{background:#fbf8f5;border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}.comment{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0}.comment-head{display:flex;justify-content:space-between;color:var(--muted);font-size:13px}.attachments a{display:inline-block;margin:4px 0 4px 8px;color:#174ea6}.checkbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;border:1px solid #d8cac0;border-radius:12px;padding:10px;background:#fff}.checkbox-item{display:flex;align-items:center;gap:8px;background:#fbf8f5;border:1px solid var(--line);border-radius:10px;padding:8px}.checkbox-item input{width:auto}.empty{padding:25px;text-align:center;color:var(--muted);border:1px dashed #d8cac0;border-radius:14px;background:#fff}.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:18px}.modal{background:#fff;border-radius:22px;width:min(900px,100%);max-height:92vh;overflow:auto;padding:22px}.modal-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px;align-items:center}.confirm-text{white-space:pre-wrap;color:var(--text);margin:0 0 14px}.confirm-input{margin-top:10px}.link{background:none;border:0;color:var(--primary);text-decoration:underline;cursor:pointer;font-family:inherit}
     @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.filters,.form-grid{grid-template-columns:1fr}.topbar-inner{align-items:flex-start;flex-direction:column}.task-top{flex-direction:column}.container{padding:13px}.panel{padding:15px}}
   
     /* HR-inspired visual layer transferred safely to department/sector board */
@@ -173,7 +181,6 @@
       <section id="tasksPage">
         <div class="grid stats">
           <div class="stat card"><span>إجمالي المهام</span><strong id="statTotal">0</strong></div>
-          <div class="stat card"><span>جديدة</span><strong id="statNew">0</strong></div>
           <div class="stat card"><span>قيد التنفيذ</span><strong id="statProgress">0</strong></div>
           <div class="stat card"><span>مكتملة</span><strong id="statDone">0</strong></div>
           <div class="stat card"><span>متأخرة</span><strong id="statLate">0</strong></div>
@@ -222,7 +229,7 @@
             <div class="form-group full">
               <label>ملف المستخدمين</label>
               <input id="usersImportFile" type="file" accept=".xlsx,.xls" onchange="handleUsersImportFile(event)">
-              <span class="meta">الأعمدة المطلوبة: الاسم الكامل، البريد الإلكتروني، المسمى الوظيفي، الدور، القطاع، الإدارة.</span>
+              <span class="meta">الأعمدة المطلوبة: الاسم الكامل، البريد الإلكتروني، المسمى الوظيفي، الدور، القطاع، القسم.</span>
             </div>
           </div>
           <div id="usersImportPreview" style="margin-top:12px;"></div>
@@ -526,7 +533,7 @@ function exportTasksToExcel(){
       'الحالة':isLate(t)?'متأخرة':t.status,
       'الأولوية':t.priority||'عادية',
       'القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),
-      'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),
+      'القسم':nameOfDept(t.target_department_id||t.owner_department_id),
       'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
       'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
       'تاريخ الاستحقاق':formatDate(t.due_date),
@@ -567,7 +574,7 @@ function renderTransferChooser(t){
   if(!options.length) return `<div id="transferChooser-${t.id}" class="transfer-inline hidden"><span class="meta">لا يوجد مستخدمون نشطون متاحون للتحويل.</span></div>`;
   return `<div id="transferChooser-${t.id}" class="transfer-inline hidden"><select id="transferSelect-${t.id}"><option value="">اختر الموظف الجديد</option>${options.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="confirmTaskTransfer('${t.id}')">تأكيد</button><button class="btn btn-sm" onclick="cancelTransferChooser('${t.id}')">إلغاء</button>${canDirectTransferTask(t)?'':`<textarea id="transferReason-${t.id}" placeholder="سبب طلب التحويل، اختياري"></textarea>`}</div>`;
 }
-function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>` }
+function taskCard(t){ const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id); return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | القسم: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(c=>`<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(c.user_id))}</span><span>${formatDate(c.created_at)}</span></div><div>${escapeHtml(c.comment_text)}</div>${renderAttachments(c.attachment_urls,c.attachment_names)}</div>`).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>` }
 
 function renderAttachments(urls=[],names=[]){ if(!urls||!urls.length)return ''; return `<div class="attachments meta">المرفقات:<br>${urls.map((u,i)=>`<a href="${escapeHtml(u)}" target="_blank">${escapeHtml(names?.[i]||'مرفق '+(i+1))}</a>`).join('')}</div>` }
 
@@ -992,7 +999,7 @@ function exportDashboardToExcel(){
     const users=usersInDashboardScope();
     const rows=users.map(u=>{
       const m=taskMetrics(tasksForUser(u.id));
-      return {'الموظف':u.name,'البريد':u.email||'','الدور':roleLabel(u.role),'القطاع':nameOfSector(u.sector_id),'الإدارة':nameOfDept(u.department_id),'إجمالي المهام':m.total,'جديدة':m.fresh,'قيد التنفيذ':m.progress,'مكتملة':m.done,'متأخرة':m.late,'نسبة الإنجاز':`${m.rate}%`};
+      return {'الموظف':u.name,'البريد':u.email||'','الدور':roleLabel(u.role),'القطاع':nameOfSector(u.sector_id),'القسم':nameOfDept(u.department_id),'إجمالي المهام':m.total,'جديدة':m.fresh,'قيد التنفيذ':m.progress,'مكتملة':m.done,'متأخرة':m.late,'نسبة الإنجاز':`${m.rate}%`};
     });
     if(!rows.length) return showToast('لا توجد بيانات لتصديرها.','info');
     const ws=XLSX.utils.json_to_sheet(rows);
@@ -1263,7 +1270,7 @@ function validateImportedUser(row, index){
   const job_title=getImportCell(row,['المسمى الوظيفي','الوظيفة','job_title','Job Title']);
   const roleText=getImportCell(row,['الدور','الصلاحية','role','Role']);
   const sectorName=getImportCell(row,['القطاع','sector','Sector']);
-  const deptName=getImportCell(row,['الإدارة','الادارة','department','Department']);
+  const deptName=getImportCell(row,['القسم','الإدارة','الادارة','department','Department']);
   const role=mapImportRole(roleText);
   const errors=[];
   if(!name) errors.push('الاسم مطلوب');
@@ -1275,7 +1282,7 @@ function validateImportedUser(row, index){
   if(!sector && !['admin','ceo'].includes(role)) errors.push('القطاع غير صحيح أو غير موجود');
   if(sector && deptName){
     department=deptByName(deptName, sector.id);
-    if(!department) errors.push('الإدارة غير موجودة داخل القطاع المحدد');
+    if(!department) errors.push('القسم غير موجود داخل القطاع المحدد');
   }
   if(isSectorHead()){
     if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع إضافة مستخدم خارج قطاعه');
@@ -1318,7 +1325,7 @@ async function downloadUsersImportTemplate(){
     listSheet.state = 'hidden';
     listSheet.views = [{ rightToLeft: true }];
 
-    const headers = ['الاسم الكامل','البريد الإلكتروني','المسمى الوظيفي','الدور','القطاع','الإدارة'];
+    const headers = ['الاسم الكامل','البريد الإلكتروني','المسمى الوظيفي','الدور','القطاع','القسم'];
     sheet.addRow(headers);
 
     sheet.columns = [
@@ -1327,7 +1334,7 @@ async function downloadUsersImportTemplate(){
       { header:'المسمى الوظيفي', key:'job_title', width:26 },
       { header:'الدور', key:'role', width:22 },
       { header:'القطاع', key:'sector', width:28 },
-      { header:'الإدارة', key:'department', width:30 }
+      { header:'القسم', key:'department', width:30 }
     ];
 
     const rolesForCurrentUser = isSectorHead()
@@ -1408,10 +1415,10 @@ async function downloadUsersImportTemplate(){
         showErrorMessage: true,
         errorStyle: 'stop',
         errorTitle: 'اختيار غير مسموح',
-        error: 'اختر الإدارة من القائمة المنسدلة فقط، ولا تكتب قيمة خارج القائمة.',
+        error: 'اختر القسم من القائمة المنسدلة فقط، ولا تكتب قيمة خارج القائمة.',
         showInputMessage: true,
-        promptTitle: 'الإدارة',
-        prompt: 'اختر الإدارة من القائمة المنسدلة.'
+        promptTitle: 'القسم',
+        prompt: 'اختر القسم من القائمة المنسدلة.'
       };
     }
 
@@ -1435,7 +1442,7 @@ async function downloadUsersImportTemplate(){
     const note = workbook.addWorksheet('تعليمات');
     note.views = [{ rightToLeft: true }];
     note.addRow(['تعليمات تعبئة نموذج المستخدمين']);
-    note.addRow(['1. لا تكتب في أعمدة الدور والقطاع والإدارة يدويًا؛ اختر من القائمة المنسدلة فقط.']);
+    note.addRow(['1. لا تكتب في أعمدة الدور والقطاع والقسم يدويًا؛ اختر من القائمة المنسدلة فقط.']);
     note.addRow(['2. عند اختيار قطاع وإدارة غير متطابقين، سيرفض النظام الصف في المعاينة قبل الحفظ.']);
     note.addRow(['3. حفظ المستخدمين من هذا النموذج يكون كمسودة فقط، ولا يتم إرسال الدعوات إلا من زر إرسال الدعوات.']);
     note.getColumn(1).width = 110;
@@ -1463,7 +1470,7 @@ async function downloadUsersImportTemplate(){
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast('تم تحميل نموذج Excel بقوائم منسدلة للدور والقطاع والإدارة.','success');
+    showToast('تم تحميل نموذج Excel بقوائم منسدلة للدور والقطاع والقسم.','success');
   }catch(e){
     console.error(e);
     showToast(e.message || 'تعذر إنشاء نموذج Excel بالقوائم المنسدلة.','error');
@@ -1779,7 +1786,7 @@ function resolveBoardTaskImportRow(rawRow,index){
   const defaultResponsibleId=$('boardTasksImportResponsible')?.value || state.profile?.id || '';
 
   const sectorName=String(getBoardTaskImportCell(row,['القطاع','sector','Sector'])).trim();
-  const departmentName=String(getBoardTaskImportCell(row,['الإدارة','الادارة','department','Department'])).trim();
+  const departmentName=String(getBoardTaskImportCell(row,['القسم','الإدارة','الادارة','department','Department'])).trim();
   const sector=sectorByNameLoose(sectorName);
   const sector_id=sector?.id || defaultSectorId || null;
   const department=departmentByNameLoose(departmentName, sector_id);
@@ -2259,7 +2266,7 @@ function renderPendingTaskApprovals(){
   if(!$('pendingTasksList')) return;
   const rows=getPendingTasks().filter(canReviewTask);
   if(!rows.length){ $('pendingTasksList').innerHTML='<div class="empty">لا توجد مهام بانتظار الاعتماد حالياً.</div>'; return; }
-  $('pendingTasksList').innerHTML=rows.map(t=>`<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>المسند إليهم: ${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button></div></div>`).join('');
+  $('pendingTasksList').innerHTML=rows.map(t=>`<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>المسند إليهم: ${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | القسم: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button></div></div>`).join('');
 }
 async function approveSubmittedTask(taskId){ const {error}=await supabaseClient.from('tasks').update({approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); renderTasks(); renderDashboard(); showToast('تم اعتماد المهمة وإظهارها في اللوحة.','success'); }
 async function rejectSubmittedTask(taskId){ const ok=await askConfirm({title:'رفض المهمة',message:'سيتم رفض المهمة ولن تظهر في القوائم والداشبورد. هل تريد المتابعة؟',okText:'رفض',danger:true}); if(!ok)return; const {error}=await supabaseClient.from('tasks').update({approval_status:'rejected',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); showToast('تم رفض المهمة.','success'); }
@@ -2290,7 +2297,7 @@ function renderCommentItem(c){ return `<div class="comment"><div class="comment-
 taskCard=function(t){
   const ass=getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—'; const com=getTaskComments(t.id);
   const editBtn=canEditTask(t)?`<button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل</button>`:'';
-  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
+  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | القسم: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${statusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="جديدة" ${t.status==='جديدة'?'selected':''}>جديدة</option><option value="قيد التنفيذ" ${t.status==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${t.status==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
 };
 async function deleteTaskComment(commentId){
   const comment=state.comments.find(c=>c.id===commentId); if(!comment) return showToast('تعذر العثور على التعليق.','error'); if(!canDeleteComment(comment)) return showToast('حذف التعليقات من صلاحية المدير ضمن النطاق فقط.','error');
@@ -2340,7 +2347,7 @@ exportTasksToExcel=function(){
   try{
     if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
     const rows=[]; const tasks=getFilteredTasks();
-    tasks.forEach(t=>{ const assignees=getTaskAssignees(t.id); const latest=latestCommentText(t.id); const base={'عنوان المهمة':t.title||'','وصف المهمة':t.description||'','الحالة':isLate(t)?'متأخرة':t.status,'الأولوية':t.priority||'عادية','القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),'المسند إليهم':assignees.map(u=>u.name).join('، '),'آخر تعليق':latest,'روابط مرفقات المهمة':(t.attachment_urls||[]).join(' | '),'أسماء مرفقات المهمة':(t.attachment_names||[]).join(' | '),'تاريخ الاستحقاق':formatDate(t.due_date),'هل المهمة متأخرة؟':isLate(t)?'نعم':'لا','حالة الاعتماد':isApprovedTask(t)?'معتمدة':(t.approval_status||'—'),'تاريخ الإنشاء':formatDate(t.created_at)}; if(assignees.length){assignees.forEach(u=>rows.push({...base,'الموظف':u.name,'بريد الموظف':u.email||'','دور الموظف':roleLabel(u.role),'قطاع الموظف':nameOfSector(u.sector_id),'إدارة الموظف':nameOfDept(u.department_id)}));} else rows.push(base); });
+    tasks.forEach(t=>{ const assignees=getTaskAssignees(t.id); const latest=latestCommentText(t.id); const base={'عنوان المهمة':t.title||'','وصف المهمة':t.description||'','الحالة':isLate(t)?'متأخرة':t.status,'الأولوية':t.priority||'عادية','القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),'القسم':nameOfDept(t.target_department_id||t.owner_department_id),'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),'المسند إليهم':assignees.map(u=>u.name).join('، '),'آخر تعليق':latest,'روابط مرفقات المهمة':(t.attachment_urls||[]).join(' | '),'أسماء مرفقات المهمة':(t.attachment_names||[]).join(' | '),'تاريخ الاستحقاق':formatDate(t.due_date),'هل المهمة متأخرة؟':isLate(t)?'نعم':'لا','حالة الاعتماد':isApprovedTask(t)?'معتمدة':(t.approval_status||'—'),'تاريخ الإنشاء':formatDate(t.created_at)}; if(assignees.length){assignees.forEach(u=>rows.push({...base,'الموظف':u.name,'بريد الموظف':u.email||'','دور الموظف':roleLabel(u.role),'قطاع الموظف':nameOfSector(u.sector_id),'قسم الموظف':nameOfDept(u.department_id)}));} else rows.push(base); });
     if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
     const ws=XLSX.utils.json_to_sheet(rows); ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:30},{wch:70},{wch:14},{wch:12},{wch:24},{wch:24},{wch:24},{wch:40},{wch:60},{wch:60},{wch:16},{wch:14},{wch:14},{wch:16}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'تقرير تفصيلي للمهام'); XLSX.writeFile(wb,`تقرير_مهام_الأقسام_تفصيلي_${new Date().toISOString().slice(0,10)}.xlsx`); showToast('تم تصدير التقرير التفصيلي بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير ملف Excel.','error'); }
@@ -2568,7 +2575,7 @@ init = async function(){
 
 
 /* === PATCH: تحسين استيراد المهام من لوحة HR ===
-   - إذا كان ملف المهام لا يحتوي قطاع/إدارة، يتم أخذ القطاع والإدارة تلقائيًا من المسؤول المطابق بالبريد.
+   - إذا كان ملف المهام لا يحتوي قطاع/قسم، يتم أخذ القطاع والقسم تلقائيًا من المسؤول المطابق بالبريد.
    - يمكن حذف أي مهمة من معاينة الاستيراد قبل الحفظ.
    - الهدف: إزالة أخطاء "اختر القطاع الافتراضي أو أضف القطاع في الملف" عندما يكون المسؤول موجودًا في النظام.
 */
@@ -2594,13 +2601,13 @@ function resolveBoardTaskImportRow(rawRow,index){
     || defaultResponsible;
 
   const sectorName=String(getBoardTaskImportCell(row,['القطاع','sector','Sector'])).trim();
-  const departmentName=String(getBoardTaskImportCell(row,['الإدارة','الادارة','department','Department'])).trim();
+  const departmentName=String(getBoardTaskImportCell(row,['القسم','الإدارة','الادارة','department','Department'])).trim();
   const sectorFromFile=sectorByNameLoose(sectorName);
   const sector_id=sectorFromFile?.id || responsibleUser?.sector_id || defaultSectorId || null;
   const departmentFromFile=departmentByNameLoose(departmentName, sector_id);
 
-  // مهم: رئيس القطاع لا يلزم أن يكون تابعًا لإدارة. لذلك إذا كان المسؤول رئيس قطاع
-  // نسمح بأن تكون الإدارة فارغة، ونكتفي بتحديد القطاع حتى تُسند المهمة له باسمه.
+  // مهم: رئيس القطاع لا يلزم أن يكون تابعًا لقسم. لذلك إذا كان المسؤول رئيس قطاع
+  // نسمح بأن تكون القسم فارغ، ونكتفي بتحديد القطاع حتى تُسند المهمة له باسمه.
   const responsibleIsSectorHead = responsibleUser?.role === 'sector_head';
   const department_id = departmentFromFile?.id || (responsibleIsSectorHead ? null : (responsibleUser?.department_id || defaultDeptId || null));
 
@@ -2683,7 +2690,7 @@ function renderBoardTasksImportPreview(){
   const validCount=boardTasksImportRows.filter(r=>r.valid).length;
   const invalidCount=boardTasksImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المهام: ${boardTasksImportRows.length} | صالح للاستيراد: ${validCount} | فيه أخطاء: ${invalidCount}</div>
-  <p class="meta">إذا كان ملف HR لا يحتوي قطاع أو إدارة، سيأخذ النظام القطاع والإدارة تلقائيًا من المستخدم المسؤول المطابق بالبريد. ويمكنك حذف أي صف غير مطلوب قبل الاستيراد.</p>
+  <p class="meta">إذا كان ملف HR لا يحتوي قطاع أو قسم، سيأخذ النظام القطاع والقسم تلقائيًا من المستخدم المسؤول المطابق بالبريد. ويمكنك حذف أي صف غير مطلوب قبل الاستيراد.</p>
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>المرفقات كنص</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardTasksImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.title)}</td><td>${escapeHtml(r.status)}</td><td>${escapeHtml(r.priority)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${escapeHtml(r.responsible_name||'—')}</td><td>${(r.task_attachment_links||r.comment_attachment_links)?'<span class="chip done">سيتم إضافتها للوصف</span>':'—'}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardTaskImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -3009,7 +3016,7 @@ function renderCompletionRequests(){
   if(!box) return;
   const rows = getCompletionRequests();
   if(!rows.length){ box.innerHTML='<div class="empty">لا توجد مهام مكتملة بانتظار الاعتماد حاليًا.</div>'; return; }
-  box.innerHTML = rows.map(t=>`<div class="task-card"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">طالب الإكمال: ${escapeHtml(nameOfUser(t.completion_requested_by)||'—')}<br>المسؤول: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}<br>تاريخ طلب الإكمال: ${formatDate(t.completion_requested_at)}</div></div><div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div><div class="actions"><button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${t.id}')">اعتماد الإكمال</button><button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${t.id}')">رفض الإكمال</button></div></div>`).join('');
+  box.innerHTML = rows.map(t=>`<div class="task-card"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">طالب الإكمال: ${escapeHtml(nameOfUser(t.completion_requested_by)||'—')}<br>المسؤول: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | القسم: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}<br>تاريخ طلب الإكمال: ${formatDate(t.completion_requested_at)}</div></div><div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div><div class="actions"><button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${t.id}')">اعتماد الإكمال</button><button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${t.id}')">رفض الإكمال</button></div></div>`).join('');
 }
 async function approveTaskCompletion(taskId){
   try{
@@ -3093,7 +3100,7 @@ taskCard = function(t){
   const editBtn=(typeof canEditTask==='function' && canEditTask(t))?`<button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل</button>`:'';
   const currentSelectValue = t.status === 'مكتملة' ? 'مكتملة' : 'قيد التنفيذ';
   const completionNote = taskIsCompletionPending(t) ? '<div class="notice info show" style="margin-top:10px;">هذه المهمة بانتظار اعتماد الإكمال من المسؤول المختص.</div>' : '';
-  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${workflowStatusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${completionNote}${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="قيد التنفيذ" ${currentSelectValue==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${currentSelectValue==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
+  return `<div class="task-card ${isDueSoon(t)?'due-soon':''}" id="task-card-${t.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title)}</div><div class="meta">المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | القسم: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>المسند إليهم: ${escapeHtml(ass)}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</div></div><div class="actions">${workflowStatusChip(t)} ${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${completionNote}${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="comment-box"><b>التعليقات</b>${com.length?com.map(renderCommentItem).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${t.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${t.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${t.id}')">إضافة تعليق</button><select onchange="changeStatus('${t.id}',this.value)"><option value="قيد التنفيذ" ${currentSelectValue==='قيد التنفيذ'?'selected':''}>قيد التنفيذ</option><option value="مكتملة" ${currentSelectValue==='مكتملة'?'selected':''}>مكتملة</option></select>${canRequestTransferTask(t)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${t.id}')">${canDirectTransferTask(t)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(t)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${t.id}')">حذف</button>`:''}</div>${renderTransferChooser(t)}</div></div>`;
 };
 
 renderMyTasksSummary = function(){
@@ -3729,6 +3736,223 @@ renderTasks = function(){
     renderTaskGroup('قيد التنفيذ', groups.progress, 'لا توجد مهام قيد التنفيذ.', true, false) +
     renderTaskGroup('متأخرة', groups.late, 'لا توجد مهام متأخرة.', true, false) +
     renderTaskGroup('مكتملة', groups.completed, 'لا توجد مهام مكتملة.', true, false);
+};
+
+
+/* === CLEAN STABILITY PATCH 2026-06-04 ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   الهدف: تثبيت آخر سلوك معتمد قبل أي مزايا جديدة، وتقليل أثر أي تعريفات قديمة موجودة أعلى الملف.
+*/
+const DEPARTMENT_TASKS_STABLE_VERSION = '2026-06-04-clean-stable';
+
+(function addCleanStableStyles(){
+  if(document.getElementById('cleanStableStyles')) return;
+  const style=document.createElement('style');
+  style.id='cleanStableStyles';
+  style.textContent=`
+    .workflow-four-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+    .task-group-details > summary::-webkit-details-marker,
+    .sector-dashboard-accordion > summary::-webkit-details-marker{display:none}
+    .task-group-details[open] > summary,
+    .sector-dashboard-accordion[open] > summary{background:#f7f0ea!important}
+    @media(max-width:900px){.workflow-four-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+    @media(max-width:560px){.workflow-four-stats{grid-template-columns:1fr!important}}
+  `;
+  document.head.appendChild(style);
+})();
+
+function cleanStableNormalizeStaticUi(){
+  document.title='لوحة متابعة مهام الأقسام والقطاعات';
+  const mainTitle=document.querySelector('.title-box h1');
+  if(mainTitle) mainTitle.textContent='لوحة متابعة مهام الأقسام والقطاعات';
+  const subTitle=document.querySelector('.title-box p');
+  if(subTitle) subTitle.textContent='نظام مؤسسي لإدارة ومتابعة مهام القطاعات والأقسام';
+
+  const statGrid=document.querySelector('.grid.stats');
+  if(statGrid) statGrid.classList.add('workflow-four-stats');
+
+  const newCard=$('statNew')?.closest('.stat');
+  if(newCard) newCard.remove();
+
+  const labels=[
+    ['statTotal','إجمالي المهام'],
+    ['statProgress','قيد التنفيذ'],
+    ['statDone','مكتملة'],
+    ['statLate','متأخرة']
+  ];
+  labels.forEach(([id,label])=>{
+    const card=$(id)?.closest('.stat');
+    const span=card?.querySelector('span');
+    if(span) span.textContent=label;
+  });
+
+  if($('filterStatus')){
+    const current=['قيد التنفيذ','مكتملة','متأخرة'].includes($('filterStatus').value) ? $('filterStatus').value : '';
+    $('filterStatus').innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
+    $('filterStatus').value=current;
+  }
+
+  if($('executiveStatusFilter')){
+    const current=['قيد التنفيذ','مكتملة','متأخرة'].includes($('executiveStatusFilter').value) ? $('executiveStatusFilter').value : '';
+    $('executiveStatusFilter').innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
+    $('executiveStatusFilter').value=current;
+  }
+}
+
+function cleanStableDisplayStatus(task){
+  if(!task) return 'قيد التنفيذ';
+  if(task.status==='مكتملة' || task.completion_status==='approved') return 'مكتملة';
+  if(isLate(task)) return 'متأخرة';
+  return 'قيد التنفيذ';
+}
+
+function cleanStableCompletedInCurrentMonth(task, now=new Date()){
+  if(!task || cleanStableDisplayStatus(task)!=='مكتملة' || !task.completion_reviewed_at) return false;
+  const d=new Date(task.completion_reviewed_at);
+  return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+}
+
+function cleanStableDueInCurrentMonth(task, now=new Date()){
+  if(!task?.due_date) return false;
+  const d=new Date(task.due_date);
+  return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+}
+
+function cleanStableSortTasks(rows){
+  return [...(rows||[])].sort((a,b)=>{
+    const order={'متأخرة':0,'قيد التنفيذ':1,'مكتملة':2};
+    const as=order[cleanStableDisplayStatus(a)] ?? 1;
+    const bs=order[cleanStableDisplayStatus(b)] ?? 1;
+    if(as!==bs) return as-bs;
+    const ad=a.due_date?new Date(a.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    const bd=b.due_date?new Date(b.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    if(ad!==bd) return ad-bd;
+    return new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime();
+  });
+}
+
+taskDisplayStatus = cleanStableDisplayStatus;
+executiveTaskStatus = cleanStableDisplayStatus;
+isCompletedInCurrentMonthByApproval = cleanStableCompletedInCurrentMonth;
+isDueInCurrentMonth = cleanStableDueInCurrentMonth;
+sortTasksByDue = cleanStableSortTasks;
+executiveSortTasks = cleanStableSortTasks;
+
+function cleanStableGroupedRows(rows){
+  const sorted=cleanStableSortTasks(rows||[]);
+  return {
+    progress: sorted.filter(t=>cleanStableDisplayStatus(t)==='قيد التنفيذ'),
+    late: sorted.filter(t=>cleanStableDisplayStatus(t)==='متأخرة'),
+    completed: sorted.filter(t=>cleanStableDisplayStatus(t)==='مكتملة')
+  };
+}
+groupedTaskRows = cleanStableGroupedRows;
+
+function cleanStableMetrics(rows){
+  const source=rows||[];
+  const groups=cleanStableGroupedRows(source);
+  return {
+    total:source.length,
+    progress:groups.progress.length,
+    late:groups.late.length,
+    completed:groups.completed.length,
+    pendingCompletion:source.filter(t=>t.completion_status==='pending').length,
+    rate:source.length?Math.round(groups.completed.length/source.length*100):0
+  };
+}
+workflowThreeMetrics = cleanStableMetrics;
+
+function cleanStableDashboardCards(rows){
+  const source=rows||[];
+  const m=cleanStableMetrics(source);
+  const now=new Date();
+  const completedThisMonth=source.filter(t=>cleanStableCompletedInCurrentMonth(t,now)).length;
+  const dueThisMonth=source.filter(t=>cleanStableDueInCurrentMonth(t,now)).length;
+
+  const counts=(state.users||[])
+    .filter(u=>u.is_active!==false)
+    .map(u=>({
+      u,
+      count:source.filter(t=>t.primary_responsible_id===u.id || getTaskAssignees(t.id).some(a=>a.id===u.id)).length
+    }))
+    .filter(x=>x.count>0)
+    .sort((a,b)=>b.count-a.count);
+
+  const most=counts[0];
+  const least=[...counts].sort((a,b)=>a.count-b.count)[0];
+
+  return `<div class="executive-stats executive-stats-old-layout">
+    <div class="executive-stat-card"><span>إجمالي المهام</span><strong>${m.total}</strong><small>كل المهام المعتمدة ضمن نطاق العرض</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${m.completed}</strong><small>إجمالي المكتمل</small></div>
+    <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${completedThisMonth}</strong><small>حسب تاريخ اعتماد الإكمال</small></div>
+    <div class="executive-stat-card"><span>المهام المستحقة هذا الشهر</span><strong>${dueThisMonth}</strong><small>حسب تاريخ الاستحقاق</small></div>
+    <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${m.progress}</strong><small>مهام تحت المعالجة${m.pendingCompletion?' | بانتظار اعتماد: '+m.pendingCompletion:''}</small></div>
+    <div class="executive-stat-card"><span>المهام المكتملة</span><strong>${m.completed}</strong><small>المهام المعتمدة كمكتملة</small></div>
+    <div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${m.late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+    <div class="executive-employees-row">
+      <div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div>
+      <div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div>
+    </div>
+  </div>`;
+}
+workflowThreeCardsHtml = cleanStableDashboardCards;
+executiveMetricsHtml = function(rows){ return cleanStableDashboardCards(rows||[]); };
+renderExecutiveSummaryCards = function(){
+  return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2>${cleanStableDashboardCards(visibleTasks())}</section>`;
+};
+
+renderStats = function(tasks=visibleTasks()){
+  cleanStableNormalizeStaticUi();
+  const m=cleanStableMetrics(tasks||[]);
+  if($('statTotal')) $('statTotal').textContent=m.total;
+  if($('statProgress')) $('statProgress').textContent=m.progress;
+  if($('statDone')) $('statDone').textContent=m.completed;
+  if($('statLate')) $('statLate').textContent=m.late;
+};
+
+function cleanStableRenderTaskGroup(title,rows,emptyText){
+  const body=rows.length ? rows.map(taskCard).join('') : `<div class="empty">${escapeHtml(emptyText||'لا توجد مهام.')}</div>`;
+  return `<details class="task-group-details" style="margin-bottom:16px;">
+    <summary class="card" style="padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span>${escapeHtml(title)}</span>
+      <span class="badge">${rows.length} مهمة</span>
+    </summary>
+    <div style="margin-top:12px;">${body}</div>
+  </details>`;
+}
+renderTaskGroup = cleanStableRenderTaskGroup;
+
+renderTasks = function(){
+  cleanStableNormalizeStaticUi();
+  const rows=getFilteredTasks();
+  renderStats(rows);
+  if(!rows.length){
+    $('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>';
+    return;
+  }
+  const groups=cleanStableGroupedRows(rows);
+  $('tasksList').innerHTML =
+    cleanStableRenderTaskGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+    cleanStableRenderTaskGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+    cleanStableRenderTaskGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.');
+};
+
+renderDashboard = function(){
+  cleanStableNormalizeStaticUi();
+  const users=usersInDashboardScope();
+  let title='داشبورد مهامي';
+  if(isAdminOrCeo()) title='أداء جميع الموظفين';
+  else if(isSectorHead()) title='أداء موظفي القطاع';
+  else if(isDepartmentManager()) title='أداء موظفي القسم';
+  $('dashboardContent').innerHTML =
+    `${renderExecutiveSummaryCards()}${renderEmployeeCards(users)}${renderMyTasksSummary()}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
+};
+
+const __cleanStableOriginalShowPage = showPage;
+showPage = function(page){
+  cleanStableNormalizeStaticUi();
+  __cleanStableOriginalShowPage(page);
+  cleanStableNormalizeStaticUi();
 };
 
 init();
