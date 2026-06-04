@@ -3454,6 +3454,147 @@ renderTasks = function(){
   __sectionFilterOriginalRenderTasks();
 };
 
+
+/* === PATCH: فلترة داشبورد الرئيس التنفيذي مثل فلترة لوحة المهام ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   يضيف فلترة متسلسلة في داشبورد الرئيس التنفيذي:
+   البحث + القطاع + القسم + الموظف + الحالة.
+   الحالات المعتمدة: قيد التنفيذ، مكتملة، متأخرة فقط.
+*/
+(function injectExecutiveCascadeFiltersStyle(){
+  if(document.getElementById('executiveCascadeFiltersStyle')) return;
+  const style=document.createElement('style');
+  style.id='executiveCascadeFiltersStyle';
+  style.textContent=`
+    #executiveSection .filters.executive-cascade-filters{
+      display:grid!important;
+      grid-template-columns:1fr 190px 190px 190px 190px!important;
+      gap:12px!important;
+      align-items:center!important;
+    }
+    @media(max-width:1100px){#executiveSection .filters.executive-cascade-filters{grid-template-columns:1fr 1fr!important;}}
+    @media(max-width:700px){#executiveSection .filters.executive-cascade-filters{grid-template-columns:1fr!important;}}
+  `;
+  document.head.appendChild(style);
+})();
+
+const __executiveCascadeOriginalEnsureDom = ensureFullHrFeatureDom;
+ensureFullHrFeatureDom = function(){
+  __executiveCascadeOriginalEnsureDom();
+  const search = $('executiveSearchInput');
+  if(!search) return;
+  const filters = search.closest('.filters');
+  if(!filters || filters.dataset.executiveCascadeReady === '1') return;
+  filters.dataset.executiveCascadeReady = '1';
+  filters.classList.add('executive-cascade-filters');
+  filters.style.gridTemplateColumns = '1fr 190px 190px 190px 190px';
+  filters.innerHTML = `
+    <input id="executiveSearchInput" placeholder="ابحث بعنوان المهمة أو الوصف أو المسؤول" oninput="renderExecutiveDirect()">
+    <select id="executiveSectorFilter" onchange="handleExecutiveSectorFilterChange()"><option value="">كل القطاعات</option></select>
+    <select id="executiveDepartmentFilter" onchange="handleExecutiveDepartmentFilterChange()"><option value="">كل الأقسام</option></select>
+    <select id="executiveAssigneeFilter" onchange="renderExecutiveDirect()"><option value="">كل الموظفين</option></select>
+    <select id="executiveStatusFilter" onchange="renderExecutiveDirect()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select>
+  `;
+};
+
+function handleExecutiveSectorFilterChange(){
+  if($('executiveDepartmentFilter')) $('executiveDepartmentFilter').value='';
+  if($('executiveAssigneeFilter')) $('executiveAssigneeFilter').value='';
+  fillExecutiveDepartmentFilter();
+  fillExecutiveAssigneeFilter();
+  renderExecutiveDirect();
+}
+
+function handleExecutiveDepartmentFilterChange(){
+  if($('executiveAssigneeFilter')) $('executiveAssigneeFilter').value='';
+  fillExecutiveAssigneeFilter();
+  renderExecutiveDirect();
+}
+
+function fillExecutiveDepartmentFilter(){
+  const el=$('executiveDepartmentFilter');
+  if(!el) return;
+  const current=el.value;
+  const sectorId=$('executiveSectorFilter')?.value || '';
+  let rows=state.departments || [];
+  if(sectorId) rows=rows.filter(d=>d.sector_id===sectorId);
+  rows=rows.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">كل الأقسام</option>'+rows.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  if(current && rows.some(d=>d.id===current)) el.value=current;
+}
+
+function executiveUserHasTaskInCurrentFilters(user){
+  if(!user) return false;
+  const sectorId=$('executiveSectorFilter')?.value || '';
+  const deptId=$('executiveDepartmentFilter')?.value || '';
+  const status=$('executiveStatusFilter')?.value || '';
+  return visibleTasks().some(t=>{
+    const taskUsers=getTaskAssignees(t.id).map(u=>u.id);
+    const assigned=taskUsers.includes(user.id) || t.primary_responsible_id===user.id;
+    if(!assigned) return false;
+    if(sectorId && executiveTaskSectorId(t)!==sectorId) return false;
+    if(deptId && executiveTaskDepartmentId(t)!==deptId) return false;
+    if(status && executiveTaskStatus(t)!==status) return false;
+    return true;
+  });
+}
+
+function fillExecutiveAssigneeFilter(){
+  const el=$('executiveAssigneeFilter');
+  if(!el) return;
+  const current=el.value;
+  const sectorId=$('executiveSectorFilter')?.value || '';
+  const deptId=$('executiveDepartmentFilter')?.value || '';
+  let users=(state.users || []).filter(u=>u.is_active!==false);
+  if(sectorId) users=users.filter(u=>u.sector_id===sectorId || executiveUserHasTaskInCurrentFilters(u));
+  if(deptId) users=users.filter(u=>u.department_id===deptId || executiveUserHasTaskInCurrentFilters(u));
+  users=users
+    .filter((u,idx,arr)=>arr.findIndex(x=>x.id===u.id)===idx)
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">كل الموظفين</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(roleLabel(u.role))}</option>`).join('');
+  if(current && users.some(u=>u.id===current)) el.value=current;
+  else el.value='';
+}
+
+fillExecutiveFilters = function(){
+  ensureFullHrFeatureDom();
+  const sectorEl=$('executiveSectorFilter');
+  if(sectorEl){
+    const current=sectorEl.value;
+    const sectors=(state.sectors || []).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    sectorEl.innerHTML='<option value="">كل القطاعات</option>'+sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    if(current && sectors.some(s=>s.id===current)) sectorEl.value=current;
+  }
+  fillExecutiveDepartmentFilter();
+  fillExecutiveAssigneeFilter();
+  const statusEl=$('executiveStatusFilter');
+  if(statusEl){
+    const current=['قيد التنفيذ','مكتملة','متأخرة'].includes(statusEl.value) ? statusEl.value : '';
+    statusEl.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
+    statusEl.value=current;
+  }
+};
+
+renderExecutiveDirect = function(){
+  fillExecutiveDepartmentFilter();
+  fillExecutiveAssigneeFilter();
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
+  const fs=$('executiveSectorFilter')?.value||'';
+  const fd=$('executiveDepartmentFilter')?.value||'';
+  const fu=$('executiveAssigneeFilter')?.value||'';
+  const st=$('executiveStatusFilter')?.value||'';
+  let rows=visibleTasks().filter(t=>(!fs||executiveTaskSectorId(t)===fs)&&(!fd||executiveTaskDepartmentId(t)===fd)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||executiveTaskStatus(t)===st)&&(!q||executiveTaskSearchText(t).includes(q)));
+  rows=sortTasksByDue(rows);
+  const statsBox=$('executiveDirectStats');
+  if(statsBox) statsBox.innerHTML=executiveMetricsHtml(rows);
+  const parts=executiveCompletedDetails(rows);
+  const tbody=$('executiveTasksTable');
+  if(tbody){
+    tbody.innerHTML = parts.activeHtml + `<tr><td colspan="9" style="padding:0;border-bottom:0;"><details style="margin:10px;"><summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></td></tr>`;
+  }
+  renderAllSectorDashboardSections(rows);
+};
+
 init();
 </script>
 </body>
