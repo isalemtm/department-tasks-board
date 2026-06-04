@@ -622,7 +622,36 @@ function validateAssignment(type,selected){
   }
   return '';
 }
-async function uploadFiles(fileList,folder){ const files=[...(fileList||[])]; const urls=[],names=[]; for(const f of files){ const path=`${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}-${f.name}`; const {error}=await supabaseClient.storage.from(BUCKET).upload(path,f,{upsert:false}); if(error)throw error; const {data}=supabaseClient.storage.from(BUCKET).getPublicUrl(path); urls.push(data.publicUrl); names.push(f.name);} return {urls,names}; }
+function sanitizeStorageFileName(fileName='file'){
+  const original = String(fileName || 'file');
+  const parts = original.split('.');
+  const ext = parts.length > 1 ? parts.pop() : '';
+  const base = parts.join('.') || 'file';
+  const safeBase = base
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-zA-Z0-9_-]+/g,'-')
+    .replace(/-+/g,'-')
+    .replace(/^-|-$/g,'')
+    .slice(0,60) || 'file';
+  const safeExt = ext.replace(/[^a-zA-Z0-9]/g,'').slice(0,12);
+  return safeExt ? `${safeBase}.${safeExt}` : safeBase;
+}
+async function uploadFiles(fileList,folder){
+  const files=[...(fileList||[])];
+  const urls=[],names=[];
+  const safeFolder=String(folder||'uploads').replace(/[^a-zA-Z0-9_/-]+/g,'-').replace(/\/+$/,'') || 'uploads';
+  for(const f of files){
+    const safeName=sanitizeStorageFileName(f.name || 'file');
+    const path=`${safeFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}-${safeName}`;
+    const {error}=await supabaseClient.storage.from(BUCKET).upload(path,f,{upsert:false});
+    if(error)throw error;
+    const {data}=supabaseClient.storage.from(BUCKET).getPublicUrl(path);
+    urls.push(data.publicUrl);
+    names.push(f.name);
+  }
+  return {urls,names};
+}
 async function saveTask(){
   try{
     const title=$('taskTitle').value.trim();
