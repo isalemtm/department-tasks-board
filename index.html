@@ -983,8 +983,8 @@ function renderDashboard(){
   let title='داشبورد مهامي';
   if(isAdminOrCeo()) title='أداء جميع الموظفين';
   else if(isSectorHead()) title='أداء موظفي القطاع';
-  else if(isDepartmentManager()) title='أداء موظفي الإدارة';
-  $('dashboardContent').innerHTML=`${renderExecutiveSummaryCards()}${renderMyTasksSummary()}${renderEmployeeCards(users)}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
+  else if(isDepartmentManager()) title='أداء موظفي القسم';
+  $('dashboardContent').innerHTML=`${renderExecutiveSummaryCards()}${renderEmployeeCards(users)}${renderMyTasksSummary()}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
 }
 function exportDashboardToExcel(){
   try{
