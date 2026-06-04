@@ -662,11 +662,12 @@ async function saveTask(){
     if(type==='all_sector') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetSector').value||u.sector_id===$('taskTargetSector').value)).map(u=>u.id);
     if(type==='all_department') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetDepartment').value||u.department_id===$('taskTargetDepartment').value)).map(u=>u.id);
     if(type!=='all_company' && !selected.length){ showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error'); return; }
-    if(!selected.includes(state.profile.id))selected.push(state.profile.id);
+    // لا نضيف منشئ المهمة تلقائيًا ضمن المسند إليهم.
+    // إذا أراد المنشئ إسناد المهمة لنفسه يختار نفسه من قائمة المسند إليهم مثل أي موظف آخر.
     const validationMessage=validateAssignment(type,selected);
     if(validationMessage){ showToast(validationMessage,'error'); return; }
     const files=await uploadFiles($('taskFiles').files,'tasks');
-    const primary=state.profile.id;
+    const primary=selected[0] || state.profile.id;
     const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
     const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
     const payload={title,description:$('taskDescription').value.trim(),status:'جديدة',priority:$('taskPriority').value,created_by:state.profile.id,owner_sector_id:state.profile.sector_id,owner_department_id:state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString(),attachment_urls:files.urls,attachment_names:files.names};
@@ -1868,7 +1869,8 @@ async function importBoardTasksFromExcel(){
       const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single();
       if(error) throw error;
 
-      const assignees=[...new Set([row.responsible_id,...(row.assignee_ids||[]),state.profile.id].filter(Boolean))];
+      // لا نضيف المستورد/منشئ عملية الاستيراد تلقائيًا ضمن المسند إليهم.
+      const assignees=[...new Set([row.responsible_id,...(row.assignee_ids||[])].filter(Boolean))];
       if(assignees.length){
         const rows=assignees.map(uid=>({task_id:data.id,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===row.responsible_id?'primary':'assignee'}));
         const inserted=await supabaseClient.from('task_assignees').insert(rows);
@@ -2241,12 +2243,13 @@ saveTask=async function(){
     if(type==='all_sector') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetSector').value||u.sector_id===$('taskTargetSector').value)).map(u=>u.id);
     if(type==='all_department') selected=state.users.filter(u=>u.is_active&&(!$('taskTargetDepartment').value||u.department_id===$('taskTargetDepartment').value)).map(u=>u.id);
     selected=[...new Set(selected)]; if(type!=='all_company' && !selected.length) return showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error');
-    if(!selected.includes(state.profile.id)) selected.push(state.profile.id);
+    // لا نضيف منشئ المهمة تلقائيًا ضمن المسند إليهم.
+    // إذا أراد المنشئ إسناد المهمة لنفسه يختار نفسه من قائمة المسند إليهم مثل أي موظف آخر.
     const validationMessage=validateAssignment(type,selected); if(validationMessage) return showToast(validationMessage,'error');
     const files=await uploadFiles($('taskFiles').files,'tasks');
     const targetSector=((isSectorHead()&&type!=='sector_heads')||isDepartmentManager()||currentRole()==='employee')?state.profile.sector_id:($('taskTargetSector').value||state.profile.sector_id);
     const targetDept=isDepartmentManager()?state.profile.department_id:($('taskTargetDepartment').value||null);
-    const primary=existing?.primary_responsible_id || state.profile.id;
+    const primary=(existing && selected.includes(existing.primary_responsible_id)) ? existing.primary_responsible_id : (selected[0] || state.profile.id);
     const attachment_urls=files.urls.length?[...(existing?.attachment_urls||[]),...files.urls]:(existing?.attachment_urls||[]);
     const attachment_names=files.names.length?[...(existing?.attachment_names||[]),...files.names]:(existing?.attachment_names||[]);
     const payload={title,description:$('taskDescription').value.trim(),priority:$('taskPriority').value,owner_sector_id:existing?.owner_sector_id||state.profile.sector_id,owner_department_id:existing?.owner_department_id||state.profile.department_id,target_sector_id:targetSector,target_department_id:targetDept,primary_responsible_id:primary,assignment_type:type,task_level:type==='sector_heads'?'executive':type==='all_sector'?'sector':type==='department_managers'?'manager':type==='all_department'?'department':'employee',due_date:$('taskDue').value||null,attachment_urls,attachment_names};
