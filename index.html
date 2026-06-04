@@ -3108,7 +3108,13 @@ renderMyTasksSummary = function(){
     return items.length?items.map(t=>`<tr class="summary-task-row ${isDueSoon(t)?'task-due-soon':''}" onclick="openTaskFromSummary('${t.id}')"><td>${escapeHtml(t.title||'بدون عنوان')}</td><td>${escapeHtml(taskDisplayStatus(t))}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}</td><td>${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</td><td>${escapeHtml(getLatestTaskComment(t.id)?.comment_text||'—')}</td></tr>`).join(''):'<tr><td colspan="6">لا توجد مهام.</td></tr>';
   }
   const tableHead='<div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>المسند إليهم</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>';
-  return `<section class="panel card"><h2>${isAdminOrCeo()?'جدول مختصر بالمهام المعتمدة':'مهامي الحالية'}</h2><p class="meta">المهام مرتبة حسب أقرب تاريخ استحقاق، والمهام المكتملة داخل قائمة قابلة للفتح.</p><h3>قيد التنفيذ</h3>${tableHead}${summaryRows(groups.progress)}</tbody></table></div><h3 style="margin-top:18px;">متأخرة</h3>${tableHead}${summaryRows(groups.late)}</tbody></table></div><details style="margin-top:18px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);">مكتملة <span class="badge">${groups.completed.length}</span></summary><div style="margin-top:10px;">${tableHead}${summaryRows(groups.completed)}</tbody></table></div></details></section>`;
+  const detailsStyle='margin-top:14px;';
+  const summaryStyle='padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;display:flex;align-items:center;justify-content:space-between;gap:10px;';
+  return `<section class="panel card"><h2>${isAdminOrCeo()?'جدول مختصر بالمهام المعتمدة':'مهامي الحالية'}</h2><p class="meta">المهام مرتبة حسب أقرب تاريخ استحقاق، وجميع الأقسام قابلة للفتح والإغلاق.</p>
+    <details style="${detailsStyle}"><summary class="card" style="${summaryStyle}"><span>قيد التنفيذ</span><span class="badge">${groups.progress.length}</span></summary><div style="margin-top:10px;">${tableHead}${summaryRows(groups.progress)}</tbody></table></div></details>
+    <details style="${detailsStyle}"><summary class="card" style="${summaryStyle}"><span>متأخرة</span><span class="badge">${groups.late.length}</span></summary><div style="margin-top:10px;">${tableHead}${summaryRows(groups.late)}</tbody></table></div></details>
+    <details style="${detailsStyle}"><summary class="card" style="${summaryStyle}"><span>مكتملة</span><span class="badge">${groups.completed.length}</span></summary><div style="margin-top:10px;">${tableHead}${summaryRows(groups.completed)}</tbody></table></div></details>
+  </section>`;
 };
 
 function executiveVisibleRowsForUser(user){
