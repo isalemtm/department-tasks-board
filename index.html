@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>لوحة متابعة مهام الأقسام</title>
+  <title>لوحة متابعة مهام القطاعات</title>
   <link rel="icon" href="dam-logo.png" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -129,8 +129,8 @@
         <img src="dam-logo.png" alt="شعار مجموعة دام القابضة" onerror="this.style.display='none'" />
       </div>
       <div class="title-box">
-        <h1>لوحة متابعة مهام الأقسام</h1>
-        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات والأقسام</p>
+        <h1>لوحة متابعة مهام القطاعات</h1>
+        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات</p>
       </div>
       <div id="userBar" class="userbar hidden"><span id="userBadge" class="badge">—</span><button class="btn btn-sm" onclick="logout()">تسجيل الخروج</button></div>
     </div>
@@ -2158,7 +2158,7 @@ function ensureFullHrFeatureDom(){
       <section id="executiveSection" class="hidden">
         <section class="panel card">
           <div class="section-head">
-            <div><h2>داشبورد متابعة مهام الأقسام والقطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
+            <div><h2>داشبورد متابعة مهام القطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
             <span class="badge">عرض فقط</span>
           </div>
           <!-- FIX: executiveDirectStats container intentionally has no executive-stats class to avoid nested grid misalignment -->
@@ -2512,7 +2512,7 @@ loadExecutiveDirectDashboard = async function(){
     state.tasks=t.data||[];
     state.assignees=a.data||[];
     state.comments=c.data||[];
-    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام الأقسام والقطاعات';
+    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام القطاعات';
     if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent='عرض مباشر للرئيس التنفيذي: المؤشرات العامة، ثم عرض كل قطاع في قسم مستقل تحت بعض.';
     fillExecutiveFilters();
     renderExecutiveDirect();
@@ -3681,7 +3681,7 @@ renderExecutiveDirect = function(){
 
 
 /* === PATCH: جعل لوحات القطاعات في داشبورد الرئيس التنفيذي مغلقة افتراضيًا ===
-   يبقى داشبورد متابعة مهام الأقسام والقطاعات العام ظاهرًا مباشرة،
+   يبقى داشبورد متابعة مهام القطاعات العام ظاهرًا مباشرة،
    وتظهر كل لوحة قطاع داخل قائمة قابلة للفتح عند الضغط.
 */
 (function addExecutiveSectorAccordionStyles(){
@@ -4421,6 +4421,190 @@ renderExecutiveDirect = function(){
   renderSectorHeadExecutiveTasksPanel(rows);
   renderAllSectorDashboardSections(rows);
 };
+
+
+/* === PATCH: تأمين داشبورد الرئيس التنفيذي بتسجيل الدخول ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+   السلوك الجديد:
+   - رابط الرئيس التنفيذي يصبح: ?view=executive
+   - إذا لم يكن المستخدم مسجل دخول تظهر صفحة تسجيل الدخول.
+   - إذا سجل دخول الرئيس التنفيذي ceo أو مدير النظام admin تظهر لوحة الرئيس التنفيذي.
+   - إذا سجل دخول أي دور آخر تظهر رسالة لطيفة بعدم وجود صلاحية.
+   - لم يعد token=7700 يفتح اللوحة بدون تسجيل دخول.
+*/
+function isExecutiveRouteProtected(){
+  const url = new URL(location.href);
+  return url.searchParams.get('view') === 'executive';
+}
+
+function ensureExecutiveAccessDeniedDom(){
+  const main = document.querySelector('main.container');
+  if(!main || $('executiveAccessDeniedSection')) return;
+  main.insertAdjacentHTML('afterbegin', `
+    <section id="executiveAccessDeniedSection" class="auth-wrap hidden">
+      <div class="auth-card card" style="max-width:680px;text-align:center;">
+        <h2 class="auth-title" style="color:var(--primary2);">ليست لديك صلاحية عرض هذه الصفحة</h2>
+        <p style="font-size:16px;line-height:1.9;color:var(--muted);margin:0 0 18px;">
+          عذرًا، داشبورد الرئيس التنفيذي مخصص للرئيس التنفيذي أو مدير النظام فقط.
+        </p>
+        <div class="actions" style="justify-content:center;">
+          <button class="btn btn-primary" onclick="location.href=location.origin+location.pathname">العودة إلى لوحة المهام</button>
+          <button class="btn" onclick="logout()">تسجيل الخروج</button>
+        </div>
+      </div>
+    </section>
+  `);
+}
+
+function hideExecutiveProtectedSections(){
+  $('executiveAccessDeniedSection')?.classList.add('hidden');
+}
+
+function showExecutiveAccessDenied(){
+  ensureFullHrFeatureDom();
+  ensureExecutiveAccessDeniedDom();
+  $('authSection')?.classList.add('hidden');
+  $('passwordSetupSection')?.classList.add('hidden');
+  $('appSection')?.classList.add('hidden');
+  $('executiveSection')?.classList.add('hidden');
+  $('executiveAccessDeniedSection')?.classList.remove('hidden');
+  $('userBar')?.classList.remove('hidden');
+  if($('userBadge') && state.profile){
+    $('userBadge').textContent = `${state.profile.name} - ${roleLabel(state.profile.role)}`;
+  }
+}
+
+function showExecutiveLoginRequired(){
+  ensureFullHrFeatureDom();
+  ensureExecutiveAccessDeniedDom();
+  $('executiveSection')?.classList.add('hidden');
+  $('executiveAccessDeniedSection')?.classList.add('hidden');
+  showAuthOnly();
+  showAuthView('login');
+  showNotice('فضلاً سجل الدخول لعرض داشبورد الرئيس التنفيذي.','info');
+}
+
+async function showExecutiveDashboardForAuthorizedUser(){
+  ensureFullHrFeatureDom();
+  ensureExecutiveAccessDeniedDom();
+
+  await loadExecutiveDirectDashboard();
+
+  $('authSection')?.classList.add('hidden');
+  $('passwordSetupSection')?.classList.add('hidden');
+  $('appSection')?.classList.add('hidden');
+  $('executiveAccessDeniedSection')?.classList.add('hidden');
+  $('executiveSection')?.classList.remove('hidden');
+  $('userBar')?.classList.remove('hidden');
+
+  if($('userBadge') && state.profile){
+    $('userBadge').textContent = `${state.profile.name} - ${roleLabel(state.profile.role)}`;
+  }
+}
+
+async function bootstrapExecutiveProtected(){
+  await loadProfile();
+
+  if(!state.profile){
+    await supabaseClient.auth.signOut();
+    showExecutiveLoginRequired();
+    showNotice('تم تسجيل الدخول، لكن الحساب غير مفعل في النظام. انتظر اعتماد مدير النظام.','info');
+    return false;
+  }
+
+  if(state.profile.must_set_password){
+    showPasswordSetup();
+    return true;
+  }
+
+  if(!isAdminOrCeo()){
+    showExecutiveAccessDenied();
+    return false;
+  }
+
+  await showExecutiveDashboardForAuthorizedUser();
+  return true;
+}
+
+const __executiveProtectedOriginalBootstrap = bootstrap;
+bootstrap = async function(){
+  if(isExecutiveRouteProtected()){
+    return await bootstrapExecutiveProtected();
+  }
+  return await __executiveProtectedOriginalBootstrap();
+};
+
+const __executiveProtectedOriginalShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  ensureExecutiveAccessDeniedDom();
+  __executiveProtectedOriginalShowAuthOnly();
+  $('executiveAccessDeniedSection')?.classList.add('hidden');
+};
+
+const __executiveProtectedOriginalShowApp = showApp;
+showApp = function(){
+  hideExecutiveProtectedSections();
+  __executiveProtectedOriginalShowApp();
+};
+
+init = async function(){
+  ensureFullHrFeatureDom();
+  ensureExecutiveAccessDeniedDom();
+
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      state.session=session;
+      state.profile=null;
+      showPasswordSetup();
+      $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+    }
+  });
+
+  const url = new URL(location.href);
+  const code = url.searchParams.get('code');
+
+  if(code){
+    const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code);
+    if(!error && data?.session){
+      state.session=data.session;
+      state.profile=null;
+      if(isExecutiveRouteProtected()){
+        await bootstrapExecutiveProtected();
+        return;
+      }
+      showPasswordSetup();
+      $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+      return;
+    }
+  }
+
+  const {data}=await supabaseClient.auth.getSession();
+  state.session=data.session;
+
+  if(isRecoveryUrl() && data?.session){
+    state.profile=null;
+    showPasswordSetup();
+    $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+    return;
+  }
+
+  if(isExecutiveRouteProtected()){
+    if(!state.session){
+      showExecutiveLoginRequired();
+      return;
+    }
+    await bootstrapExecutiveProtected();
+    return;
+  }
+
+  if(state.session){
+    const ok=await bootstrap();
+    if(!ok) showAuthOnly();
+  }else{
+    showAuthOnly();
+  }
+};
+
 
 init();
 </script>
