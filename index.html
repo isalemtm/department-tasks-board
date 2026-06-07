@@ -4240,6 +4240,188 @@ saveTask = async function(){
   }
 };
 
+
+/* === PATCH: بطاقة/لوحة مستقلة في داشبورد الرئيس التنفيذي لمهام رؤساء القطاعات فقط ===
+   خاص بلوحة مهام الأقسام والقطاعات فقط.
+   يعرض نفس نمط إحصائيات داشبورد الرئيس التنفيذي، لكن الأرقام محسوبة فقط على المهام
+   التي يكون أحد رؤساء القطاعات مسؤولًا رئيسيًا عنها أو مسندًا إليه فيها.
+   يمكن الضغط على أي بطاقة لفتح جدول المهام التابعة لها.
+*/
+let executiveSectorHeadDrill = null;
+
+function executiveSectorHeadUsers(){
+  return (state.users || []).filter(u => u.is_active !== false && u.role === 'sector_head');
+}
+
+function taskHasSectorHeadAssignee(task){
+  if(!task) return false;
+  const sectorHeadIds = new Set(executiveSectorHeadUsers().map(u => u.id));
+  if(task.primary_responsible_id && sectorHeadIds.has(task.primary_responsible_id)) return true;
+  return getTaskAssignees(task.id).some(u => sectorHeadIds.has(u.id));
+}
+
+function sectorHeadTaskRows(rows){
+  return (rows || []).filter(taskHasSectorHeadAssignee);
+}
+
+function sectorHeadTaskRowsByMetric(rows, metric){
+  const source = sectorHeadTaskRows(rows || []);
+  const now = new Date();
+  if(metric === 'doneTotal' || metric === 'completed') return source.filter(t => t.status === 'مكتملة');
+  if(metric === 'doneMonth') return source.filter(t => isCompletedInCurrentMonthByApproval(t, now));
+  if(metric === 'dueMonth') return source.filter(t => isDueInCurrentMonth(t, now));
+  if(metric === 'progress') return source.filter(t => t.status !== 'مكتملة' && !isLate(t));
+  if(metric === 'late') return source.filter(t => t.status !== 'مكتملة' && isLate(t));
+  return source;
+}
+
+function sectorHeadCountsForRows(rows){
+  const source = sectorHeadTaskRows(rows || []);
+  const now = new Date();
+  const sectorHeads = executiveSectorHeadUsers();
+  const counts = sectorHeads
+    .map(u => ({
+      u,
+      count: source.filter(t => t.primary_responsible_id === u.id || getTaskAssignees(t.id).some(a => a.id === u.id)).length
+    }))
+    .filter(x => x.count > 0)
+    .sort((a,b) => b.count - a.count);
+
+  return {
+    total: source.length,
+    doneTotal: source.filter(t => t.status === 'مكتملة').length,
+    doneMonth: source.filter(t => isCompletedInCurrentMonthByApproval(t, now)).length,
+    dueMonth: source.filter(t => isDueInCurrentMonth(t, now)).length,
+    progress: source.filter(t => t.status !== 'مكتملة' && !isLate(t)).length,
+    completed: source.filter(t => t.status === 'مكتملة').length,
+    late: source.filter(t => t.status !== 'مكتملة' && isLate(t)).length,
+    most: counts[0],
+    least: [...counts].sort((a,b)=>a.count-b.count)[0]
+  };
+}
+
+function sectorHeadDrillTitle(metric){
+  return ({
+    total: 'كل مهام رؤساء القطاعات',
+    doneTotal: 'مهام رؤساء القطاعات المنجزة حتى الآن',
+    doneMonth: 'مهام رؤساء القطاعات المنجزة هذا الشهر',
+    dueMonth: 'مهام رؤساء القطاعات المستحقة هذا الشهر',
+    progress: 'مهام رؤساء القطاعات قيد التنفيذ',
+    completed: 'مهام رؤساء القطاعات المكتملة',
+    late: 'مهام رؤساء القطاعات المتأخرة',
+    most: 'مهام أكثر رئيس قطاع لديه مهام',
+    least: 'مهام أقل رئيس قطاع لديه مهام'
+  })[metric] || 'مهام رؤساء القطاعات';
+}
+
+function openSectorHeadExecutiveTasks(metric, userId=''){
+  executiveSectorHeadDrill = { metric, userId };
+  renderSectorHeadExecutiveTasksPanel(window.__lastExecutiveFilteredRows || visibleTasks());
+  setTimeout(()=>{
+    const panel = $('executiveSectorHeadTasksPanel');
+    if(panel) panel.scrollIntoView({behavior:'smooth', block:'start'});
+  },80);
+}
+
+function closeSectorHeadExecutiveTasks(){
+  executiveSectorHeadDrill = null;
+  renderSectorHeadExecutiveTasksPanel(window.__lastExecutiveFilteredRows || visibleTasks());
+}
+
+function sectorHeadStatsCard({label,value,small,metric,userId=''}){
+  return `<button type="button" class="executive-stat-card sector-head-click-card" onclick="openSectorHeadExecutiveTasks('${metric}','${userId}')"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(small)}</small></button>`;
+}
+
+function renderSectorHeadExecutiveStats(rows){
+  const c = sectorHeadCountsForRows(rows || []);
+  return `<section class="panel card" id="executiveSectorHeadsStatsPanel" style="margin-top:18px;">
+    <div class="section-head">
+      <div>
+        <h2>متابعة مهام رؤساء القطاعات</h2>
+        <p class="meta">نفس مؤشرات الداشبورد، لكن محسوبة فقط على المهام المسندة لرؤساء القطاعات أو المسؤولين عنها. اضغط على أي بطاقة لفتح المهام.</p>
+      </div>
+      <span class="badge">${c.total} مهمة</span>
+    </div>
+    <div class="executive-stats executive-stats-old-layout sector-heads-stats-grid">
+      ${sectorHeadStatsCard({label:'إجمالي مهام رؤساء القطاعات',value:c.total,small:'كل مهام رؤساء القطاعات ضمن نطاق العرض',metric:'total'})}
+      ${sectorHeadStatsCard({label:'المنجزة حتى الآن',value:c.doneTotal,small:'إجمالي المكتمل لرؤساء القطاعات',metric:'doneTotal'})}
+      ${sectorHeadStatsCard({label:'المنجزة هذا الشهر',value:c.doneMonth,small:'حسب تاريخ اعتماد الإكمال خلال الشهر الحالي',metric:'doneMonth'})}
+      ${sectorHeadStatsCard({label:'المستحقة هذا الشهر',value:c.dueMonth,small:'حسب تاريخ الاستحقاق خلال الشهر الحالي',metric:'dueMonth'})}
+      ${sectorHeadStatsCard({label:'قيد التنفيذ',value:c.progress,small:'مهام رؤساء القطاعات تحت المعالجة',metric:'progress'})}
+      ${sectorHeadStatsCard({label:'المكتملة',value:c.completed,small:'مهام رؤساء القطاعات المكتملة',metric:'completed'})}
+      ${sectorHeadStatsCard({label:'المتأخرة',value:c.late,small:'تجاوزت تاريخ الاستحقاق',metric:'late'})}
+      <div class="executive-employees-row">
+        ${sectorHeadStatsCard({label:'أكثر رئيس قطاع لديه مهام',value:c.most?.u?.name || '—',small:c.most ? c.most.count + ' مهمة' : 'لا توجد مهام',metric:'most',userId:c.most?.u?.id || ''})}
+        ${sectorHeadStatsCard({label:'أقل رئيس قطاع لديه مهام',value:c.least?.u?.name || '—',small:c.least ? c.least.count + ' مهمة' : 'لا توجد مهام',metric:'least',userId:c.least?.u?.id || ''})}
+      </div>
+    </div>
+    <div id="executiveSectorHeadTasksPanel"></div>
+  </section>`;
+}
+
+function renderSectorHeadExecutiveTasksPanel(rows){
+  const box = $('executiveSectorHeadTasksPanel');
+  if(!box) return;
+  if(!executiveSectorHeadDrill){
+    box.innerHTML = '<div class="empty" style="margin-top:14px;">اضغط على إحدى بطاقات رؤساء القطاعات لعرض المهام المرتبطة بها.</div>';
+    return;
+  }
+
+  let items = sectorHeadTaskRowsByMetric(rows || [], executiveSectorHeadDrill.metric);
+  if(executiveSectorHeadDrill.userId){
+    items = items.filter(t => t.primary_responsible_id === executiveSectorHeadDrill.userId || getTaskAssignees(t.id).some(u => u.id === executiveSectorHeadDrill.userId));
+  }
+  items = sortTasksByDue(items);
+
+  const tableRows = items.length
+    ? items.map(executiveTaskRow).join('')
+    : '<tr><td colspan="9">لا توجد مهام مطابقة لهذا المؤشر.</td></tr>';
+
+  box.innerHTML = `<div class="card" style="margin-top:16px;padding:14px;box-shadow:none;">
+    <div class="section-head">
+      <div>
+        <h3 style="margin:0;color:var(--primary2);">${escapeHtml(sectorHeadDrillTitle(executiveSectorHeadDrill.metric))}</h3>
+        <p class="meta">عدد المهام: ${items.length}</p>
+      </div>
+      <button class="btn btn-sm" onclick="closeSectorHeadExecutiveTasks()">إغلاق</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${tableRows}</tbody></table></div>
+  </div>`;
+}
+
+(function injectSectorHeadStatsStyle(){
+  if(document.getElementById('sectorHeadExecutiveStatsStyle')) return;
+  const style=document.createElement('style');
+  style.id='sectorHeadExecutiveStatsStyle';
+  style.textContent=`
+    .sector-head-click-card{border:1px solid var(--line);font-family:inherit;cursor:pointer;width:100%;}
+    .sector-head-click-card:hover{transform:translateY(-2px);border-color:#bfa68f;box-shadow:0 16px 34px rgba(97,70,59,.16);}
+  `;
+  document.head.appendChild(style);
+})();
+
+const __sectorHeadsOriginalRenderExecutiveDirect = renderExecutiveDirect;
+renderExecutiveDirect = function(){
+  const q=($('executiveSearchInput')?.value||'').trim().toLowerCase();
+  const fs=$('executiveSectorFilter')?.value||'';
+  const fu=$('executiveAssigneeFilter')?.value||'';
+  const st=$('executiveStatusFilter')?.value||'';
+  let rows=visibleTasks().filter(t=>(!fs||executiveTaskSectorId(t)===fs)&&(!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu)&&(!st||executiveTaskStatus(t)===st)&&(!q||executiveTaskSearchText(t).includes(q)));
+  rows=sortTasksByDue(rows);
+  window.__lastExecutiveFilteredRows = rows;
+
+  const statsBox=$('executiveDirectStats');
+  if(statsBox) statsBox.innerHTML = workflowThreeCardsHtml(rows) + renderSectorHeadExecutiveStats(rows);
+
+  const parts=executiveCompletedDetails(rows);
+  const tbody=$('executiveTasksTable');
+  if(tbody){
+    tbody.innerHTML = parts.activeHtml + `<tr><td colspan="9" style="padding:0;border-bottom:0;"><details style="margin:10px;"><summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></td></tr>`;
+  }
+  renderSectorHeadExecutiveTasksPanel(rows);
+  renderAllSectorDashboardSections(rows);
+};
+
 init();
 </script>
 </body>
