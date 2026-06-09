@@ -1163,12 +1163,35 @@ function renderBoardUsersImportPreview(){
   }
   const validCount=boardUsersImportRows.filter(r=>r.valid).length;
   const invalidCount=boardUsersImportRows.length-validCount;
-  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="actions" style="justify-content:flex-start;margin:8px 0 12px;"><button class="btn btn-sm" onclick="cleanBoardUsersImportPreview()">تنظيف المعاينة</button><button class="btn btn-sm" onclick="clearBoardUsersImport()">مسح المعاينة</button></div><div class="meta" style="margin-bottom:10px;">زر تنظيف المعاينة يحذف تلقائيًا الصفوف المكررة أو الموجودة مسبقًا في المستخدمين، حتى لا تتكرر رسالة الخطأ عند الحفظ.</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 function clearBoardUsersImport(){
   boardUsersImportRows=[];
   if($('boardUsersImportFile')) $('boardUsersImportFile').value='';
   renderBoardUsersImportPreview();
+}
+
+function cleanBoardUsersImportPreview(){
+  const before = boardUsersImportRows.length;
+  const existingEmails = new Set((state.users || []).map(u => String(u.email || '').trim().toLowerCase()));
+  const seen = new Set();
+
+  boardUsersImportRows = boardUsersImportRows.filter(row => {
+    const email = String(row.email || '').trim().toLowerCase();
+    const hasDuplicateError = (row.errors || []).some(err => String(err || '').includes('موجود مسبقًا') || String(err || '').includes('موجود مسبقا'));
+
+    if(!email) return false;
+    if(existingEmails.has(email)) return false;
+    if(hasDuplicateError) return false;
+    if(seen.has(email)) return false;
+
+    seen.add(email);
+    return true;
+  });
+
+  renderBoardUsersImportPreview();
+  const removed = before - boardUsersImportRows.length;
+  showToast(removed ? `تم تنظيف المعاينة وحذف ${removed} صف مكرر أو موجود مسبقًا.` : 'لا توجد صفوف مكررة أو موجودة مسبقًا في المعاينة.','info',6000);
 }
 
 function removeBoardUserImportRow(index){
@@ -1290,7 +1313,8 @@ function renderUsersImportPreview(){
   const validCount=usersImportRows.filter(r=>r.valid).length;
   const invalidCount=usersImportRows.length-validCount;
   box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
-  <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل حفظ المستخدمين كحسابات نشطة بدون بريد، مثل الصفوف المكررة أو غير المطلوبة.</div>
+  <div class="actions" style="justify-content:flex-start;margin:8px 0 12px;"><button class="btn btn-sm" onclick="cleanUsersImportPreview()">تنظيف المعاينة</button><button class="btn btn-sm" onclick="clearUsersImport()">مسح المعاينة</button></div>
+  <div class="meta" style="margin-bottom:10px;">يمكنك حذف أي صف من المعاينة قبل الحفظ. زر تنظيف المعاينة يحذف تلقائيًا الصفوف المكررة أو الموجودة مسبقًا في المستخدمين.</div>
   <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml(r.errors.join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -1299,6 +1323,29 @@ function removeImportedUserRow(index){
   const removed = usersImportRows.splice(index, 1)[0];
   renderUsersImportPreview();
   showToast(`تم حذف ${removed?.name || 'الصف'} من المعاينة فقط.`, 'info');
+}
+
+function cleanUsersImportPreview(){
+  const before = usersImportRows.length;
+  const existingEmails = new Set((state.users || []).map(u => String(u.email || '').trim().toLowerCase()));
+  const seen = new Set();
+
+  usersImportRows = usersImportRows.filter(row => {
+    const email = String(row.email || '').trim().toLowerCase();
+    const hasDuplicateError = (row.errors || []).some(err => String(err || '').includes('موجود مسبقًا') || String(err || '').includes('موجود مسبقا'));
+
+    if(!email) return false;
+    if(existingEmails.has(email)) return false;
+    if(hasDuplicateError) return false;
+    if(seen.has(email)) return false;
+
+    seen.add(email);
+    return true;
+  });
+
+  renderUsersImportPreview();
+  const removed = before - usersImportRows.length;
+  showToast(removed ? `تم تنظيف المعاينة وحذف ${removed} صف مكرر أو موجود مسبقًا.` : 'لا توجد صفوف مكررة أو موجودة مسبقًا في المعاينة.','info',6000);
 }
 async function downloadUsersImportTemplate(){
   try{
