@@ -4145,6 +4145,58 @@ renderAssigneePicker = function(){
   });
 };
 
+
+
+/* === PATCH: إرسال إشعار بريد عند إضافة مهمة جديدة ===
+   خاص بلوحة متابعة مهام القطاعات.
+   يعتمد على Edge Function باسم send-task-notification.
+   لا يمنع حفظ المهمة إذا فشل البريد؛ يظهر تنبيه فقط.
+*/
+function uniqueValidEmailsForTaskNotification(userIds){
+  const emails=[];
+  const seen=new Set();
+  (userIds||[]).forEach(uid=>{
+    const u=(state.users||[]).find(x=>x.id===uid);
+    const email=String(u?.email||'').trim().toLowerCase();
+    if(!email) return;
+    if(state.profile?.email && email===String(state.profile.email).trim().toLowerCase()) return;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    if(seen.has(email)) return;
+    seen.add(email);
+    emails.push(email);
+  });
+  return emails;
+}
+
+async function notifyAssigneesByEmailAfterTaskCreate({taskId, selectedUserIds, taskPayload}){
+  try{
+    if(!taskId || !Array.isArray(selectedUserIds) || !selectedUserIds.length) return {ok:true, skipped:true};
+
+    const recipients=uniqueValidEmailsForTaskNotification(selectedUserIds);
+    if(!recipients.length) return {ok:true, skipped:true};
+
+    const {data,error}=await supabaseClient.functions.invoke('send-task-notification',{
+      body:{
+        to:recipients,
+        taskId,
+        taskTitle:taskPayload?.title||'',
+        taskDescription:taskPayload?.description||'',
+        priority:taskPayload?.priority||'',
+        dueDate:taskPayload?.due_date||'',
+        assignedBy:state.profile?.name||'النظام'
+      }
+    });
+
+    if(error) throw error;
+    if(data && data.ok===false) throw new Error(data.error||'تعذر إرسال إشعار البريد.');
+
+    return {ok:true,data};
+  }catch(e){
+    console.error('notifyAssigneesByEmailAfterTaskCreate failed:',e);
+    return {ok:false,error:e};
+  }
+}
+
 saveTask = async function(){
   try{
     const title = $('taskTitle').value.trim();
@@ -4273,6 +4325,15 @@ saveTask = async function(){
       if(inserted.error) throw inserted.error;
     }
 
+    let emailNotifyResult = {ok:true, skipped:true};
+    if(!editId){
+      emailNotifyResult = await notifyAssigneesByEmailAfterTaskCreate({
+        taskId,
+        selectedUserIds:selected,
+        taskPayload:payload
+      });
+    }
+
     closeTaskModal();
     await loadAll();
     setupFilters();
@@ -4280,7 +4341,11 @@ saveTask = async function(){
     if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
     if($('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
 
-    showToast(editId ? 'تم تحديث المهمة بنجاح.' : (currentRole()==='employee' ? 'تم إرسال المهمة للاعتماد.' : 'تم حفظ المهمة بنجاح.'), 'success');
+    if(!editId && emailNotifyResult && emailNotifyResult.ok===false){
+      showToast('تم حفظ المهمة، لكن تعذر إرسال إشعار البريد لبعض المستخدمين.','error');
+    }else{
+      showToast(editId ? 'تم تحديث المهمة بنجاح.' : (currentRole()==='employee' ? 'تم إرسال المهمة للاعتماد.' : 'تم حفظ المهمة بنجاح وإرسال إشعار البريد.'), 'success');
+    }
   }catch(e){
     console.error(e);
     showToast(e.message || 'تعذر حفظ المهمة.','error');
