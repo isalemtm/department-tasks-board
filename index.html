@@ -6974,6 +6974,210 @@ showAuthOnly = function(){
   setTimeout(installFinalCenteredHeaderLayout, 50);
 };
 
+
+/* === PATCH: تقسيم إدارة المستخدمين حسب القطاع === */
+function ensureUsersBySectorAdminStyle(){
+  if(document.getElementById('usersBySectorAdminStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='usersBySectorAdminStyle';
+  style.textContent=`
+    .admin-sector-users-block{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fffdfb;
+      margin:16px 0;
+      overflow:hidden;
+      box-shadow:0 8px 22px rgba(97,70,59,.05);
+    }
+
+    .admin-sector-users-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      padding:14px 16px;
+      background:#fbf8f5;
+      border-bottom:1px solid var(--line);
+    }
+
+    .admin-sector-users-head h3{
+      margin:0;
+      color:var(--primary2);
+      font-size:21px;
+      line-height:1.4;
+    }
+
+    .admin-sector-users-head .sector-count{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      background:#efe8e3;
+      color:var(--primary2);
+      border-radius:999px;
+      padding:7px 12px;
+      font-size:13px;
+      font-weight:700;
+    }
+
+    .admin-sector-users-block .table-wrap{
+      border:0;
+      border-radius:0;
+    }
+
+    .admin-sector-users-block table{
+      min-width:980px;
+    }
+
+    .admin-sector-users-block tr:last-child td{
+      border-bottom:0;
+    }
+
+    .admin-sector-users-summary{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      color:var(--muted);
+      font-size:13px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function renderUserAdminAction(u, active, needsPassword, canNotify){
+  const archivedInfo=!active
+    ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>`
+    : '';
+
+  const notifyButton = active && needsPassword && canNotify
+    ? `<button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار تعيين كلمة المرور</button>`
+    : '';
+
+  const editButton = isAdmin()
+    ? `<button class="btn btn-primary btn-sm" onclick="openUserEditModal('${u.id}')">تعديل</button>`
+    : '';
+
+  let action='—';
+
+  if(isAdmin()){
+    if(u.id===state.profile.id){
+      action=`${editButton} <span class="meta">حسابك الحالي</span>`;
+    }else if(active){
+      action=`${editButton} ${notifyButton} <button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`;
+    }else{
+      action=`${editButton} <span class="chip late">معطل ومؤرشف</span>`;
+    }
+  }else{
+    action=notifyButton || '<span class="meta">لا توجد صلاحية</span>';
+  }
+
+  return { action, archivedInfo };
+}
+
+function adminUserRowHtml(u, canNotify){
+  const active=u.is_active!==false;
+  const needsPassword=u.must_set_password===true;
+  const { action, archivedInfo } = renderUserAdminAction(u, active, needsPassword, canNotify);
+
+  return `
+    <tr>
+      <td>${escapeHtml(u.name)}${archivedInfo}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>${escapeHtml(u.job_title||'—')}</td>
+      <td>${roleLabel(u.role)}</td>
+      <td>${nameOfDept(u.department_id)}</td>
+      <td>${active?'نعم':'لا'}</td>
+      <td>${needsPassword?'نعم':'لا'}</td>
+      <td>${action}</td>
+    </tr>`;
+}
+
+function adminUsersTableForSector(users, canNotify){
+  const rows=users.map(u=>adminUserRowHtml(u, canNotify)).join('');
+
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>الاسم</th>
+            <th>البريد</th>
+            <th>المسمى الوظيفي</th>
+            <th>الدور</th>
+            <th>القسم</th>
+            <th>نشط</th>
+            <th>يحتاج تعيين كلمة مرور</th>
+            <th>إجراء</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+renderUsers = function(){
+  ensureUsersBySectorAdminStyle();
+
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
+  const allUsers=(state.users||[]).slice();
+
+  const passwordNotice = getUsersNeedingPasswordSetup().length
+    ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>`
+    : '';
+
+  if(!allUsers.length){
+    $('usersTable').innerHTML=`${passwordNotice}<div class="empty">لا يوجد مستخدمون لعرضهم.</div>`;
+    return;
+  }
+
+  const sectorGroups=new Map();
+
+  allUsers.forEach(u=>{
+    const key=u.sector_id || '__no_sector__';
+    const name=nameOfSector(u.sector_id) || 'بدون قطاع';
+    if(!sectorGroups.has(key)){
+      sectorGroups.set(key,{name, users:[]});
+    }
+    sectorGroups.get(key).users.push(u);
+  });
+
+  const blocks=[...sectorGroups.values()]
+    .sort((a,b)=>{
+      if(a.name==='بدون قطاع') return 1;
+      if(b.name==='بدون قطاع') return -1;
+      return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    })
+    .map(group=>{
+      const sortedUsers=group.users
+        .slice()
+        .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+      const activeCount=sortedUsers.filter(u=>u.is_active!==false).length;
+      const needsPasswordCount=sortedUsers.filter(u=>u.must_set_password===true).length;
+
+      return `
+        <section class="admin-sector-users-block">
+          <div class="admin-sector-users-head">
+            <div>
+              <h3>${escapeHtml(group.name)}</h3>
+              <div class="admin-sector-users-summary">
+                <span>${activeCount} نشط</span>
+                <span>•</span>
+                <span>${needsPasswordCount} يحتاج تعيين كلمة مرور</span>
+              </div>
+            </div>
+            <span class="sector-count">${sortedUsers.length} مستخدم</span>
+          </div>
+          ${adminUsersTableForSector(sortedUsers, canNotify)}
+        </section>
+      `;
+    }).join('');
+
+  $('usersTable').innerHTML=`${passwordNotice}${blocks}`;
+};
+
 init();
 </script>
 </body>
