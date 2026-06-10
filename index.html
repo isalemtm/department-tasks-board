@@ -5931,6 +5931,113 @@ init = async function(){
   return await __disableExternalExecutiveInit();
 };
 
+
+/* === PATCH: توحيد شريط أزرار الصفحات وتوسيطه في جميع الصفحات === */
+function installCenteredNavigationStyle(){
+  if(document.getElementById('centeredNavigationStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='centeredNavigationStyle';
+  style.textContent=`
+    /* الشريط العلوي داخل اللوحة */
+    .app-header.card{
+      justify-content:center!important;
+      align-items:center!important;
+      padding:16px!important;
+      margin:18px auto 20px!important;
+    }
+
+    /* إخفاء عبارة الترحيب من شريط الأزرار حتى يكون الشريط موحدًا ومرتبًا */
+    .app-header .welcome{
+      display:none!important;
+    }
+
+    /* أزرار الصفحات الرئيسية */
+    .app-actions{
+      width:100%!important;
+      display:flex!important;
+      justify-content:center!important;
+      align-items:center!important;
+      gap:10px!important;
+      flex-wrap:wrap!important;
+      margin:0 auto!important;
+    }
+
+    .app-actions .btn,
+    .executive-inner-nav .btn{
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      border:1px solid var(--line)!important;
+      border-radius:12px!important;
+      box-shadow:none!important;
+      padding:11px 18px!important;
+      min-width:92px;
+      text-align:center;
+    }
+
+    .app-actions .btn.active,
+    .executive-inner-nav .btn.active{
+      background:var(--primary)!important;
+      color:#fff!important;
+      border-color:var(--primary)!important;
+      box-shadow:0 0 0 3px rgba(97,70,59,.12)!important;
+    }
+
+    .app-actions .btn:hover,
+    .executive-inner-nav .btn:hover{
+      transform:translateY(-1px);
+      filter:brightness(.98);
+    }
+
+    /* شريط أزرار صفحة متابعة القطاعات */
+    .executive-inner-nav{
+      display:flex!important;
+      justify-content:center!important;
+      align-items:center!important;
+      gap:10px!important;
+      flex-wrap:wrap!important;
+      margin:0 auto 18px!important;
+      padding:14px!important;
+      background:#fff!important;
+      border:1px solid var(--line)!important;
+      border-radius:18px!important;
+      width:100%!important;
+    }
+
+    @media(max-width:900px){
+      .app-actions,
+      .executive-inner-nav{
+        justify-content:center!important;
+      }
+
+      .app-actions .btn,
+      .executive-inner-nav .btn{
+        flex:1 1 140px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __centeredNavigationOriginalShowApp = showApp;
+showApp = function(){
+  __centeredNavigationOriginalShowApp();
+  installCenteredNavigationStyle();
+};
+
+const __centeredNavigationOriginalShowPage = showPage;
+showPage = function(p){
+  installCenteredNavigationStyle();
+  __centeredNavigationOriginalShowPage(p);
+};
+
+const __centeredNavigationOriginalShowExecutiveFollowPage = showExecutiveFollowPage;
+showExecutiveFollowPage = function(){
+  installCenteredNavigationStyle();
+  __centeredNavigationOriginalShowExecutiveFollowPage();
+  installCenteredNavigationStyle();
+};
+
 init();
 </script>
 </body>
