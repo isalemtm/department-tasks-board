@@ -5526,6 +5526,278 @@ renderOrgPage = function(){
     </section>`;
 };
 
+
+/* === PATCH: تمكين مدير النظام من تعديل بيانات أي مستخدم === */
+function cleanEmailForEdit(v){
+  return String(v||'').trim().toLowerCase().replace(/\s+/g,'');
+}
+
+function ensureUserEditModalDom(){
+  if($('userEditModal')) return;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="userEditModal" class="modal-back hidden">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 id="userEditModalTitle">تعديل بيانات المستخدم</h2>
+          <button class="btn" onclick="closeUserEditModal()">إغلاق</button>
+        </div>
+
+        <input type="hidden" id="editUserId">
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>الاسم الكامل</label>
+            <input id="editUserName" placeholder="اسم المستخدم">
+          </div>
+
+          <div class="form-group">
+            <label>البريد الإلكتروني</label>
+            <input id="editUserEmail" type="email" placeholder="example@rasf.sa">
+          </div>
+
+          <div class="form-group">
+            <label>المسمى الوظيفي</label>
+            <input id="editUserJobTitle" placeholder="المسمى الوظيفي">
+          </div>
+
+          <div class="form-group">
+            <label>الدور</label>
+            <select id="editUserRole">
+              <option value="employee">موظف</option>
+              <option value="department_manager">مدير قسم</option>
+              <option value="sector_head">رئيس قطاع</option>
+              <option value="ceo">الرئيس التنفيذي</option>
+              <option value="admin">مدير النظام</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>القطاع</label>
+            <select id="editUserSector" onchange="fillUserEditDepartments(this.value)"></select>
+          </div>
+
+          <div class="form-group">
+            <label>القسم</label>
+            <select id="editUserDepartment"></select>
+          </div>
+
+          <div class="form-group">
+            <label>حالة الحساب</label>
+            <select id="editUserIsActive">
+              <option value="true">نشط</option>
+              <option value="false">معطل / مؤرشف</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>يحتاج تعيين كلمة مرور؟</label>
+            <select id="editUserMustSetPassword">
+              <option value="false">لا</option>
+              <option value="true">نعم</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="notice info show" style="margin-top:12px;">
+          ملاحظة: تعديل البريد هنا يحدث بريد تسجيل الدخول في Supabase Auth وجدول المستخدمين معًا.
+        </div>
+
+        <div class="actions" style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="saveUserEdit()">حفظ التعديلات</button>
+          <button class="btn" onclick="closeUserEditModal()">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function fillUserEditSectors(selected=''){
+  const el=$('editUserSector');
+  if(!el) return;
+  el.innerHTML='<option value="">بدون قطاع</option>'+(state.sectors||[]).map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  el.value=selected||'';
+}
+
+function fillUserEditDepartments(sectorId='', selected=''){
+  const el=$('editUserDepartment');
+  if(!el) return;
+  const rows=(state.departments||[]).filter(d=>!sectorId || d.sector_id===sectorId);
+  el.innerHTML='<option value="">بدون قسم</option>'+rows.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  el.value=selected && rows.some(d=>d.id===selected) ? selected : '';
+}
+
+function openUserEditModal(userId){
+  if(!isAdmin()){
+    showToast('تعديل بيانات المستخدمين من صلاحية مدير النظام فقط.','error');
+    return;
+  }
+
+  ensureUserEditModalDom();
+
+  const u=(state.users||[]).find(x=>x.id===userId);
+  if(!u){
+    showToast('تعذر العثور على المستخدم.','error');
+    return;
+  }
+
+  $('editUserId').value=u.id;
+  $('editUserName').value=u.name||'';
+  $('editUserEmail').value=u.email||'';
+  $('editUserJobTitle').value=u.job_title||'';
+  $('editUserRole').value=u.role||'employee';
+  $('editUserIsActive').value=(u.is_active!==false).toString();
+  $('editUserMustSetPassword').value=(u.must_set_password===true).toString();
+
+  fillUserEditSectors(u.sector_id||'');
+  fillUserEditDepartments(u.sector_id||'', u.department_id||'');
+
+  $('userEditModalTitle').textContent='تعديل بيانات المستخدم: '+(u.name||'—');
+  $('userEditModal').classList.remove('hidden');
+}
+
+function closeUserEditModal(){
+  $('userEditModal')?.classList.add('hidden');
+}
+
+async function saveUserEdit(){
+  try{
+    if(!isAdmin()){
+      showToast('تعديل بيانات المستخدمين من صلاحية مدير النظام فقط.','error');
+      return;
+    }
+
+    const userId=$('editUserId').value;
+    const existing=(state.users||[]).find(u=>u.id===userId);
+    if(!existing){
+      showToast('تعذر العثور على المستخدم.','error');
+      return;
+    }
+
+    const payload={
+      user_id:userId,
+      name:$('editUserName').value.trim(),
+      email:cleanEmailForEdit($('editUserEmail').value),
+      job_title:$('editUserJobTitle').value.trim(),
+      role:$('editUserRole').value,
+      sector_id:$('editUserSector').value||null,
+      department_id:$('editUserDepartment').value||null,
+      is_active:$('editUserIsActive').value==='true',
+      must_set_password:$('editUserMustSetPassword').value==='true'
+    };
+
+    if(!payload.name){
+      showToast('اكتب اسم المستخدم.','error');
+      return;
+    }
+
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)){
+      showToast('البريد الإلكتروني غير صحيح.','error');
+      return;
+    }
+
+    const emailChanged=cleanEmailForEdit(existing.email)!==payload.email;
+
+    const ok=await askConfirm({
+      title:'حفظ تعديلات المستخدم',
+      message:`سيتم تحديث بيانات المستخدم:\n${existing.name || payload.name}\n\n${emailChanged ? 'تنبيه: تم تغيير البريد، وسيتم تحديث بريد تسجيل الدخول أيضًا.\n\n' : ''}هل تريد حفظ التعديلات؟`,
+      okText:'حفظ التعديلات',
+      danger:false
+    });
+    if(!ok) return;
+
+    const {data,error}=await supabaseClient.functions.invoke('admin-update-user',{
+      body:payload
+    });
+
+    if(error) throw error;
+    if(data?.error) throw new Error(data.error);
+
+    closeUserEditModal();
+    await loadAll();
+    setupFilters();
+    renderAdmin();
+    renderTasks();
+
+    showToast('تم تحديث بيانات المستخدم بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تحديث بيانات المستخدم.','error',8000);
+  }
+}
+
+renderUsers = function(){
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
+
+  const rows=state.users.map(u=>{
+    const active=u.is_active!==false;
+    const needsPassword=u.must_set_password===true;
+    const archivedInfo=!active
+      ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>`
+      : '';
+
+    let action='—';
+
+    const notifyButton = active && needsPassword && canNotify
+      ? `<button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار تعيين كلمة المرور</button>`
+      : '';
+
+    const editButton = isAdmin()
+      ? `<button class="btn btn-primary btn-sm" onclick="openUserEditModal('${u.id}')">تعديل</button>`
+      : '';
+
+    if(isAdmin()){
+      if(u.id===state.profile.id){
+        action=`${editButton} <span class="meta">حسابك الحالي</span>`;
+      }else if(active){
+        action=`${editButton} ${notifyButton} <button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`;
+      }else{
+        action=`${editButton} <span class="chip late">معطل ومؤرشف</span>`;
+      }
+    }else{
+      action=notifyButton || '<span class="meta">لا توجد صلاحية</span>';
+    }
+
+    return `
+      <tr>
+        <td>${escapeHtml(u.name)}${archivedInfo}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td>${escapeHtml(u.job_title||'—')}</td>
+        <td>${roleLabel(u.role)}</td>
+        <td>${nameOfSector(u.sector_id)}</td>
+        <td>${nameOfDept(u.department_id)}</td>
+        <td>${active?'نعم':'لا'}</td>
+        <td>${needsPassword?'نعم':'لا'}</td>
+        <td>${action}</td>
+      </tr>`;
+  }).join('');
+
+  const passwordNotice = getUsersNeedingPasswordSetup().length
+    ? `<div class="actions" style="margin-bottom:12px;"><button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button></div>`
+    : '';
+
+  $('usersTable').innerHTML=`
+    ${passwordNotice}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>الاسم</th>
+            <th>البريد</th>
+            <th>المسمى الوظيفي</th>
+            <th>الدور</th>
+            <th>القطاع</th>
+            <th>القسم</th>
+            <th>نشط</th>
+            <th>يحتاج تعيين كلمة مرور</th>
+            <th>إجراء</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+};
+
 init();
 </script>
 </body>
