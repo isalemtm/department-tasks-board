@@ -5270,6 +5270,262 @@ renderEmployeeCards = function(users){
   `;
 };
 
+
+/* === PATCH: مؤشرات الأداء حسب القطاع + زر متابعة القطاعات + إظهار سالم كرئيس قطاع مع صلاحيات مدير نظام === */
+const ADMIN_AS_SECTOR_HEAD_EMAILS = new Set(['s.alghannam@rasf.sa']);
+
+function isAdminDisplayedAsSectorHead(u){
+  const email=String(u?.email||'').trim().toLowerCase();
+  return !!u && ADMIN_AS_SECTOR_HEAD_EMAILS.has(email) && !!u.sector_id;
+}
+
+function ensureExecutiveFollowPageButton(){
+  ensureFullHrFeatureDom();
+
+  const actions=document.querySelector('.app-actions');
+  if(!actions) return;
+
+  if(!$('tabExecutiveFollow')){
+    const btn=document.createElement('button');
+    btn.id='tabExecutiveFollow';
+    btn.className='btn btn-secondary hidden';
+    btn.textContent='متابعة القطاعات';
+    btn.setAttribute('onclick',"showPage('executiveFollow')");
+    const adminBtn=$('tabAdmin');
+    if(adminBtn) actions.insertBefore(btn, adminBtn);
+    else actions.appendChild(btn);
+  }
+
+  const can=typeof isAdminOrCeo==='function' && isAdminOrCeo();
+  $('tabExecutiveFollow')?.classList.toggle('hidden', !can);
+}
+
+function executivePagesList(){
+  return ['tasks','dashboard','performance','org','admin'];
+}
+
+function showExecutiveFollowPage(){
+  if(!(typeof isAdminOrCeo==='function' && isAdminOrCeo())){
+    showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+    return;
+  }
+
+  ensureFullHrFeatureDom();
+  ensureExecutiveFollowPageButton();
+
+  executivePagesList().forEach(x=>{
+    $(x+'Page')?.classList.add('hidden');
+    $('tab'+x[0].toUpperCase()+x.slice(1))?.classList.remove('active');
+  });
+
+  $('executiveSection')?.classList.remove('hidden');
+  $('tabExecutiveFollow')?.classList.add('active');
+
+  fillExecutiveFilters();
+  renderExecutiveDirect();
+}
+
+const __sectorFollowShowPage = showPage;
+showPage = function(p){
+  ensureExecutiveFollowPageButton();
+
+  if(p==='executiveFollow'){
+    showExecutiveFollowPage();
+    return;
+  }
+
+  $('executiveSection')?.classList.add('hidden');
+  $('tabExecutiveFollow')?.classList.remove('active');
+
+  __sectorFollowShowPage(p);
+};
+
+const __sectorFollowShowApp = showApp;
+showApp = function(){
+  __sectorFollowShowApp();
+  ensureExecutiveFollowPageButton();
+};
+
+function taskBelongsToSectorForPerformance(t, sectorId){
+  if(!t || !sectorId) return false;
+  if(t.target_sector_id===sectorId || t.owner_sector_id===sectorId) return true;
+  const primary=(state.users||[]).find(u=>u.id===t.primary_responsible_id);
+  if(primary?.sector_id===sectorId) return true;
+  return (typeof getTaskAssignees==='function' ? getTaskAssignees(t.id) : []).some(u=>u.sector_id===sectorId);
+}
+
+function performanceCardsHtml(title, rows, subtitle=''){
+  const total=rows.length;
+  const completed=rows.filter(t=>t.status==='مكتملة').length;
+  const progress=rows.filter(t=>taskPerfStatus(t)==='progress').length;
+  const late=rows.filter(t=>taskPerfStatus(t)==='late').length;
+  const doneMonth=rows.filter(completedThisMonthPerf).length;
+  const dueMonth=rows.filter(dueThisMonthPerf).length;
+
+  return `
+    <section class="panel card">
+      <div class="section-head">
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          ${subtitle ? `<p class="meta">${escapeHtml(subtitle)}</p>` : ''}
+        </div>
+        <span class="badge">${total} مهمة</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن نطاق العرض</small></div>
+        <div class="kpi-card"><span>نسبة الإنجاز</span><strong>${pct(completed,total)}</strong><small>${completed} مكتملة من ${total}</small></div>
+        <div class="kpi-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
+        <div class="kpi-card"><span>متأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+        <div class="kpi-card"><span>المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ اعتماد الإكمال</small></div>
+        <div class="kpi-card"><span>المستحقة هذا الشهر</span><strong>${dueMonth}</strong><small>حسب تاريخ الاستحقاق</small></div>
+        <div class="kpi-card"><span>متوسط مدة الإنجاز</span><strong>${averageCompletionDays(rows)}</strong><small>للمهام المكتملة التي لها تاريخ اعتماد</small></div>
+      </div>
+    </section>
+  `;
+}
+
+renderPerformancePage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  const rows=perfRowsInScope();
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const sectorBlocks=sectors.map(sector=>{
+    const sectorRows=rows.filter(t=>taskBelongsToSectorForPerformance(t, sector.id));
+    const departmentRows=groupPerformance(
+      sectorRows,
+      (state.departments||[]).filter(d=>d.sector_id===sector.id),
+      d=>d.id,
+      d=>d.name||'—'
+    );
+    const employeeRows=groupPerformance(
+      sectorRows,
+      (state.users||[]).filter(u=>u.is_active!==false && u.sector_id===sector.id),
+      u=>u.id,
+      u=>u.name||'—'
+    );
+
+    return `
+      ${performanceCardsHtml('مؤشرات قطاع: ' + (sector.name||'—'), sectorRows, 'مؤشرات مستقلة لهذا القطاع حسب المهام المرتبطة به.')}
+      <div class="kpi-subgrid">
+        ${performanceTable('الأداء حسب أقسام القطاع', departmentRows)}
+        ${performanceTable('الأداء حسب موظفي القطاع', employeeRows)}
+      </div>
+    `;
+  }).join('');
+
+  const allSectorRows=groupPerformance(rows,state.sectors||[],s=>s.id,s=>s.name||'—');
+  const allDepartmentRows=groupPerformance(rows,state.departments||[],d=>d.id,d=>`${d.name||'—'} / ${nameOfSector?nameOfSector(d.sector_id):''}`);
+  const allEmployeeRows=groupPerformance(rows,(state.users||[]).filter(u=>u.is_active!==false),u=>u.id,u=>u.name||'—');
+
+  $('performanceContent').innerHTML=`
+    <div class="section-head" style="margin-bottom:10px;">
+      <div>
+        <h2 style="margin:0;color:var(--primary2);">مؤشرات قياس الأداء</h2>
+        <p class="meta">أولاً مؤشرات كل قطاع بشكل مستقل، وفي النهاية ملخص عام يشمل كل القطاعات.</p>
+      </div>
+    </div>
+    ${sectorBlocks || '<section class="panel card"><div class="empty-state">لا توجد قطاعات لعرض مؤشراتها.</div></section>'}
+    ${performanceCardsHtml('مؤشرات جميع القطاعات', rows, 'ملخص عام شامل لكل القطاعات داخل لوحة متابعة مهام القطاعات.')}
+    <div class="kpi-subgrid">
+      ${performanceTable('الأداء حسب القطاع', allSectorRows)}
+      ${performanceTable('الأداء حسب القسم', allDepartmentRows)}
+    </div>
+    ${performanceTable('الأداء حسب الموظف', allEmployeeRows)}
+  `;
+};
+
+function orgSectorHeadsForSector(users, sectorId){
+  return (users||[]).filter(u=>
+    u.sector_id===sectorId &&
+    (u.role==='sector_head' || isAdminDisplayedAsSectorHead(u))
+  );
+}
+
+const __orgRolePatchRenderOrgPage = renderOrgPage;
+renderOrgPage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  ensureUnifiedButtonTheme();
+
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoCards = ceos.length
+    ? ceos.map(u=>orgPersonCard(u,'head','الرئيس التنفيذي')).join('')
+    : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+  const sectorHtml = sectors.map(sector=>{
+    const heads=orgSectorHeadsForSector(users, sector.id);
+    const departments=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    const departmentsHtml = departments.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && !['department_manager','sector_head','ceo'].includes(u.role) && !isAdminDisplayedAsSectorHead(u));
+      const managerBlock = managers.length
+        ? `<div class="org-person-cards">${managers.map(u=>orgPersonCard(u,'manager','مدير القسم')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+      const employeeBlock = employees.length
+        ? `<div class="org-person-cards">${employees.map(u=>orgPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+      return `
+        <div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
+        </div>`;
+    }).join('');
+
+    const usersWithoutDepartment=users.filter(u=>u.sector_id===sector.id && !u.department_id && !['sector_head','ceo'].includes(u.role) && !isAdminDisplayedAsSectorHead(u));
+    const noDeptBlock = usersWithoutDepartment.length ? `
+      <div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>orgPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+    return `
+      <div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${orgMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">
+          ${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}
+          ${noDeptBlock}
+        </div>
+      </div>`;
+  }).join('');
+
+  $('orgContent').innerHTML = `
+    <section class="panel card">
+      <div class="section-head">
+        <div>
+          <h2>الهيكل التنظيمي للشركة</h2>
+          <p class="meta">عرض بطاقي ديناميكي يتوسع تلقائياً حسب المستخدمين والقطاعات والأقسام المضافة في لوحة متابعة مهام القطاعات.</p>
+        </div>
+        <span class="badge">${users.length} مستخدم</span>
+      </div>
+      <div class="org-chart-page">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>`;
+};
+
 init();
 </script>
 </body>
