@@ -4718,6 +4718,243 @@ init = async function(){
 };
 
 
+
+/* === PATCH: إضافة صفحة مؤشرات الأداء + صفحة الهيكل التنظيمي ===
+   خاص بلوحة متابعة مهام القطاعات.
+   يضيف صفحتين داخل التطبيق:
+   1) مؤشرات الأداء: ملخصات وجداول أداء حسب القطاع/القسم/الموظف.
+   2) الهيكل التنظيمي: عرض شجري للرئيس التنفيذي والقطاعات والأقسام والموظفين.
+*/
+function ensurePerformanceAndOrgPagesDom(){
+  const actions=document.querySelector('#appSection .app-actions');
+  if(actions && !$('tabPerformance')){
+    const adminBtn=$('tabAdmin');
+    const performanceBtn=document.createElement('button');
+    performanceBtn.id='tabPerformance';
+    performanceBtn.className='btn btn-secondary';
+    performanceBtn.textContent='مؤشرات الأداء';
+    performanceBtn.setAttribute('onclick',"showPage('performance')");
+
+    const orgBtn=document.createElement('button');
+    orgBtn.id='tabOrg';
+    orgBtn.className='btn btn-secondary';
+    orgBtn.textContent='الهيكل التنظيمي';
+    orgBtn.setAttribute('onclick',"showPage('org')");
+
+    if(adminBtn){
+      actions.insertBefore(performanceBtn, adminBtn);
+      actions.insertBefore(orgBtn, adminBtn);
+    }else{
+      actions.appendChild(performanceBtn);
+      actions.appendChild(orgBtn);
+    }
+  }
+
+  const app=$('appSection');
+  if(app && !$('performancePage')){
+    const adminPage=$('adminPage');
+    const performance=document.createElement('section');
+    performance.id='performancePage';
+    performance.className='hidden';
+    performance.innerHTML='<div id="performanceContent"></div>';
+
+    const org=document.createElement('section');
+    org.id='orgPage';
+    org.className='hidden';
+    org.innerHTML='<div id="orgContent"></div>';
+
+    if(adminPage){
+      app.insertBefore(performance, adminPage);
+      app.insertBefore(org, adminPage);
+    }else{
+      app.appendChild(performance);
+      app.appendChild(org);
+    }
+  }
+
+  if(!document.getElementById('performanceOrgPagesStyle')){
+    const style=document.createElement('style');
+    style.id='performanceOrgPagesStyle';
+    style.textContent=`
+      .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:14px 0 18px;}
+      .kpi-card{padding:16px;text-align:center;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 10px 24px rgba(97,70,59,.06);}
+      .kpi-card span{display:block;color:var(--muted);font-size:13px;margin-bottom:6px;}
+      .kpi-card strong{display:block;color:var(--primary2);font-size:30px;line-height:1.2;}
+      .kpi-card small{display:block;color:var(--muted);font-size:12px;margin-top:5px;line-height:1.6;}
+      .kpi-subgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start;}
+      .org-tree{display:flex;flex-direction:column;gap:16px;}
+      .org-node{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;box-shadow:0 10px 24px rgba(97,70,59,.06);}
+      .org-node.ceo{background:#fbf8f5;border-color:#d8cac0;text-align:center;}
+      .org-node h3,.org-node h4{margin:0 0 8px;color:var(--primary2);}
+      .org-meta{color:var(--muted);font-size:13px;line-height:1.7;}
+      .org-sector-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;}
+      .org-departments{display:grid;gap:10px;margin-top:12px;}
+      .org-dept{border:1px dashed #d8cac0;border-radius:14px;padding:11px;background:#fffdfb;}
+      .org-users{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+      .org-user-chip{background:#efe8e3;color:var(--primary2);border-radius:999px;padding:6px 10px;font-size:12px;}
+      .org-user-chip.manager{background:#e9f1f8;color:#35516a;}
+      .org-user-chip.head{background:#e9f8f4;color:#166c61;}
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+function pct(value,total){
+  if(!total) return '0%';
+  return Math.round((value/total)*100)+'%';
+}
+
+function perfRowsInScope(){
+  let rows=visibleTasks ? visibleTasks() : (state.tasks||[]).filter(t=>t.is_archived!==true);
+  return rows;
+}
+
+function taskPerfStatus(t){
+  if(t.status==='مكتملة') return 'completed';
+  if(typeof isLate==='function' && isLate(t)) return 'late';
+  return 'progress';
+}
+
+function completedThisMonthPerf(t){
+  if(typeof isCompletedInCurrentMonthByApproval==='function') return isCompletedInCurrentMonthByApproval(t,new Date());
+  const d=t.completion_reviewed_at?new Date(t.completion_reviewed_at):null;
+  const now=new Date();
+  return !!d && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+}
+
+function dueThisMonthPerf(t){
+  if(typeof isDueInCurrentMonth==='function') return isDueInCurrentMonth(t,new Date());
+  if(!t.due_date) return false;
+  const d=new Date(t.due_date), now=new Date();
+  return !Number.isNaN(d.getTime()) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+}
+
+function averageCompletionDays(rows){
+  const values=(rows||[]).map(t=>{
+    const start=t.created_at?new Date(t.created_at):null;
+    const end=t.completion_reviewed_at?new Date(t.completion_reviewed_at):(t.status==='مكتملة' && t.updated_at?new Date(t.updated_at):null);
+    if(!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    return Math.max(0, Math.round((end-start)/(1000*60*60*24)));
+  }).filter(v=>v!==null);
+  if(!values.length) return '—';
+  return Math.round(values.reduce((a,b)=>a+b,0)/values.length)+' يوم';
+}
+
+function groupPerformance(rows, entities, idGetter, nameGetter){
+  return (entities||[]).map(entity=>{
+    const id=idGetter(entity);
+    const itemRows=(rows||[]).filter(t=>{
+      const assignees=typeof getTaskAssignees==='function'?getTaskAssignees(t.id):[];
+      return t.owner_sector_id===id || t.target_sector_id===id || t.owner_department_id===id || t.target_department_id===id || t.primary_responsible_id===id || assignees.some(u=>u.id===id || u.sector_id===id || u.department_id===id);
+    });
+    const total=itemRows.length;
+    const completed=itemRows.filter(t=>t.status==='مكتملة').length;
+    const late=itemRows.filter(t=>taskPerfStatus(t)==='late').length;
+    const progress=itemRows.filter(t=>taskPerfStatus(t)==='progress').length;
+    return {name:nameGetter(entity), total, completed, progress, late, rate:pct(completed,total)};
+  }).filter(x=>x.total>0).sort((a,b)=>b.total-a.total || String(a.name).localeCompare(String(b.name),'ar'));
+}
+
+function performanceTable(title, rows){
+  const body=rows.length?rows.map(r=>`<tr><td>${escapeHtml(r.name)}</td><td>${r.total}</td><td>${r.completed}</td><td>${r.progress}</td><td>${r.late}</td><td>${r.rate}</td></tr>`).join(''):'<tr><td colspan="6">لا توجد بيانات لعرضها.</td></tr>';
+  return `<section class="panel card" style="box-shadow:none;"><h3>${escapeHtml(title)}</h3><div class="table-wrap"><table><thead><tr><th>البند</th><th>إجمالي</th><th>مكتملة</th><th>قيد التنفيذ</th><th>متأخرة</th><th>نسبة الإنجاز</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+}
+
+function renderPerformancePage(){
+  ensurePerformanceAndOrgPagesDom();
+  const rows=perfRowsInScope();
+  const total=rows.length;
+  const completed=rows.filter(t=>t.status==='مكتملة').length;
+  const progress=rows.filter(t=>taskPerfStatus(t)==='progress').length;
+  const late=rows.filter(t=>taskPerfStatus(t)==='late').length;
+  const doneMonth=rows.filter(completedThisMonthPerf).length;
+  const dueMonth=rows.filter(dueThisMonthPerf).length;
+
+  const sectorRows=groupPerformance(rows,state.sectors||[],s=>s.id,s=>s.name||'—');
+  const departmentRows=groupPerformance(rows,state.departments||[],d=>d.id,d=>`${d.name||'—'} / ${nameOfSector?nameOfSector(d.sector_id):''}`);
+  const employeeEntities=(state.users||[]).filter(u=>u.is_active!==false);
+  const employeeRows=groupPerformance(rows,employeeEntities,u=>u.id,u=>u.name||'—');
+
+  $('performanceContent').innerHTML=`
+    <section class="panel card">
+      <div class="section-head"><div><h2>مؤشرات قياس الأداء</h2><p class="meta">مؤشرات تشغيلية مبنية على المهام الحالية في لوحة متابعة مهام القطاعات.</p></div><span class="badge">${total} مهمة</span></div>
+      <div class="kpi-grid">
+        <div class="kpi-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام ضمن نطاق العرض</small></div>
+        <div class="kpi-card"><span>نسبة الإنجاز</span><strong>${pct(completed,total)}</strong><small>${completed} مكتملة من ${total}</small></div>
+        <div class="kpi-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
+        <div class="kpi-card"><span>متأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+        <div class="kpi-card"><span>المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ اعتماد الإكمال</small></div>
+        <div class="kpi-card"><span>المستحقة هذا الشهر</span><strong>${dueMonth}</strong><small>حسب تاريخ الاستحقاق</small></div>
+        <div class="kpi-card"><span>متوسط مدة الإنجاز</span><strong>${averageCompletionDays(rows)}</strong><small>للمهام المكتملة التي لها تاريخ اعتماد</small></div>
+      </div>
+    </section>
+    <div class="kpi-subgrid">
+      ${performanceTable('الأداء حسب القطاع', sectorRows)}
+      ${performanceTable('الأداء حسب القسم', departmentRows)}
+    </div>
+    ${performanceTable('الأداء حسب الموظف', employeeRows)}
+  `;
+}
+
+function userLine(u){
+  if(!u) return '—';
+  const title=u.job_title?` - ${u.job_title}`:'';
+  return `${escapeHtml(u.name||'—')}<span class="org-meta">${escapeHtml(title)}</span>`;
+}
+
+function renderOrgPage(){
+  ensurePerformanceAndOrgPagesDom();
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoHtml=ceos.length?ceos.map(u=>`<div class="org-user-chip head">${userLine(u)}</div>`).join(''):'<span class="org-meta">لم يتم تحديد الرئيس التنفيذي في النظام.</span>';
+
+  const sectorHtml=sectors.map(sector=>{
+    const heads=users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
+    const deps=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    const usersNoDept=users.filter(u=>u.sector_id===sector.id && !u.department_id && u.role!=='sector_head' && u.role!=='ceo');
+    const depsHtml=deps.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && u.role!=='department_manager' && u.role!=='sector_head' && u.role!=='ceo');
+      return `<div class="org-dept"><h4>${escapeHtml(dep.name||'—')}</h4><div class="org-meta">مدير القسم</div><div class="org-users">${managers.length?managers.map(u=>`<span class="org-user-chip manager">${userLine(u)}</span>`).join(''):'<span class="org-meta">غير محدد</span>'}</div><div class="org-meta" style="margin-top:8px;">الموظفون</div><div class="org-users">${employees.length?employees.map(u=>`<span class="org-user-chip">${userLine(u)}</span>`).join(''):'<span class="org-meta">لا يوجد موظفون</span>'}</div></div>`;
+    }).join('');
+    const noDeptHtml=usersNoDept.length?`<div class="org-dept"><h4>بدون قسم</h4><div class="org-users">${usersNoDept.map(u=>`<span class="org-user-chip">${userLine(u)}</span>`).join('')}</div></div>`:'';
+    return `<div class="org-node"><h3>${escapeHtml(sector.name||'—')}</h3><div class="org-meta">رئيس القطاع</div><div class="org-users">${heads.length?heads.map(u=>`<span class="org-user-chip head">${userLine(u)}</span>`).join(''):'<span class="org-meta">غير محدد</span>'}</div><div class="org-departments">${depsHtml || '<div class="org-meta">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}${noDeptHtml}</div></div>`;
+  }).join('');
+
+  $('orgContent').innerHTML=`
+    <section class="panel card">
+      <div class="section-head"><div><h2>الهيكل التنظيمي للشركة</h2><p class="meta">عرض وظيفي مبني على بيانات المستخدمين والقطاعات والأقسام المسجلة في لوحة متابعة مهام القطاعات.</p></div><span class="badge">${users.length} مستخدم</span></div>
+      <div class="org-tree">
+        <div class="org-node ceo"><h3>الرئيس التنفيذي</h3><div class="org-users" style="justify-content:center;">${ceoHtml}</div></div>
+        <div class="org-sector-grid">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>
+  `;
+}
+
+const __pagesOriginalShowPage = showPage;
+showPage = function(p){
+  ensurePerformanceAndOrgPagesDom();
+  if(['performance','org'].includes(p)){
+    ['tasks','dashboard','performance','org','admin'].forEach(x=>{
+      $(x+'Page')?.classList.toggle('hidden',x!==p);
+      $('tab'+x[0].toUpperCase()+x.slice(1))?.classList.toggle('active',x===p);
+    });
+    if(p==='performance') renderPerformancePage();
+    if(p==='org') renderOrgPage();
+    return;
+  }
+  __pagesOriginalShowPage(p);
+};
+
+const __pagesOriginalShowApp = showApp;
+showApp = function(){
+  __pagesOriginalShowApp();
+  ensurePerformanceAndOrgPagesDom();
+};
+
 init();
 </script>
 </body>
