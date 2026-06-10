@@ -6273,6 +6273,48 @@ showApp = function(){
   showPage(currentActive);
 };
 
+
+/* === PATCH: صلاحية الرئيس التنفيذي لحذف مهام فريقه ورؤساء القطاعات ===
+   السلوك:
+   - مدير النظام: يحذف كل المهام.
+   - الرئيس التنفيذي: يحذف مهام فريقه، ومهام رؤساء القطاعات، دون فتح حذف جميع المهام.
+   - رئيس القطاع: يحذف مهام قطاعه كما هو سابقًا.
+*/
+function isTaskLinkedToCeoTeamOrSectorHeads(task){
+  if(!task || !isCeo()) return false;
+
+  const ceoSectorId = state.profile?.sector_id || null;
+  const primaryUser = (state.users || []).find(u => u.id === task.primary_responsible_id);
+  const assignees = typeof getTaskAssignees === 'function' ? getTaskAssignees(task.id) : [];
+
+  const linkedUsers = [primaryUser, ...assignees].filter(Boolean);
+
+  const hasSectorHead = linkedUsers.some(u => u.role === 'sector_head');
+
+  const linkedToCeoSector =
+    !!ceoSectorId &&
+    (
+      task.owner_sector_id === ceoSectorId ||
+      task.target_sector_id === ceoSectorId ||
+      linkedUsers.some(u => u.sector_id === ceoSectorId)
+    );
+
+  return hasSectorHead || linkedToCeoSector;
+}
+
+canDeleteTask = function(t){
+  if(isAdmin()) return true;
+
+  if(isCeo()){
+    return isTaskLinkedToCeoTeamOrSectorHeads(t);
+  }
+
+  if(!isSectorHead()) return false;
+
+  return t.owner_sector_id === state.profile.sector_id ||
+         t.target_sector_id === state.profile.sector_id;
+};
+
 init();
 </script>
 </body>
