@@ -7178,6 +7178,152 @@ renderUsers = function(){
   $('usersTable').innerHTML=`${passwordNotice}${blocks}`;
 };
 
+
+/* === PATCH: إصلاح تعيين كلمة المرور عند ظهور Auth session missing === */
+async function tryRestorePasswordRecoverySession(){
+  try{
+    const url = new URL(location.href);
+    const query = new URLSearchParams(location.search || '');
+    const hash = new URLSearchParams((location.hash || '').replace(/^#/,''));
+
+    const code = query.get('code');
+    if(code){
+      const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
+      if(!error && data?.session){
+        state.session = data.session;
+        return true;
+      }
+      console.warn('exchangeCodeForSession failed:', error);
+    }
+
+    const tokenHash = query.get('token_hash') || hash.get('token_hash');
+    const type = query.get('type') || hash.get('type');
+
+    if(tokenHash && type === 'recovery'){
+      const { data, error } = await supabaseClient.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'recovery'
+      });
+
+      if(!error && data?.session){
+        state.session = data.session;
+        return true;
+      }
+      console.warn('verifyOtp recovery failed:', error);
+    }
+
+    const accessToken = hash.get('access_token');
+    const refreshToken = hash.get('refresh_token');
+
+    if(accessToken && refreshToken){
+      const { data, error } = await supabaseClient.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+
+      if(!error && data?.session){
+        state.session = data.session;
+        return true;
+      }
+      console.warn('setSession from hash failed:', error);
+    }
+
+    const { data } = await supabaseClient.auth.getSession();
+    if(data?.session){
+      state.session = data.session;
+      return true;
+    }
+
+    return false;
+  }catch(e){
+    console.error('tryRestorePasswordRecoverySession error:', e);
+    return false;
+  }
+}
+
+function isPasswordRecoveryRoute(){
+  const query = new URLSearchParams(location.search || '');
+  const hash = new URLSearchParams((location.hash || '').replace(/^#/,''));
+  return query.get('type') === 'recovery' ||
+         hash.get('type') === 'recovery' ||
+         query.has('token_hash') ||
+         hash.has('access_token') ||
+         query.has('code');
+}
+
+completePasswordSetup = async function(){
+  const p1 = $('newPassword')?.value || '';
+  const p2 = $('newPassword2')?.value || '';
+
+  if(!p1 || p1.length < 6){
+    showNotice('كلمة المرور يجب ألا تقل عن 6 أحرف.','error');
+    return;
+  }
+
+  if(p1 !== p2){
+    showNotice('كلمتا المرور غير متطابقتين.','error');
+    return;
+  }
+
+  let { data } = await supabaseClient.auth.getSession();
+
+  if(!data?.session){
+    const restored = await tryRestorePasswordRecoverySession();
+    if(restored){
+      data = (await supabaseClient.auth.getSession()).data;
+    }
+  }
+
+  if(!data?.session){
+    showNotice('انتهت صلاحية رابط تعيين كلمة المرور أو تم فتحه بطريقة لم تنشئ جلسة دخول. فضلاً اطلب إرسال رابط جديد وافتح آخر رابط وصل للبريد.','error');
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.updateUser({ password:p1 });
+
+  if(error){
+    showNotice(error.message || 'تعذر تحديث كلمة المرور.','error');
+    return;
+  }
+
+  try{
+    await supabaseClient
+      .from('users')
+      .update({ must_set_password:false })
+      .eq('id', data.session.user.id);
+  }catch(e){
+    console.warn('Unable to update must_set_password:', e);
+  }
+
+  await supabaseClient.auth.signOut();
+
+  showAuthOnly();
+  showAuthView('login');
+  showNotice('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','success');
+};
+
+const __passwordRecoveryFixInit = init;
+init = async function(){
+  ensureFullHrFeatureDom?.();
+
+  if(isPasswordRecoveryRoute()){
+    const restored = await tryRestorePasswordRecoverySession();
+
+    if(restored){
+      showPasswordSetup();
+      $('passwordSetupNotice').textContent = 'فضلاً أدخل كلمة المرور الجديدة.';
+      return;
+    }
+
+    showAuthOnly();
+    showAuthView('login');
+    showNotice('انتهت صلاحية رابط تعيين كلمة المرور أو تم فتحه بطريقة غير صحيحة. اطلب من مدير النظام إرسال رابط جديد، ثم افتح آخر رابط يصل للبريد.','error');
+    return;
+  }
+
+  return await __passwordRecoveryFixInit();
+};
+
 init();
 </script>
 </body>
