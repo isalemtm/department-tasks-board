@@ -130,7 +130,7 @@
       </div>
       <div class="title-box">
         <h1>لوحة متابعة مهام القطاعات</h1>
-        <p>نظام مؤسسي لإدارة ومتابعة مهام القطاعات</p>
+        <p>نظام داخلي لإدارة ومتابعة مهام القطاعات</p>
       </div>
       <div id="userBar" class="userbar hidden"><span id="userBadge" class="badge">—</span><button class="btn btn-sm" onclick="logout()">تسجيل الخروج</button></div>
     </div>
@@ -6313,6 +6313,103 @@ canDeleteTask = function(t){
 
   return t.owner_sector_id === state.profile.sector_id ||
          t.target_sector_id === state.profile.sector_id;
+};
+
+
+/* === PATCH: توسيط عنوان اللوحة وتحديث النص التعريفي === */
+function installCenteredMainTitleStyle(){
+  if(document.getElementById('centeredMainTitleStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='centeredMainTitleStyle';
+  style.textContent=`
+    .topbar{
+      position:relative;
+    }
+
+    .topbar-inner{
+      position:relative;
+      min-height:72px;
+      justify-content:center!important;
+      align-items:center!important;
+    }
+
+    .topbar .brand{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:max-content;
+      max-width:70%;
+      justify-content:center;
+      text-align:center;
+      pointer-events:none;
+      z-index:1;
+    }
+
+    .topbar .title-box{
+      text-align:center!important;
+    }
+
+    .topbar .title-box h1{
+      text-align:center!important;
+      margin:0 0 4px!important;
+    }
+
+    .topbar .title-box p{
+      text-align:center!important;
+      margin:0!important;
+    }
+
+    .topbar .userbar{
+      margin-inline-end:auto;
+      position:relative;
+      z-index:2;
+    }
+
+    @media(max-width:900px){
+      .topbar-inner{
+        min-height:112px;
+        align-items:flex-start!important;
+      }
+
+      .topbar .brand{
+        max-width:92%;
+        top:64px;
+      }
+
+      .topbar .title-box h1{
+        font-size:23px!important;
+      }
+
+      .topbar .title-box p{
+        font-size:13px!important;
+      }
+
+      .topbar .userbar{
+        align-self:flex-start;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __centeredMainTitleOriginalShowApp = showApp;
+showApp = function(){
+  __centeredMainTitleOriginalShowApp();
+  installCenteredMainTitleStyle();
+};
+
+const __centeredMainTitleOriginalShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __centeredMainTitleOriginalShowAuthOnly();
+  installCenteredMainTitleStyle();
+};
+
+const __centeredMainTitleOriginalInit = init;
+init = async function(){
+  installCenteredMainTitleStyle();
+  return await __centeredMainTitleOriginalInit();
 };
 
 init();
