@@ -6038,6 +6038,241 @@ showExecutiveFollowPage = function(){
   installCenteredNavigationStyle();
 };
 
+
+/* === PATCH: إصلاح تنقل الصفحات ومنع تلوّن أكثر من زر + إصلاح ظهور نافذة التأكيد خلف نافذة تعديل المستخدم === */
+function clearAllPageButtonsActive(){
+  [
+    'tabTasks',
+    'tabDashboard',
+    'tabPerformance',
+    'tabOrg',
+    'tabAdmin',
+    'tabExecutiveFollow'
+  ].forEach(id => $(id)?.classList.remove('active'));
+
+  document.querySelectorAll('#executiveInnerNav .btn').forEach(btn => btn.classList.remove('active'));
+}
+
+function hideAllMainPagesForCleanNavigation(){
+  [
+    'tasksPage',
+    'dashboardPage',
+    'performancePage',
+    'orgPage',
+    'adminPage',
+    'executiveSection'
+  ].forEach(id => $(id)?.classList.add('hidden'));
+}
+
+function setMainPageActive(pageKey){
+  clearAllPageButtonsActive();
+
+  const map = {
+    tasks: 'tabTasks',
+    dashboard: 'tabDashboard',
+    performance: 'tabPerformance',
+    org: 'tabOrg',
+    admin: 'tabAdmin',
+    executiveFollow: 'tabExecutiveFollow'
+  };
+
+  if(map[pageKey]) $(map[pageKey])?.classList.add('active');
+}
+
+function setExecutiveInnerActive(label){
+  document.querySelectorAll('#executiveInnerNav .btn').forEach(btn=>{
+    btn.classList.toggle('active', btn.textContent.trim() === label);
+  });
+}
+
+/* إعادة ضبط دالة التنقل نهائيًا حتى لا تتداخل تعديلات سابقة وتظهر أكثر من صفحة/زر */
+showPage = function(p){
+  ensureFullHrFeatureDom?.();
+  ensurePerformanceAndOrgPagesDom?.();
+  ensureExecutiveFollowPageButton?.();
+  installCenteredNavigationStyle?.();
+  installTopNavigationLightTheme?.();
+
+  hideAllMainPagesForCleanNavigation();
+  clearAllPageButtonsActive();
+
+  if(p === 'tasks'){
+    $('tasksPage')?.classList.remove('hidden');
+    setMainPageActive('tasks');
+    if(typeof renderTasks === 'function') renderTasks();
+    return;
+  }
+
+  if(p === 'dashboard'){
+    $('dashboardPage')?.classList.remove('hidden');
+    setMainPageActive('dashboard');
+    if(typeof renderDashboard === 'function') renderDashboard();
+    return;
+  }
+
+  if(p === 'performance'){
+    if(typeof canViewPerformanceAndOrgPages === 'function' && !canViewPerformanceAndOrgPages()){
+      showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+      $('tasksPage')?.classList.remove('hidden');
+      setMainPageActive('tasks');
+      return;
+    }
+
+    $('performancePage')?.classList.remove('hidden');
+    setMainPageActive('performance');
+    if(typeof renderPerformancePage === 'function') renderPerformancePage();
+    return;
+  }
+
+  if(p === 'org'){
+    if(typeof canViewPerformanceAndOrgPages === 'function' && !canViewPerformanceAndOrgPages()){
+      showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+      $('tasksPage')?.classList.remove('hidden');
+      setMainPageActive('tasks');
+      return;
+    }
+
+    $('orgPage')?.classList.remove('hidden');
+    setMainPageActive('org');
+    if(typeof renderOrgPage === 'function') renderOrgPage();
+    return;
+  }
+
+  if(p === 'admin'){
+    if(typeof canManageUserImports === 'function' && !canManageUserImports()){
+      showToast('ليست لديك صلاحية الوصول إلى إدارة المستخدمين.','error');
+      $('tasksPage')?.classList.remove('hidden');
+      setMainPageActive('tasks');
+      return;
+    }
+
+    $('adminPage')?.classList.remove('hidden');
+    setMainPageActive('admin');
+    if(typeof renderAdmin === 'function') renderAdmin();
+    return;
+  }
+
+  if(p === 'executiveFollow'){
+    if(typeof isAdminOrCeo === 'function' && !isAdminOrCeo()){
+      showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+      $('tasksPage')?.classList.remove('hidden');
+      setMainPageActive('tasks');
+      return;
+    }
+
+    ensureExecutiveInnerNav?.();
+    updateExecutiveInnerNavVisibility?.();
+
+    $('executiveSection')?.classList.remove('hidden');
+    setMainPageActive('executiveFollow');
+    setExecutiveInnerActive('متابعة القطاعات');
+
+    if(typeof fillExecutiveFilters === 'function') fillExecutiveFilters();
+    if(typeof renderExecutiveDirect === 'function') renderExecutiveDirect();
+    return;
+  }
+
+  $('tasksPage')?.classList.remove('hidden');
+  setMainPageActive('tasks');
+  if(typeof renderTasks === 'function') renderTasks();
+};
+
+/* إصلاح زر حفظ تعديلات المستخدم: إغلاق نافذة التعديل مؤقتًا قبل نافذة التأكيد حتى لا تظهر خلفها */
+saveUserEdit = async function(){
+  try{
+    if(!isAdmin()){
+      showToast('تعديل بيانات المستخدمين من صلاحية مدير النظام فقط.','error');
+      return;
+    }
+
+    const modal=$('userEditModal');
+    const userId=$('editUserId')?.value;
+    const existing=(state.users||[]).find(u=>u.id===userId);
+
+    if(!existing){
+      showToast('تعذر العثور على المستخدم.','error');
+      return;
+    }
+
+    const payload={
+      user_id:userId,
+      name:$('editUserName').value.trim(),
+      email:cleanEmailForEdit($('editUserEmail').value),
+      job_title:$('editUserJobTitle').value.trim(),
+      role:$('editUserRole').value,
+      sector_id:$('editUserSector').value||null,
+      department_id:$('editUserDepartment').value||null,
+      is_active:$('editUserIsActive').value==='true',
+      must_set_password:$('editUserMustSetPassword').value==='true'
+    };
+
+    if(!payload.name){
+      showToast('اكتب اسم المستخدم.','error');
+      return;
+    }
+
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)){
+      showToast('البريد الإلكتروني غير صحيح.','error');
+      return;
+    }
+
+    const emailChanged=cleanEmailForEdit(existing.email)!==payload.email;
+
+    /* إخفاء نافذة التعديل قبل askConfirm حتى تظهر نافذة التأكيد فوق كل شيء */
+    modal?.classList.add('hidden');
+
+    const ok=await askConfirm({
+      title:'حفظ تعديلات المستخدم',
+      message:`سيتم تحديث بيانات المستخدم:\n${existing.name || payload.name}\n\n${emailChanged ? 'تنبيه: تم تغيير البريد، وسيتم تحديث بريد تسجيل الدخول أيضًا.\n\n' : ''}هل تريد حفظ التعديلات؟`,
+      okText:'حفظ التعديلات',
+      danger:false
+    });
+
+    if(!ok){
+      modal?.classList.remove('hidden');
+      return;
+    }
+
+    const {data,error}=await supabaseClient.functions.invoke('admin-update-user',{
+      body:payload
+    });
+
+    if(error) throw error;
+    if(data?.error) throw new Error(data.error);
+
+    closeUserEditModal?.();
+
+    await loadAll();
+    setupFilters?.();
+    renderAdmin?.();
+    renderTasks?.();
+
+    showToast('تم تحديث بيانات المستخدم بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    $('userEditModal')?.classList.remove('hidden');
+    showToast(e.message || 'تعذر تحديث بيانات المستخدم.','error',8000);
+  }
+};
+
+/* بعد تحميل التطبيق تأكد أن صفحة واحدة فقط نشطة */
+const __finalNavigationFixShowApp = showApp;
+showApp = function(){
+  __finalNavigationFixShowApp();
+  installCenteredNavigationStyle?.();
+  ensureExecutiveFollowPageButton?.();
+
+  const currentActive =
+    $('tabExecutiveFollow')?.classList.contains('active') ? 'executiveFollow' :
+    $('tabAdmin')?.classList.contains('active') ? 'admin' :
+    $('tabOrg')?.classList.contains('active') ? 'org' :
+    $('tabPerformance')?.classList.contains('active') ? 'performance' :
+    $('tabDashboard')?.classList.contains('active') ? 'dashboard' :
+    'tasks';
+
+  showPage(currentActive);
+};
+
 init();
 </script>
 </body>
