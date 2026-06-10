@@ -6518,6 +6518,148 @@ init = async function(){
   return await __trueCenteredTitleOriginalInit();
 };
 
+
+/* === PATCH: توسيط العنوان بدقة في منتصف الشاشة بغض النظر عن أزرار اليسار === */
+function installAbsoluteViewportCenteredTitle(){
+  if(document.getElementById('absoluteViewportCenteredTitleStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='absoluteViewportCenteredTitleStyle';
+  style.textContent=`
+    .topbar{
+      position:relative!important;
+      min-height:104px!important;
+      padding:0!important;
+      display:block!important;
+    }
+
+    .topbar-inner{
+      position:relative!important;
+      width:100%!important;
+      max-width:none!important;
+      min-height:104px!important;
+      margin:0!important;
+      padding:0 22px!important;
+      display:block!important;
+    }
+
+    .topbar .userbar{
+      position:absolute!important;
+      left:22px!important;
+      right:auto!important;
+      top:50%!important;
+      transform:translateY(-50%)!important;
+      z-index:3!important;
+      margin:0!important;
+      display:flex!important;
+      justify-content:flex-start!important;
+      align-items:center!important;
+    }
+
+    html[dir="rtl"] .topbar .userbar{
+      left:22px!important;
+      right:auto!important;
+    }
+
+    .topbar .brand{
+      position:absolute!important;
+      left:50%!important;
+      right:auto!important;
+      top:50%!important;
+      transform:translate(-50%,-50%)!important;
+      width:auto!important;
+      min-width:0!important;
+      max-width:none!important;
+      margin:0!important;
+      padding:0!important;
+      display:block!important;
+      text-align:center!important;
+      z-index:2!important;
+      pointer-events:none!important;
+    }
+
+    .topbar .brand img{
+      display:none!important;
+    }
+
+    .topbar .title-box{
+      width:auto!important;
+      min-width:0!important;
+      max-width:none!important;
+      flex:none!important;
+      text-align:center!important;
+      white-space:nowrap!important;
+      margin:0!important;
+      padding:0!important;
+    }
+
+    .topbar .title-box h1{
+      margin:0 0 4px!important;
+      text-align:center!important;
+      line-height:1.25!important;
+    }
+
+    .topbar .title-box p{
+      margin:0!important;
+      text-align:center!important;
+      line-height:1.5!important;
+    }
+
+    @media(max-width:900px){
+      .topbar{
+        min-height:126px!important;
+      }
+
+      .topbar-inner{
+        min-height:126px!important;
+      }
+
+      .topbar .userbar{
+        top:18px!important;
+        transform:none!important;
+        left:12px!important;
+      }
+
+      .topbar .brand{
+        top:76px!important;
+        width:100%!important;
+        padding:0 12px!important;
+      }
+
+      .topbar .title-box{
+        white-space:normal!important;
+      }
+
+      .topbar .title-box h1{
+        font-size:22px!important;
+      }
+
+      .topbar .title-box p{
+        font-size:13px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __absoluteViewportCenteredTitleInit = init;
+init = async function(){
+  installAbsoluteViewportCenteredTitle();
+  return await __absoluteViewportCenteredTitleInit();
+};
+
+const __absoluteViewportCenteredTitleShowApp = showApp;
+showApp = function(){
+  __absoluteViewportCenteredTitleShowApp();
+  installAbsoluteViewportCenteredTitle();
+};
+
+const __absoluteViewportCenteredTitleShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __absoluteViewportCenteredTitleShowAuthOnly();
+  installAbsoluteViewportCenteredTitle();
+};
+
 init();
 </script>
 </body>
