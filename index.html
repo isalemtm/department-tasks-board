@@ -5798,6 +5798,139 @@ renderUsers = function(){
     </div>`;
 };
 
+
+/* === PATCH: إيقاف الرابط الخارجي وإضافة أزرار داخل متابعة القطاعات وتعديل ألوان أزرار الصفحات === */
+function installTopNavigationLightTheme(){
+  if(document.getElementById('topNavigationLightTheme')) return;
+
+  const style=document.createElement('style');
+  style.id='topNavigationLightTheme';
+  style.textContent=`
+    .app-actions .btn,
+    .executive-inner-nav .btn{
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      border:1px solid var(--line)!important;
+      box-shadow:none!important;
+    }
+
+    .app-actions .btn.active,
+    .executive-inner-nav .btn.active{
+      background:var(--primary)!important;
+      color:#fff!important;
+      border-color:var(--primary)!important;
+      box-shadow:0 0 0 3px rgba(97,70,59,.12)!important;
+    }
+
+    .executive-inner-nav{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-start;
+      flex-wrap:wrap;
+      margin:0 0 18px;
+      padding:14px;
+      background:#fbf8f5;
+      border:1px solid var(--line);
+      border-radius:16px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function canViewExecutiveFollowPage(){
+  return typeof isAdminOrCeo === 'function' && isAdminOrCeo();
+}
+
+function ensureExecutiveInnerNav(){
+  ensureFullHrFeatureDom();
+  const section=$('executiveSection');
+  if(!section || $('executiveInnerNav')) return;
+
+  const panel=section.querySelector('.panel.card');
+  if(!panel) return;
+
+  panel.insertAdjacentHTML('afterbegin', `
+    <div id="executiveInnerNav" class="executive-inner-nav">
+      <button class="btn" onclick="showPage('tasks')">المهام</button>
+      <button class="btn" onclick="showPage('dashboard')">لوحة الموظفين</button>
+      <button class="btn" onclick="showPage('performance')">مؤشرات الأداء</button>
+      <button class="btn" onclick="showPage('org')">الهيكل التنظيمي</button>
+      <button class="btn active" onclick="showPage('executiveFollow')">متابعة القطاعات</button>
+      <button id="executiveInnerAdminBtn" class="btn" onclick="showPage('admin')">إدارة المستخدمين</button>
+    </div>
+  `);
+}
+
+function updateExecutiveInnerNavVisibility(){
+  ensureExecutiveInnerNav();
+
+  const nav=$('executiveInnerNav');
+  if(!nav) return;
+
+  const can=canViewExecutiveFollowPage();
+  nav.classList.toggle('hidden', !can);
+
+  $('executiveInnerAdminBtn')?.classList.toggle('hidden', !(typeof isAdmin === 'function' && isAdmin()));
+}
+
+const __innerNavEnsureExecutiveFollowPageButton = ensureExecutiveFollowPageButton;
+ensureExecutiveFollowPageButton = function(){
+  __innerNavEnsureExecutiveFollowPageButton();
+  installTopNavigationLightTheme();
+
+  const can=canViewExecutiveFollowPage();
+  $('tabExecutiveFollow')?.classList.toggle('hidden', !can);
+};
+
+const __innerNavShowExecutiveFollowPage = showExecutiveFollowPage;
+showExecutiveFollowPage = function(){
+  if(!canViewExecutiveFollowPage()){
+    showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+    return;
+  }
+
+  __innerNavShowExecutiveFollowPage();
+
+  installTopNavigationLightTheme();
+  updateExecutiveInnerNavVisibility();
+
+  $('tabExecutiveFollow')?.classList.add('active');
+  $('executiveInnerNav')?.querySelectorAll('.btn').forEach(btn=>btn.classList.remove('active'));
+  const activeBtn=[...($('executiveInnerNav')?.querySelectorAll('.btn')||[])].find(btn=>btn.textContent.trim()==='متابعة القطاعات');
+  activeBtn?.classList.add('active');
+};
+
+const __innerNavShowPage = showPage;
+showPage = function(p){
+  installTopNavigationLightTheme();
+
+  if(p !== 'executiveFollow'){
+    $('executiveSection')?.classList.add('hidden');
+    $('tabExecutiveFollow')?.classList.remove('active');
+  }
+
+  __innerNavShowPage(p);
+};
+
+/* إيقاف استخدام الرابط الخارجي ?view=executive؛ الدخول يكون من زر متابعة القطاعات بعد تسجيل الدخول فقط */
+isExecutiveRouteProtected = function(){
+  return false;
+};
+
+const __disableExternalExecutiveInit = init;
+init = async function(){
+  const url = new URL(location.href);
+  if(url.searchParams.get('view') === 'executive'){
+    url.searchParams.delete('view');
+    url.searchParams.delete('token');
+    history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+  }
+
+  installTopNavigationLightTheme();
+  return await __disableExternalExecutiveInit();
+};
+
 init();
 </script>
 </body>
