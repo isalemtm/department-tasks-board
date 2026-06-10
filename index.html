@@ -83,7 +83,7 @@
     @media(max-width:768px){.brand{justify-content:center}.brand img{width:220px}.title-box{text-align:center}.title-box h1{font-size:24px}.app-header{flex-direction:column;align-items:stretch}.app-actions{flex-direction:column;align-items:stretch}.executive-stats{grid-template-columns:1fr}.executive-employees-row{grid-column:1/-1;grid-template-columns:1fr;max-width:none}.employee-mini-stats{grid-template-columns:1fr}}
 
 
-    /* === تحسين محاذاة كروت إحصائيات القطاعات في داشبورد الرئيس التنفيذي === */
+    /* === تحسين محاذاة كروت إحصائيات القطاعات في لوحة الرئيس التنفيذي === */
     .sector-dashboard-section .executive-stats{
       display:grid;
       grid-template-columns:repeat(6,minmax(150px,1fr));
@@ -165,7 +165,7 @@
         </div>
         <div class="app-actions">
           <button id="tabTasks" class="btn btn-secondary active" onclick="showPage('tasks')">المهام</button>
-          <button id="tabDashboard" class="btn btn-info" onclick="showPage('dashboard')">داشبورد الموظفين</button>
+          <button id="tabDashboard" class="btn btn-info" onclick="showPage('dashboard')">لوحة الموظفين</button>
           <button id="tabAdmin" class="btn btn-secondary hidden" onclick="showPage('admin')">إدارة المستخدمين</button>
         </div>
       </div>
@@ -980,7 +980,7 @@ function renderEmployeeCards(users){
 }
 function renderDashboard(){
   const users=usersInDashboardScope();
-  let title='داشبورد مهامي';
+  let title='لوحة مهامي';
   if(isAdminOrCeo()) title='أداء جميع الموظفين';
   else if(isSectorHead()) title='أداء موظفي القطاع';
   else if(isDepartmentManager()) title='أداء موظفي القسم';
@@ -1000,8 +1000,8 @@ function exportDashboardToExcel(){
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'أداء الموظفين');
     XLSX.writeFile(wb,`أداء_الموظفين_${new Date().toISOString().slice(0,10)}.xlsx`);
-    showToast('تم تصدير داشبورد الأداء بنجاح.','success');
-  }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير الداشبورد.','error'); }
+    showToast('تم تصدير لوحة الأداء بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير اللوحة.','error'); }
 }
 function canManageUserImports(){ return isAdmin() || isSectorHead() || isDepartmentManager(); }
 function renderAdmin(){
@@ -2106,7 +2106,7 @@ async function archiveUser(userId,name){
 
   const ok=await askConfirm({
     title:'تعطيل وأرشفة المستخدم',
-    message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد والداشبورد.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم التعامل مع المهام غير المكتملة كالتالي:\n- إذا كانت المهمة مشتركة: يتم إزالة المستخدم منها فقط.\n- إذا كانت فردية ولا يوجد مسند آخر: يتم أرشفة المهمة.\n\nهل تريد المتابعة؟`,
+    message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد واللوحة.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم التعامل مع المهام غير المكتملة كالتالي:\n- إذا كانت المهمة مشتركة: يتم إزالة المستخدم منها فقط.\n- إذا كانت فردية ولا يوجد مسند آخر: يتم أرشفة المهمة.\n\nهل تريد المتابعة؟`,
     okText:'تعطيل وأرشفة',
     danger:true,
     requireText:'تعطيل',
@@ -2205,7 +2205,7 @@ function ensureFullHrFeatureDom(){
       <section id="executiveSection" class="hidden">
         <section class="panel card">
           <div class="section-head">
-            <div><h2>داشبورد متابعة مهام القطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
+            <div><h2>لوحة متابعة مهام القطاعات</h2><p class="meta">عرض مباشر للرئيس التنفيذي: مؤشرات عامة وجدول تفصيلي للمهام.</p></div>
             <span class="badge">عرض فقط</span>
           </div>
           <!-- FIX: executiveDirectStats container intentionally has no executive-stats class to avoid nested grid misalignment -->
@@ -2235,7 +2235,7 @@ function ensureFullHrFeatureDom(){
   }
   if($('adminPage') && !$('pendingTasksPanel')){
     const transfer=$('transferRequestsPanel') || $('requestsPanel');
-    const html=`<section id="pendingTasksPanel" class="panel card hidden"><h2>مهام بانتظار الاعتماد</h2><p class="meta">المهام التي يضيفها الموظفون لا تظهر في القوائم والداشبورد إلا بعد الاعتماد. يمكنك تعديلها قبل الاعتماد.</p><div id="pendingTasksList"></div></section>`;
+    const html=`<section id="pendingTasksPanel" class="panel card hidden"><h2>مهام بانتظار الاعتماد</h2><p class="meta">المهام التي يضيفها الموظفون لا تظهر في القوائم واللوحة إلا بعد الاعتماد. يمكنك تعديلها قبل الاعتماد.</p><div id="pendingTasksList"></div></section>`;
     if(transfer) transfer.insertAdjacentHTML('beforebegin', html); else $('adminPage').insertAdjacentHTML('afterbegin', html);
   }
   if($('taskModal') && !$('clearTaskBtn')){
@@ -2365,7 +2365,7 @@ function renderPendingTaskApprovals(){
   $('pendingTasksList').innerHTML=rows.map(t=>`<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>المسند إليهم: ${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button></div></div>`).join('');
 }
 async function approveSubmittedTask(taskId){ const {error}=await supabaseClient.from('tasks').update({approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); renderTasks(); renderDashboard(); showToast('تم اعتماد المهمة وإظهارها في اللوحة.','success'); }
-async function rejectSubmittedTask(taskId){ const ok=await askConfirm({title:'رفض المهمة',message:'سيتم رفض المهمة ولن تظهر في القوائم والداشبورد. هل تريد المتابعة؟',okText:'رفض',danger:true}); if(!ok)return; const {error}=await supabaseClient.from('tasks').update({approval_status:'rejected',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); showToast('تم رفض المهمة.','success'); }
+async function rejectSubmittedTask(taskId){ const ok=await askConfirm({title:'رفض المهمة',message:'سيتم رفض المهمة ولن تظهر في القوائم واللوحة. هل تريد المتابعة؟',okText:'رفض',danger:true}); if(!ok)return; const {error}=await supabaseClient.from('tasks').update({approval_status:'rejected',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); showToast('تم رفض المهمة.','success'); }
 
 function clearTaskForm(){
   $('editTaskId').value=''; $('taskModalTitle').textContent='إضافة مهمة'; $('taskTitle').value=''; $('taskDescription').value=''; $('taskPriority').value='عادية'; $('taskDue').value=''; $('taskFiles').value='';
@@ -2559,7 +2559,7 @@ loadExecutiveDirectDashboard = async function(){
     state.tasks=t.data||[];
     state.assignees=a.data||[];
     state.comments=c.data||[];
-    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='داشبورد متابعة مهام القطاعات';
+    if($('executiveDirectTitle')) $('executiveDirectTitle').textContent='لوحة متابعة مهام القطاعات';
     if($('executiveDirectSubtitle')) $('executiveDirectSubtitle').textContent='عرض مباشر للرئيس التنفيذي: المؤشرات العامة، ثم عرض كل قطاع في قسم مستقل تحت بعض.';
     fillExecutiveFilters();
     renderExecutiveDirect();
@@ -2618,7 +2618,7 @@ function renderAllSectorDashboardSections(filteredRows){
         <div class="section-head">
           <div>
             <h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2>
-            <p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}.</p>
+            <p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس لوحة الرئيس التنفيذي${q?' حسب البحث الحالي':''}.</p>
           </div>
           <span class="badge">${sectorRows.length} مهمة</span>
         </div>
@@ -2979,7 +2979,7 @@ archiveUser = async function(userId,name){
   if(user.id===state.profile.id) return showToast('لا يمكن تعطيل حسابك الحالي.','error');
   const reason=window.prompt(`اكتب سبب تعطيل وأرشفة المستخدم: ${name || user.name || ''}`,'ترك الشركة');
   if(reason===null) return;
-  const ok=await askConfirm({title:'تعطيل وأرشفة المستخدم',message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد والداشبورد.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم إزالة المستخدم من المهام المشتركة، وأرشفة مهامه الفردية غير المكتملة. هل تريد المتابعة؟`,okText:'تعطيل وأرشفة',danger:true,requireText:'تعطيل',inputLabel:'للتأكيد اكتب كلمة تعطيل'});
+  const ok=await askConfirm({title:'تعطيل وأرشفة المستخدم',message:`سيتم تعطيل حساب المستخدم واستبعاده من قوائم الإسناد واللوحة.\n\nالمستخدم: ${user.name || name || '—'}\n\nسيتم إزالة المستخدم من المهام المشتركة، وأرشفة مهامه الفردية غير المكتملة. هل تريد المتابعة؟`,okText:'تعطيل وأرشفة',danger:true,requireText:'تعطيل',inputLabel:'للتأكيد اكتب كلمة تعطيل'});
   if(!ok) return;
   try{
     const now=new Date().toISOString();
@@ -3258,7 +3258,7 @@ renderAllSectorDashboardSections = function(filteredRows){
   const sections=state.sectors.filter(s=>!selectedSector || s.id===selectedSector).map(sector=>{
     const sectorRows=sortTasksByDue(filteredRows.filter(t=>executiveTaskSectorId(t)===sector.id));
     const parts=executiveCompletedDetails(sectorRows);
-    return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;"><div class="section-head"><div><h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2><p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس داشبورد الرئيس التنفيذي${q?' حسب البحث الحالي':''}. ملاحظة: مهام رئيس القطاع تُحسب له فقط إذا كان مسؤولًا أو مسندًا إليه.</p></div><span class="badge">${sectorRows.length} مهمة</span></div>${executiveMetricsHtml(sectorRows, '')}<div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div><details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></section>`;
+    return `<section class="panel card sector-dashboard-section" style="margin-top:22px;box-shadow:none;background:#fff;"><div class="section-head"><div><h2 style="margin:0;color:var(--primary2);">${escapeHtml(sector.name)}</h2><p class="meta" style="margin:4px 0 0;">لوحة مستقلة لهذا القطاع ضمن نفس لوحة الرئيس التنفيذي${q?' حسب البحث الحالي':''}. ملاحظة: مهام رئيس القطاع تُحسب له فقط إذا كان مسؤولًا أو مسندًا إليه.</p></div><span class="badge">${sectorRows.length} مهمة</span></div>${executiveMetricsHtml(sectorRows, '')}<div class="table-wrap" style="margin-top:16px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.activeHtml}</tbody></table></div><details style="margin-top:14px;"><summary class="card" style="padding:12px;cursor:pointer;font-weight:900;color:var(--primary2);box-shadow:none;">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary><div class="table-wrap" style="margin-top:10px;"><table><thead><tr><th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${parts.completedHtml}</tbody></table></div></details></section>`;
   }).join('');
   box.innerHTML=sections || '<div class="empty">لا توجد قطاعات لعرضها.</div>';
 };
@@ -3277,7 +3277,7 @@ taskMetrics = function(rows){
 
 
 
-/* === PATCH: توحيد مؤشرات الداشبورد إلى ثلاث حالات مع إبقاء إجمالي المهام وأكثر/أقل موظف ===
+/* === PATCH: توحيد مؤشرات اللوحة إلى ثلاث حالات مع إبقاء إجمالي المهام وأكثر/أقل موظف ===
    خاص بلوحة مهام الأقسام والقطاعات فقط.
    الكروت المعتمدة للعرض:
    1) إجمالي المهام.
@@ -3355,7 +3355,7 @@ function workflowThreeCardsHtml(rows){
   </div>`;
 }
 
-// تعديل كروت داشبورد الرئيس التنفيذي والقطاعات إلى إجمالي المهام + المنجز/المستحق هذا الشهر + الحالات + أكثر/أقل موظف.
+// تعديل كروت لوحة الرئيس التنفيذي والقطاعات إلى إجمالي المهام + المنجز/المستحق هذا الشهر + الحالات + أكثر/أقل موظف.
 executiveMetricsHtml = function(rows, titlePrefix=''){
   return workflowThreeCardsHtml(rows || []);
 };
@@ -3365,7 +3365,7 @@ renderExecutiveDirectStats = function(rows){
   if(box) box.innerHTML = workflowThreeCardsHtml(rows || visibleTasks());
 };
 
-// تعديل كروت الداشبورد الداخلي كذلك إلى إجمالي المهام + نفس التصنيف الثلاثي.
+// تعديل كروت اللوحة الداخلي كذلك إلى إجمالي المهام + نفس التصنيف الثلاثي.
 renderExecutiveSummaryCards = function(){
   const tasks = visibleTasks();
   return `<section class="panel card"><h2>أهم مؤشرات المتابعة</h2>${workflowThreeCardsHtml(tasks)}</section>`;
@@ -3407,7 +3407,7 @@ function normalizeWorkflowStatLabels(){
   });
 }
 
-// تحسين شكل شبكة المؤشرات بنفس تخطيط الداشبورد القديم: 6 كروت بالأعلى وكرتا أكثر/أقل موظف في الوسط.
+// تحسين شكل شبكة المؤشرات بنفس تخطيط اللوحة القديم: 6 كروت بالأعلى وكرتا أكثر/أقل موظف في الوسط.
 const workflowStyle = document.createElement('style');
 workflowStyle.textContent = `
   .executive-stats-old-layout{display:grid!important;grid-template-columns:repeat(7,minmax(130px,1fr))!important;gap:14px!important;align-items:stretch!important;max-width:none!important;margin:0 0 18px!important;}
@@ -3586,9 +3586,9 @@ renderTasks = function(){
 };
 
 
-/* === PATCH: فلترة داشبورد الرئيس التنفيذي مثل فلترة لوحة المهام ===
+/* === PATCH: فلترة لوحة الرئيس التنفيذي مثل فلترة لوحة المهام ===
    خاص بلوحة مهام الأقسام والقطاعات فقط.
-   يضيف فلترة متسلسلة في داشبورد الرئيس التنفيذي:
+   يضيف فلترة متسلسلة في لوحة الرئيس التنفيذي:
    البحث + القطاع + القسم + الموظف + الحالة.
    الحالات المعتمدة: قيد التنفيذ، مكتملة، متأخرة فقط.
 */
@@ -3727,8 +3727,8 @@ renderExecutiveDirect = function(){
 };
 
 
-/* === PATCH: جعل لوحات القطاعات في داشبورد الرئيس التنفيذي مغلقة افتراضيًا ===
-   يبقى داشبورد متابعة مهام القطاعات العام ظاهرًا مباشرة،
+/* === PATCH: جعل لوحات القطاعات في لوحة الرئيس التنفيذي مغلقة افتراضيًا ===
+   يبقى لوحة متابعة مهام القطاعات العام ظاهرًا مباشرة،
    وتظهر كل لوحة قطاع داخل قائمة قابلة للفتح عند الضغط.
 */
 (function addExecutiveSectorAccordionStyles(){
@@ -4353,9 +4353,9 @@ saveTask = async function(){
 };
 
 
-/* === PATCH: بطاقة/لوحة مستقلة في داشبورد الرئيس التنفيذي لمهام رؤساء القطاعات فقط ===
+/* === PATCH: بطاقة/لوحة مستقلة في لوحة الرئيس التنفيذي لمهام رؤساء القطاعات فقط ===
    خاص بلوحة مهام الأقسام والقطاعات فقط.
-   يعرض نفس نمط إحصائيات داشبورد الرئيس التنفيذي، لكن الأرقام محسوبة فقط على المهام
+   يعرض نفس نمط إحصائيات لوحة الرئيس التنفيذي، لكن الأرقام محسوبة فقط على المهام
    التي يكون أحد رؤساء القطاعات مسؤولًا رئيسيًا عنها أو مسندًا إليه فيها.
    يمكن الضغط على أي بطاقة لفتح جدول المهام التابعة لها.
 */
@@ -4450,7 +4450,7 @@ function renderSectorHeadExecutiveStats(rows){
     <div class="section-head">
       <div>
         <h2>متابعة مهام رؤساء القطاعات</h2>
-        <p class="meta">نفس مؤشرات الداشبورد، لكن محسوبة فقط على المهام المسندة لرؤساء القطاعات أو المسؤولين عنها. اضغط على أي بطاقة لفتح المهام.</p>
+        <p class="meta">نفس مؤشرات اللوحة، لكن محسوبة فقط على المهام المسندة لرؤساء القطاعات أو المسؤولين عنها. اضغط على أي بطاقة لفتح المهام.</p>
       </div>
       <span class="badge">${c.total} مهمة</span>
     </div>
@@ -4535,7 +4535,7 @@ renderExecutiveDirect = function(){
 };
 
 
-/* === PATCH: تأمين داشبورد الرئيس التنفيذي بتسجيل الدخول ===
+/* === PATCH: تأمين لوحة الرئيس التنفيذي بتسجيل الدخول ===
    خاص بلوحة متابعة مهام القطاعات فقط.
    السلوك الجديد:
    - رابط الرئيس التنفيذي يصبح: ?view=executive
@@ -4557,7 +4557,7 @@ function ensureExecutiveAccessDeniedDom(){
       <div class="auth-card card" style="max-width:680px;text-align:center;">
         <h2 class="auth-title" style="color:var(--primary2);">ليست لديك صلاحية عرض هذه الصفحة</h2>
         <p style="font-size:16px;line-height:1.9;color:var(--muted);margin:0 0 18px;">
-          عذرًا، داشبورد الرئيس التنفيذي مخصص للرئيس التنفيذي أو مدير النظام فقط.
+          عذرًا، لوحة الرئيس التنفيذي مخصص للرئيس التنفيذي أو مدير النظام فقط.
         </p>
         <div class="actions" style="justify-content:center;">
           <button class="btn btn-primary" onclick="location.href=location.origin+location.pathname">العودة إلى لوحة المهام</button>
@@ -4593,7 +4593,7 @@ function showExecutiveLoginRequired(){
   $('executiveAccessDeniedSection')?.classList.add('hidden');
   showAuthOnly();
   showAuthView('login');
-  showNotice('فضلاً سجل الدخول لعرض داشبورد الرئيس التنفيذي.','info');
+  showNotice('فضلاً سجل الدخول لعرض لوحة الرئيس التنفيذي.','info');
 }
 
 async function showExecutiveDashboardForAuthorizedUser(){
@@ -4953,6 +4953,321 @@ const __pagesOriginalShowApp = showApp;
 showApp = function(){
   __pagesOriginalShowApp();
   ensurePerformanceAndOrgPagesDom();
+};
+
+/* === PATCH: تحسين صفحة الهيكل التنظيمي + توحيد ألوان الأزرار === */
+function ensureUnifiedButtonTheme(){
+  if(document.getElementById('unifiedButtonsStyle')) return;
+  const style=document.createElement('style');
+  style.id='unifiedButtonsStyle';
+  style.textContent=`
+    .btn-secondary,.btn-info{background:var(--primary)!important;color:#fff!important;border-color:var(--primary)!important;}
+    .btn-secondary:hover,.btn-info:hover,.btn-primary:hover{filter:brightness(.96);}
+    .app-actions .btn{background:var(--primary)!important;color:#fff!important;border-color:var(--primary)!important;}
+    .app-actions .btn.active{background:var(--primary2)!important;color:#fff!important;box-shadow:0 0 0 3px rgba(97,70,59,.14);}
+    #appShell .btn:not(.btn-danger):not(.btn-success),
+    #taskModal .btn:not(.btn-danger):not(.btn-success),
+    #confirmModal .btn:not(.btn-danger):not(.btn-success){background:var(--primary);color:#fff;}
+    #appShell .btn:not(.btn-danger):not(.btn-success):hover,
+    #taskModal .btn:not(.btn-danger):not(.btn-success):hover,
+    #confirmModal .btn:not(.btn-danger):not(.btn-success):hover{filter:brightness(.96);}
+
+    .org-chart-page{display:flex;flex-direction:column;gap:18px;}
+    .org-ceo-card{max-width:560px;margin:0 auto;text-align:center;background:#fbf8f5;}
+    .org-ceo-card .org-person-cards{justify-content:center;}
+    .org-sector-stack{display:flex;flex-direction:column;gap:18px;}
+    .org-sector-box{border:1px solid var(--line);border-radius:20px;background:#fff;box-shadow:0 10px 24px rgba(97,70,59,.06);padding:18px;}
+    .org-sector-title-card,.org-mini-card,.org-dept-title-card,.org-person-card{border:1px solid #daccc2;border-radius:18px;background:#fff;padding:14px 16px;box-shadow:0 8px 20px rgba(97,70,59,.06);}
+    .org-sector-title-card{background:#fbf8f5;text-align:center;max-width:420px;margin:0 auto;font-weight:900;color:var(--primary2);font-size:22px;}
+    .org-mini-card{max-width:320px;margin:0 auto;text-align:center;background:#fffaf6;}
+    .org-mini-card .org-role-label,.org-dept-title-card .org-role-label,.org-person-card .org-role-label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+    .org-mini-card .org-name,.org-dept-title-card .org-name,.org-person-card .org-name{display:block;color:var(--primary2);font-weight:800;font-size:18px;line-height:1.5;}
+    .org-mini-card .org-job,.org-dept-title-card .org-job,.org-person-card .org-job{display:block;color:var(--muted);font-size:13px;line-height:1.6;}
+    .org-tree-line{width:2px;height:18px;background:#daccc2;margin:0 auto;}
+    .org-departments-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;align-items:start;margin-top:6px;}
+    .org-department-box{border:1px dashed #d8cac0;border-radius:18px;background:#fffdfb;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:100%;}
+    .org-dept-title-card{text-align:center;background:#f9f4ef;}
+    .org-person-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+    .org-person-card{padding:12px 14px;}
+    .org-person-card.head{background:#eef6f4;}
+    .org-person-card.manager{background:#eef3f8;}
+    .org-person-card.employee{background:#fff;}
+    .org-note-line{text-align:center;color:var(--muted);font-size:13px;line-height:1.7;}
+    .org-subtitle{margin:0;color:var(--muted);font-size:13px;}
+    @media(max-width:900px){
+      .org-sector-title-card{font-size:20px;}
+      .org-departments-grid{grid-template-columns:1fr;}
+      .org-person-cards{grid-template-columns:1fr;}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function orgPersonCard(u, roleClass='employee', roleLabelText='موظف'){
+  if(!u) return '<div class="org-note-line">غير محدد</div>';
+  const job=u.job_title || roleLabel(u.role) || roleLabelText || 'موظف';
+  return `<div class="org-person-card ${roleClass}"><span class="org-role-label">${escapeHtml(roleLabelText)}</span><span class="org-name">${escapeHtml(u.name||'—')}</span><span class="org-job">${escapeHtml(job)}</span></div>`;
+}
+
+function orgMiniHeadCards(usersList, roleLabelText='رئيس القطاع'){
+  if(!usersList || !usersList.length) return '<div class="org-note-line">غير محدد</div>';
+  return usersList.map(u=>`<div class="org-mini-card"><span class="org-role-label">${escapeHtml(roleLabelText)}</span><span class="org-name">${escapeHtml(u.name||'—')}</span><span class="org-job">${escapeHtml(u.job_title || roleLabel(u.role) || roleLabelText)}</span></div>`).join('');
+}
+
+renderOrgPage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  ensureUnifiedButtonTheme();
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoCards = ceos.length
+    ? ceos.map(u=>orgPersonCard(u,'head','الرئيس التنفيذي')).join('')
+    : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+  const sectorHtml = sectors.map(sector=>{
+    const heads=users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
+    const departments=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    const departmentsHtml = departments.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && !['department_manager','sector_head','ceo'].includes(u.role));
+      const managerBlock = managers.length
+        ? `<div class="org-person-cards">${managers.map(u=>orgPersonCard(u,'manager','مدير القسم')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+      const employeeBlock = employees.length
+        ? `<div class="org-person-cards">${employees.map(u=>orgPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+      return `
+        <div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
+        </div>`;
+    }).join('');
+
+    const usersWithoutDepartment=users.filter(u=>u.sector_id===sector.id && !u.department_id && !['sector_head','ceo'].includes(u.role));
+    const noDeptBlock = usersWithoutDepartment.length ? `
+      <div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>orgPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+    return `
+      <div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${orgMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">
+          ${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}
+          ${noDeptBlock}
+        </div>
+      </div>`;
+  }).join('');
+
+  $('orgContent').innerHTML = `
+    <section class="panel card">
+      <div class="section-head">
+        <div>
+          <h2>الهيكل التنظيمي للشركة</h2>
+          <p class="meta">عرض بطاقي ديناميكي يتوسع تلقائياً حسب المستخدمين والقطاعات والأقسام المضافة في لوحة متابعة مهام القطاعات.</p>
+        </div>
+        <span class="badge">${users.length} مستخدم</span>
+      </div>
+      <div class="org-chart-page">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>`;
+};
+
+const __unifiedButtonsOriginalShowApp = showApp;
+showApp = function(){
+  __unifiedButtonsOriginalShowApp();
+  ensureUnifiedButtonTheme();
+};
+
+/* === PATCH: حصر صفحة مؤشرات الأداء والهيكل التنظيمي على مدير النظام والرئيس التنفيذي فقط === */
+function canViewPerformanceAndOrgPages(){
+  return typeof isAdminOrCeo === 'function' && isAdminOrCeo();
+}
+
+const __secureEnsurePerformanceAndOrgPagesDom = ensurePerformanceAndOrgPagesDom;
+
+ensurePerformanceAndOrgPagesDom = function(){
+  __secureEnsurePerformanceAndOrgPagesDom();
+
+  const canView = canViewPerformanceAndOrgPages();
+
+  const performanceBtn = $('tabPerformance');
+  const orgBtn = $('tabOrg');
+
+  if(performanceBtn) performanceBtn.classList.toggle('hidden', !canView);
+  if(orgBtn) orgBtn.classList.toggle('hidden', !canView);
+
+  if(!canView){
+    $('performancePage')?.classList.add('hidden');
+    $('orgPage')?.classList.add('hidden');
+  }
+};
+
+const __secureShowPagePerformanceOrg = showPage;
+
+showPage = function(p){
+  if(['performance','org'].includes(p) && !canViewPerformanceAndOrgPages()){
+    showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+    return;
+  }
+
+  __secureShowPagePerformanceOrg(p);
+};
+
+const __secureShowAppPerformanceOrg = showApp;
+
+showApp = function(){
+  __secureShowAppPerformanceOrg();
+  ensurePerformanceAndOrgPagesDom();
+
+  if(!canViewPerformanceAndOrgPages()){
+    $('tabPerformance')?.classList.add('hidden');
+    $('tabOrg')?.classList.add('hidden');
+    $('performancePage')?.classList.add('hidden');
+    $('orgPage')?.classList.add('hidden');
+  }
+};
+
+
+/* === PATCH: تقسيم بطاقات أداء الموظفين حسب القطاع === */
+function ensureEmployeeCardsBySectorStyle(){
+  if(document.getElementById('employeeCardsBySectorStyle')) return;
+  const style=document.createElement('style');
+  style.id='employeeCardsBySectorStyle';
+  style.textContent=`
+    .employee-sector-block{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fffdfb;
+      padding:16px;
+      margin-top:14px;
+      box-shadow:0 8px 22px rgba(97,70,59,.05);
+    }
+    .employee-sector-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+      padding-bottom:10px;
+      border-bottom:1px solid var(--line);
+    }
+    .employee-sector-head h3{
+      margin:0;
+      color:var(--primary2);
+      font-size:21px;
+      line-height:1.4;
+    }
+    .employee-sector-head .sector-count{
+      background:#efe8e3;
+      color:var(--primary2);
+      border-radius:999px;
+      padding:6px 12px;
+      font-size:13px;
+      font-weight:700;
+    }
+    .employee-sector-block .employee-dashboard-grid{
+      margin-top:0;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function renderSingleEmployeePerformanceCard(u){
+  const m=taskMetrics(tasksForUser(u.id));
+  return `
+    <div class="employee-card">
+      <div class="employee-top">
+        <div>
+          <h4 class="employee-title">${escapeHtml(u.name)}</h4>
+          <div class="meta">
+            ${escapeHtml(u.email||'—')}<br>
+            ${escapeHtml(nameOfSector(u.sector_id))} / ${escapeHtml(nameOfDept(u.department_id))}
+          </div>
+        </div>
+        <span class="status-chip status-مكتملة">الإجمالي ${m.rate}%</span>
+      </div>
+      <div class="employee-mini-stats">
+        <div class="mini-stat"><strong>${m.total}</strong><span>إجمالي</span></div>
+        <div class="mini-stat"><strong>${m.done}</strong><span>مكتملة</span></div>
+        <div class="mini-stat"><strong>${m.progress}</strong><span>قيد التنفيذ</span></div>
+        <div class="mini-stat"><strong>${m.late}</strong><span>متأخرة</span></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${m.rate}%"></div></div>
+    </div>
+  `;
+}
+
+renderEmployeeCards = function(users){
+  ensureEmployeeCardsBySectorStyle();
+
+  const rows=(users||[]).filter(Boolean);
+  if(!rows.length){
+    return `<section class="panel card"><h2>بطاقات أداء الموظفين</h2><div class="empty-state">لا توجد بيانات لعرضها حالياً.</div></section>`;
+  }
+
+  const sectorMap=new Map();
+
+  rows.forEach(u=>{
+    const sectorId=u.sector_id || '__no_sector__';
+    const sectorName=nameOfSector(u.sector_id) || 'بدون قطاع';
+    if(!sectorMap.has(sectorId)){
+      sectorMap.set(sectorId,{name:sectorName, users:[]});
+    }
+    sectorMap.get(sectorId).users.push(u);
+  });
+
+  const sectorBlocks=[...sectorMap.values()]
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'))
+    .map(group=>{
+      const sortedUsers=group.users
+        .slice()
+        .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+      return `
+        <div class="employee-sector-block">
+          <div class="employee-sector-head">
+            <h3>${escapeHtml(group.name)}</h3>
+            <span class="sector-count">${sortedUsers.length} موظف</span>
+          </div>
+          <div class="employee-dashboard-grid">
+            ${sortedUsers.map(renderSingleEmployeePerformanceCard).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  return `
+    <section class="panel card">
+      <h2>بطاقات أداء الموظفين</h2>
+      ${sectorBlocks}
+    </section>
+  `;
 };
 
 init();
