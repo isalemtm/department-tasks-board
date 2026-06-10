@@ -6660,6 +6660,158 @@ showAuthOnly = function(){
   installAbsoluteViewportCenteredTitle();
 };
 
+
+/* === PATCH: وضع اسم المستخدم وزر تسجيل الخروج تحت العنوان في المنتصف === */
+function installCenteredUserbarUnderTitleStyle(){
+  if(document.getElementById('centeredUserbarUnderTitleStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='centeredUserbarUnderTitleStyle';
+  style.textContent=`
+    .topbar{
+      position:relative!important;
+      min-height:134px!important;
+      padding:0!important;
+      display:block!important;
+    }
+
+    .topbar-inner{
+      position:relative!important;
+      width:100%!important;
+      max-width:none!important;
+      min-height:134px!important;
+      margin:0!important;
+      padding:0 22px!important;
+      display:block!important;
+    }
+
+    .topbar .brand{
+      position:absolute!important;
+      left:50%!important;
+      right:auto!important;
+      top:42%!important;
+      transform:translate(-50%,-50%)!important;
+      width:auto!important;
+      max-width:90%!important;
+      margin:0!important;
+      padding:0!important;
+      display:block!important;
+      text-align:center!important;
+      z-index:2!important;
+      pointer-events:none!important;
+    }
+
+    .topbar .brand img{
+      display:none!important;
+    }
+
+    .topbar .title-box{
+      width:auto!important;
+      min-width:0!important;
+      max-width:none!important;
+      flex:none!important;
+      text-align:center!important;
+      white-space:nowrap!important;
+      margin:0!important;
+      padding:0!important;
+    }
+
+    .topbar .title-box h1{
+      margin:0 0 4px!important;
+      text-align:center!important;
+      line-height:1.25!important;
+    }
+
+    .topbar .title-box p{
+      margin:0!important;
+      text-align:center!important;
+      line-height:1.5!important;
+    }
+
+    .topbar .userbar{
+      position:absolute!important;
+      left:50%!important;
+      right:auto!important;
+      top:92px!important;
+      transform:translateX(-50%)!important;
+      z-index:3!important;
+      margin:0!important;
+      display:flex!important;
+      justify-content:center!important;
+      align-items:center!important;
+      gap:10px!important;
+      flex-wrap:wrap!important;
+      width:auto!important;
+      max-width:96%!important;
+    }
+
+    html[dir="rtl"] .topbar .userbar{
+      left:50%!important;
+      right:auto!important;
+      transform:translateX(-50%)!important;
+    }
+
+    .topbar .userbar .badge,
+    .topbar .userbar .btn{
+      white-space:nowrap!important;
+      box-shadow:0 6px 16px rgba(97,70,59,.08)!important;
+    }
+
+    @media(max-width:900px){
+      .topbar{
+        min-height:158px!important;
+      }
+
+      .topbar-inner{
+        min-height:158px!important;
+      }
+
+      .topbar .brand{
+        top:52px!important;
+        width:100%!important;
+        padding:0 12px!important;
+      }
+
+      .topbar .title-box{
+        white-space:normal!important;
+      }
+
+      .topbar .title-box h1{
+        font-size:22px!important;
+      }
+
+      .topbar .title-box p{
+        font-size:13px!important;
+      }
+
+      .topbar .userbar{
+        top:104px!important;
+        width:100%!important;
+        padding:0 12px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __centeredUserbarUnderTitleInit = init;
+init = async function(){
+  installCenteredUserbarUnderTitleStyle();
+  return await __centeredUserbarUnderTitleInit();
+};
+
+const __centeredUserbarUnderTitleShowApp = showApp;
+showApp = function(){
+  __centeredUserbarUnderTitleShowApp();
+  installCenteredUserbarUnderTitleStyle();
+};
+
+const __centeredUserbarUnderTitleShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __centeredUserbarUnderTitleShowAuthOnly();
+  installCenteredUserbarUnderTitleStyle();
+};
+
 init();
 </script>
 </body>
