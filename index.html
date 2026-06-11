@@ -7353,177 +7353,23 @@ init = async function(){
 /* === PATCH: تبسيط نموذج إضافة المهمة وتاريخ DD/MM/YYYY ===
    خاص بلوحة متابعة مهام القطاعات فقط.
 */
-function ensureTaskDueNativeDatePicker(){
-  const el=$('taskDue');
-  if(!el) return;
-  if(el.type !== 'date') el.type='date';
-  el.setAttribute('lang','en');
-  el.setAttribute('dir','ltr');
-  el.classList.add('date-ltr');
-}
-function getTaskDueDateForSave(){
-  const value=($('taskDue')?.value||'').trim();
-  return {ok:true,value:value||null};
-}
-function openTaskFilePicker(event){
-  if(event?.target?.id==='taskFiles') return;
-  $('taskFiles')?.click();
-}
-function handleTaskFileDragOver(event){
-  event.preventDefault();
-  event.stopPropagation();
-  $('taskFilesDropZone')?.classList.add('drag-over');
-}
-function handleTaskFileDragLeave(event){
-  event.preventDefault();
-  event.stopPropagation();
-  $('taskFilesDropZone')?.classList.remove('drag-over');
-}
-function handleTaskFileDrop(event){
-  event.preventDefault();
-  event.stopPropagation();
-  const zone=$('taskFilesDropZone');
-  zone?.classList.remove('drag-over');
-  const input=$('taskFiles');
-  const files=event.dataTransfer?.files;
-  if(!input || !files || !files.length) return;
-  try{
-    const dt=new DataTransfer();
-    [...files].forEach(file=>dt.items.add(file));
-    input.files=dt.files;
-    updateTaskFilesDropZone();
-  }catch(e){
-    showToast('تعذر إضافة الملفات بالسحب والإفلات. استخدم زر اختيار الملفات.','error');
-  }
-}
-function updateTaskFilesDropZone(){
-  const input=$('taskFiles');
-  const text=$('taskFilesDropText');
-  if(!input || !text) return;
-  const files=[...(input.files||[])];
-  if(!files.length){
-    text.textContent='لم يتم اختيار ملفات';
-    return;
-  }
-  if(files.length===1){
-    text.textContent=files[0].name;
-    return;
-  }
-  text.textContent=`تم اختيار ${files.length} ملفات: ${files.slice(0,3).map(f=>f.name).join('، ')}${files.length>3?'...':''}`;
-}
-function setTaskAdvancedOptionsVisible(visible){
-  const box=$('taskAdvancedFields');
-  const btn=$('taskAdvancedToggle');
-  if(!box) return;
-  box.classList.toggle('hidden',!visible);
-  if(btn) btn.textContent=visible?'إخفاء الخيارات الإضافية':'خيارات إضافية';
-}
-function toggleTaskAdvancedOptions(){
-  const box=$('taskAdvancedFields');
-  setTaskAdvancedOptionsVisible(box?.classList.contains('hidden'));
-}
-const __simpleTaskOriginalOpenTaskModal = openTaskModal;
-openTaskModal = function(){
-  __simpleTaskOriginalOpenTaskModal();
-  ensureTaskDueNativeDatePicker();
-  updateTaskFilesDropZone();
-  setTaskAdvancedOptionsVisible(false);
-};
-const __simpleTaskOriginalEditTask = editTask;
-editTask = function(taskId){
-  __simpleTaskOriginalEditTask(taskId);
-  ensureTaskDueNativeDatePicker();
-  const t=state.tasks.find(x=>x.id===taskId);
-  if(t && $('taskDue')) $('taskDue').value=String(t.due_date||'').slice(0,10);
-  updateTaskFilesDropZone();
-  setTaskAdvancedOptionsVisible(true);
-};
-const __simpleTaskOriginalClearTaskForm = clearTaskForm;
-clearTaskForm = function(){
-  __simpleTaskOriginalClearTaskForm();
-  ensureTaskDueNativeDatePicker();
-  if($('taskFiles')) $('taskFiles').value='';
-  updateTaskFilesDropZone();
-  setTaskAdvancedOptionsVisible(false);
-};
-const __simpleTaskOriginalSaveTask = saveTask;
-saveTask = async function(){
-  const due=getTaskDueDateForSave();
-  if(!due.ok) return;
-  const el=$('taskDue');
-  const original=el ? el.value : '';
-  if(el) el.value=due.value || '';
-  try{
-    await __simpleTaskOriginalSaveTask();
-  }finally{
-    if(el && !$('taskModal')?.classList.contains('hidden')) el.value=original;
-  }
-};
-
-
-/* === PATCH: تقويم تاريخ الاستحقاق بصيغة ظاهرة DD/MM/YYYY + إسناد الموظف للمدير/رئيس القطاع ===
-   خاص بلوحة متابعة مهام القطاعات فقط.
-   - يبقي input type="date" لاختيار التاريخ من التقويم.
-   - يخفي العرض الداخلي المتأثر بلغة المتصفح، ويعرض قيمة واضحة DD/MM/YYYY.
-   - يسمح للموظف بإسناد المهمة لموظف، مدير قسم، أو رئيس قطاع داخل نفس القطاع.
-*/
-(function injectDueDateDisplayAndEmployeeAssignStyles(){
-  if(document.getElementById('dueDateDisplayAndEmployeeAssignStyles')) return;
-  const style=document.createElement('style');
-  style.id='dueDateDisplayAndEmployeeAssignStyles';
-  style.textContent=`
-    .date-picker-shell{position:relative;width:100%;display:block;}
-    .date-picker-shell .date-display-input{
-      width:100%;
-      direction:ltr!important;
-      text-align:left!important;
-      unicode-bidi:plaintext;
-      font-family:Tahoma, Arial, sans-serif!important;
-      padding-left:44px!important;
-      background:#fff;
-      color:var(--text);
-      cursor:pointer;
-    }
-    .date-picker-shell .date-display-input::placeholder{color:#9a8a82;opacity:1;}
-    .date-picker-shell .date-calendar-icon{
-      position:absolute;
-      left:14px;
-      top:50%;
-      transform:translateY(-50%);
-      z-index:2;
-      pointer-events:none;
-      color:var(--primary2);
-      font-size:17px;
-      line-height:1;
-    }
-    .date-picker-shell #taskDue.native-date-input-overlay{
-      position:absolute!important;
-      inset:0!important;
-      width:100%!important;
-      height:100%!important;
-      opacity:0!important;
-      cursor:pointer!important;
-      z-index:3!important;
-      padding:0!important;
-      border:0!important;
-      background:transparent!important;
-    }
-  `;
-  document.head.appendChild(style);
-})();
-
-function formatDueDateDisplayDDMMYYYY(value){
-  const iso=String(value||'').trim();
-  const m=iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(!m) return '';
-  return `${m[3]}/${m[2]}/${m[1]}`;
-}
-
-function syncTaskDueDisplay(){
+function openTaskDueNativePicker(){
   const source=$('taskDue');
-  const display=$('taskDueDisplay');
-  if(!source || !display) return;
-  display.value=formatDueDateDisplayDDMMYYYY(source.value);
+  const shell=source?.closest?.('.date-picker-shell');
+  if(!source) return;
+  try{
+    shell?.classList.add('date-picker-active');
+    source.focus({preventScroll:true});
+    if(typeof source.showPicker==='function'){
+      source.showPicker();
+    }else{
+      source.click();
+    }
+  }catch(e){
+    try{ source.click(); }catch(_e){}
+  }finally{
+    setTimeout(()=>shell?.classList.remove('date-picker-active'),700);
+  }
 }
 
 function ensureTaskDueNativeDatePicker(){
@@ -7548,7 +7394,7 @@ function ensureTaskDueNativeDatePicker(){
     display.setAttribute('dir','ltr');
     display.setAttribute('lang','en');
     display.className='date-display-input';
-    display.tabIndex=-1;
+    display.setAttribute('aria-label','تاريخ الاستحقاق');
 
     const icon=document.createElement('span');
     icon.className='date-calendar-icon';
@@ -7562,6 +7408,21 @@ function ensureTaskDueNativeDatePicker(){
     el.classList.add('native-date-input-overlay');
     el.addEventListener('change', syncTaskDueDisplay);
     el.addEventListener('input', syncTaskDueDisplay);
+
+    // نفتح التقويم الأصلي عند الضغط على الحقل الظاهر، مع إبقاء العرض بصيغة DD/MM/YYYY.
+    shell.addEventListener('click', function(event){
+      event.preventDefault();
+      openTaskDueNativePicker();
+    });
+    display.addEventListener('keydown', function(event){
+      if(event.key==='Enter' || event.key===' '){
+        event.preventDefault();
+        openTaskDueNativePicker();
+      }
+    });
+    display.addEventListener('focus', function(){
+      setTimeout(openTaskDueNativePicker,0);
+    });
   }
 
   syncTaskDueDisplay();
