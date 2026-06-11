@@ -125,6 +125,22 @@
     #taskAdvancedFields{border:1px dashed var(--line);border-radius:14px;padding:14px;background:#fbf8f5;margin-top:-6px}
     #taskAdvancedToggle{background:#f4f0ec;color:var(--primary2)}
 
+
+    /* Task form: native English date picker + drag/drop attachments */
+    .date-ltr{direction:ltr;text-align:left;unicode-bidi:plaintext;lang:en;}
+    input[type="date"].date-ltr{font-family:Tahoma, Arial, sans-serif;letter-spacing:.2px;}
+    input[type="date"].date-ltr::-webkit-datetime-edit{direction:ltr;text-align:left;}
+    input[type="date"].date-ltr::-webkit-datetime-edit-fields-wrapper{direction:ltr;}
+    input[type="date"].date-ltr::-webkit-datetime-edit-day-field,
+    input[type="date"].date-ltr::-webkit-datetime-edit-month-field,
+    input[type="date"].date-ltr::-webkit-datetime-edit-year-field{direction:ltr;}
+    .file-drop-zone{border:2px dashed #d8cac0;background:#fbf8f5;border-radius:16px;padding:20px;text-align:center;cursor:pointer;transition:.2s ease;color:var(--primary2)}
+    .file-drop-zone:hover,.file-drop-zone.drag-over{border-color:var(--primary);background:#f4eee8;box-shadow:0 0 0 3px rgba(97,70,59,.08)}
+    .file-drop-input{display:none!important}
+    .file-drop-icon{width:42px;height:42px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#efe8e3;color:var(--primary);font-size:22px;font-weight:900;margin-bottom:8px}
+    .file-drop-title{font-weight:900;color:var(--primary2)}
+    .file-drop-text{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.6}
+
   </style>
 </head>
 <body>
@@ -333,9 +349,9 @@
   <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid task-quick-form">
     <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle" placeholder="اكتب عنوان المهمة باختصار"></div>
     <div class="form-group full"><label>المسند إليه</label><div id="assigneePicker" class="checkbox-grid"></div></div>
-    <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="text" class="date-ltr" dir="ltr" inputmode="numeric" autocomplete="off" placeholder="DD/MM/YYYY"></div>
+    <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date" class="date-ltr" dir="ltr" lang="en" autocomplete="off"></div>
     <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription" placeholder="اختياري: اكتب تفاصيل المهمة"></textarea></div>
-    <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
+    <div class="form-group full"><label>مرفقات المهمة</label><div id="taskFilesDropZone" class="file-drop-zone" onclick="openTaskFilePicker(event)" ondragover="handleTaskFileDragOver(event)" ondragleave="handleTaskFileDragLeave(event)" ondrop="handleTaskFileDrop(event)"><input id="taskFiles" class="file-drop-input" type="file" multiple onchange="updateTaskFilesDropZone()"><div class="file-drop-icon">⬆</div><div class="file-drop-title">اضغط لاختيار الملفات أو اسحبها وأفلتها هنا</div><div id="taskFilesDropText" class="file-drop-text">لم يتم اختيار ملفات</div></div></div>
     <div class="form-group full"><button type="button" id="taskAdvancedToggle" class="btn btn-sm" onclick="toggleTaskAdvancedOptions()">خيارات إضافية</button><span class="meta" style="margin-inline-start:8px;">الأولوية ونوع التكليف والقطاع والقسم</span></div>
     <div id="taskAdvancedFields" class="form-grid full hidden">
       <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
@@ -7337,47 +7353,63 @@ init = async function(){
 /* === PATCH: تبسيط نموذج إضافة المهمة وتاريخ DD/MM/YYYY ===
    خاص بلوحة متابعة مهام القطاعات فقط.
 */
-function convertArabicDigitsToEnglish(value=''){
-  const map={'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
-  return String(value||'').replace(/[٠-٩۰-۹]/g, d => map[d] || d);
-}
-function normalizeTaskDueDateInput(value=''){
-  const raw=convertArabicDigitsToEnglish(value).trim();
-  if(!raw) return null;
-  const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(iso) return raw;
-  const m=raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if(!m) return undefined;
-  const day=Number(m[1]), month=Number(m[2]), year=Number(m[3]);
-  const d=new Date(year, month-1, day);
-  if(d.getFullYear()!==year || d.getMonth()!==month-1 || d.getDate()!==day) return undefined;
-  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-}
-function formatTaskDueDateForInput(value=''){
-  const raw=String(value||'').trim();
-  const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(!m) return raw;
-  return `${m[3]}/${m[2]}/${m[1]}`;
+function ensureTaskDueNativeDatePicker(){
+  const el=$('taskDue');
+  if(!el) return;
+  if(el.type !== 'date') el.type='date';
+  el.setAttribute('lang','en');
+  el.setAttribute('dir','ltr');
+  el.classList.add('date-ltr');
 }
 function getTaskDueDateForSave(){
-  const parsed=normalizeTaskDueDateInput($('taskDue')?.value||'');
-  if(parsed===undefined){
-    showToast('صيغة تاريخ الاستحقاق يجب أن تكون DD/MM/YYYY، مثال: 25/06/2026','error',6500);
-    return {ok:false,value:null};
-  }
-  return {ok:true,value:parsed};
+  const value=($('taskDue')?.value||'').trim();
+  return {ok:true,value:value||null};
 }
-function attachTaskDueDateMask(){
-  const el=$('taskDue');
-  if(!el || el.dataset.dateMaskAttached==='1') return;
-  el.dataset.dateMaskAttached='1';
-  el.addEventListener('input',()=>{
-    const old=el.value;
-    let v=convertArabicDigitsToEnglish(old).replace(/[^0-9]/g,'').slice(0,8);
-    if(v.length>4) v=`${v.slice(0,2)}/${v.slice(2,4)}/${v.slice(4)}`;
-    else if(v.length>2) v=`${v.slice(0,2)}/${v.slice(2)}`;
-    el.value=v;
-  });
+function openTaskFilePicker(event){
+  if(event?.target?.id==='taskFiles') return;
+  $('taskFiles')?.click();
+}
+function handleTaskFileDragOver(event){
+  event.preventDefault();
+  event.stopPropagation();
+  $('taskFilesDropZone')?.classList.add('drag-over');
+}
+function handleTaskFileDragLeave(event){
+  event.preventDefault();
+  event.stopPropagation();
+  $('taskFilesDropZone')?.classList.remove('drag-over');
+}
+function handleTaskFileDrop(event){
+  event.preventDefault();
+  event.stopPropagation();
+  const zone=$('taskFilesDropZone');
+  zone?.classList.remove('drag-over');
+  const input=$('taskFiles');
+  const files=event.dataTransfer?.files;
+  if(!input || !files || !files.length) return;
+  try{
+    const dt=new DataTransfer();
+    [...files].forEach(file=>dt.items.add(file));
+    input.files=dt.files;
+    updateTaskFilesDropZone();
+  }catch(e){
+    showToast('تعذر إضافة الملفات بالسحب والإفلات. استخدم زر اختيار الملفات.','error');
+  }
+}
+function updateTaskFilesDropZone(){
+  const input=$('taskFiles');
+  const text=$('taskFilesDropText');
+  if(!input || !text) return;
+  const files=[...(input.files||[])];
+  if(!files.length){
+    text.textContent='لم يتم اختيار ملفات';
+    return;
+  }
+  if(files.length===1){
+    text.textContent=files[0].name;
+    return;
+  }
+  text.textContent=`تم اختيار ${files.length} ملفات: ${files.slice(0,3).map(f=>f.name).join('، ')}${files.length>3?'...':''}`;
 }
 function setTaskAdvancedOptionsVisible(visible){
   const box=$('taskAdvancedFields');
@@ -7393,23 +7425,25 @@ function toggleTaskAdvancedOptions(){
 const __simpleTaskOriginalOpenTaskModal = openTaskModal;
 openTaskModal = function(){
   __simpleTaskOriginalOpenTaskModal();
-  attachTaskDueDateMask();
+  ensureTaskDueNativeDatePicker();
+  updateTaskFilesDropZone();
   setTaskAdvancedOptionsVisible(false);
-  if($('taskDue')) $('taskDue').placeholder='DD/MM/YYYY';
 };
 const __simpleTaskOriginalEditTask = editTask;
 editTask = function(taskId){
   __simpleTaskOriginalEditTask(taskId);
-  attachTaskDueDateMask();
+  ensureTaskDueNativeDatePicker();
   const t=state.tasks.find(x=>x.id===taskId);
-  if(t && $('taskDue')) $('taskDue').value=formatTaskDueDateForInput(t.due_date||'');
+  if(t && $('taskDue')) $('taskDue').value=String(t.due_date||'').slice(0,10);
+  updateTaskFilesDropZone();
   setTaskAdvancedOptionsVisible(true);
 };
 const __simpleTaskOriginalClearTaskForm = clearTaskForm;
 clearTaskForm = function(){
   __simpleTaskOriginalClearTaskForm();
-  attachTaskDueDateMask();
-  if($('taskDue')) $('taskDue').placeholder='DD/MM/YYYY';
+  ensureTaskDueNativeDatePicker();
+  if($('taskFiles')) $('taskFiles').value='';
+  updateTaskFilesDropZone();
   setTaskAdvancedOptionsVisible(false);
 };
 const __simpleTaskOriginalSaveTask = saveTask;
