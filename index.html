@@ -119,22 +119,7 @@
       .sector-dashboard-section .executive-employees-row{grid-column:1 / -1;grid-template-columns:1fr;max-width:none;}
     }
 
-  
-
-    /* === تبسيط نموذج إضافة المهمة وسحب وإفلات المرفقات === */
-    .task-modal-simplified{width:min(820px,100%)}
-    .task-basic-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
-    .date-en{direction:ltr!important;text-align:right!important;font-family:Arial, Tahoma, sans-serif!important;unicode-bidi:isolate!important}
-    .task-advanced-toggle-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px}
-    .task-advanced-options{border:1px solid var(--line);border-radius:16px;background:#fbf8f5;padding:14px;margin-top:0}
-    .task-save-actions{margin-top:14px;justify-content:flex-start}
-    .file-dropzone{position:relative;border:1.5px dashed #c8b5a8;background:#fff;border-radius:16px;padding:18px;cursor:pointer;transition:.2s;text-align:center;min-height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
-    .file-dropzone:hover,.file-dropzone.dragover{border-color:var(--primary);background:#fbf6f1;box-shadow:0 0 0 3px rgba(97,70,59,.08)}
-    .file-dropzone-title{font-weight:900;color:var(--primary2)}
-    .file-dropzone-summary{color:var(--muted);font-size:13px;line-height:1.6;max-width:100%;word-break:break-word}
-    .file-dropzone-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;padding:0;border:0;pointer-events:none}
-    @media(max-width:900px){.task-basic-grid{grid-template-columns:1fr}.task-advanced-toggle-row{align-items:flex-start}}
-</style>
+  </style>
 </head>
 <body>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
@@ -339,91 +324,17 @@
     </section>
   </main>
 
-  <div id="taskModal" class="modal-back hidden">
-    <div class="modal task-modal-simplified">
-      <div class="modal-head">
-        <h2 id="taskModalTitle">إضافة مهمة</h2>
-        <button class="btn" onclick="closeTaskModal()">إغلاق</button>
-      </div>
-      <input type="hidden" id="editTaskId">
-
-      <div class="form-grid task-basic-grid">
-        <div class="form-group full">
-          <label>عنوان المهمة</label>
-          <input id="taskTitle" placeholder="اكتب عنوانًا واضحًا ومختصرًا للمهمة">
-        </div>
-
-        <div class="form-group full">
-          <label>المسند إليه</label>
-          <div id="assigneePicker" class="checkbox-grid"></div>
-        </div>
-
-        <div class="form-group">
-          <label>تاريخ الاستحقاق</label>
-          <div class="date-picker-wrap" onclick="openTaskDuePicker(event)">
-            <span class="date-display-icon">📅</span>
-            <input id="taskDueDisplay" class="date-display-input" type="text" placeholder="DD/MM/YYYY" readonly aria-label="تاريخ الاستحقاق">
-            <input id="taskDue" class="native-date-overlay" type="date" lang="en-US" dir="ltr" onchange="syncTaskDueDisplay()">
-          </div>
-        </div>
-
-        <div class="form-group full">
-          <label>وصف المهمة</label>
-          <textarea id="taskDescription" placeholder="اكتب تفاصيل المهمة عند الحاجة"></textarea>
-        </div>
-
-        <div class="form-group full">
-          <label>مرفقات المهمة</label>
-          <div id="taskFilesDropzone" class="file-dropzone" role="button" tabindex="0" onclick="openTaskFilePicker()" onkeydown="handleTaskFileDropzoneKey(event)">
-            <div class="file-dropzone-title">اسحب الملفات هنا أو اضغط لاختيارها</div>
-            <div id="taskFilesSummary" class="file-dropzone-summary">لم يتم اختيار ملفات</div>
-            <input id="taskFiles" class="file-dropzone-input" type="file" multiple onchange="updateTaskFileSummary()">
-          </div>
-        </div>
-
-        <div class="form-group full task-advanced-toggle-row">
-          <button type="button" id="taskAdvancedToggle" class="btn btn-sm" onclick="toggleTaskAdvancedOptions()">خيارات إضافية</button>
-          <span class="meta">الأولوية ونوع التكليف والقطاع والقسم تظهر عند الحاجة فقط.</span>
-        </div>
-
-        <div id="taskAdvancedOptions" class="full task-advanced-options hidden">
-          <div class="form-grid">
-            <div class="form-group">
-              <label>الأولوية</label>
-              <select id="taskPriority">
-                <option value="منخفضة">منخفضة</option>
-                <option value="عادية" selected>عادية</option>
-                <option value="عالية">عالية</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>نوع التكليف</label>
-              <select id="assignmentType" onchange="handleAssignmentTypeChange()">
-                <option value="employees">موظفون محددون</option>
-                <option value="department_managers">مدراء أقسام</option>
-                <option value="sector_heads">رؤساء قطاعات</option>
-                <option value="all_department">كل إدارة</option>
-                <option value="all_sector">كل قطاع</option>
-                <option value="all_company">كل الشركة</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>القطاع المستهدف</label>
-              <select id="taskTargetSector" onchange="handleTargetSectorChange()"></select>
-            </div>
-            <div class="form-group">
-              <label>القسم المستهدف</label>
-              <select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="actions task-save-actions">
-        <button class="btn btn-primary" onclick="saveTask()">حفظ المهمة</button>
-      </div>
-    </div>
-  </div>
+  <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid">
+    <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle"></div>
+    <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
+    <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
+    <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
+    <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
+    <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
+    <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
+    <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription"></textarea></div>
+    <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
+  </div><div class="actions"><button class="btn btn-primary" onclick="saveTask()">حفظ المهمة</button></div></div></div>
 
   <div id="confirmModal" class="modal-back hidden">
     <div class="modal" style="width:min(560px,100%);">
@@ -4065,8 +3976,7 @@ permittedAssigneeUsers = function(){
   let rows = (state.users || []).filter(u => u.is_active !== false);
 
   if(type === 'employees'){
-    // الموظف يستطيع إسناد مهمة لموظف، مدير قسم، أو رئيس قطاع داخل نفس القطاع.
-    rows = rows.filter(u => ['employee','department_manager','sector_head'].includes(u.role));
+    rows = rows.filter(u => ['employee','department_manager'].includes(u.role));
   }
 
   if(type === 'department_managers'){
@@ -4090,9 +4000,9 @@ permittedAssigneeUsers = function(){
     rows = rows.filter(u => u.sector_id === sector);
   }
 
-  // عند اختيار قسم، تُعرض أسماء مستخدمي هذا القسم، مع إبقاء رئيس القطاع ظاهرًا لأنه غالبًا لا يرتبط بقسم محدد.
+  // عند اختيار قسم، تُعرض أسماء مستخدمي هذا القسم فقط.
   if(['employees','department_managers'].includes(type) && dept){
-    rows = rows.filter(u => u.department_id === dept || (type === 'employees' && u.role === 'sector_head'));
+    rows = rows.filter(u => u.department_id === dept);
   }
 
   if(isSectorHead() && !isAdmin() && type !== 'sector_heads'){
@@ -4352,10 +4262,7 @@ saveTask = async function(){
 
     if(currentRole() === 'employee'){
       targetSector = state.profile.sector_id || targetSector;
-      // إذا كانت المهمة مسندة لرئيس القطاع، يبقى القسم فارغًا لأن رئيس القطاع نطاقه القطاع وليس قسمًا محددًا.
-      targetDept = primaryUser?.role === 'sector_head'
-        ? null
-        : (primaryUser?.department_id || $('taskTargetDepartment').value || state.profile.department_id || null);
+      targetDept = primaryUser?.department_id || $('taskTargetDepartment').value || state.profile.department_id || null;
     }
 
     const attachment_urls = files.urls.length
@@ -7415,268 +7322,6 @@ init = async function(){
   }
 
   return await __passwordRecoveryFixInit();
-};
-
-
-/* === PATCH: السماح للموظف بإسناد مهمة لرئيس القطاع أو مدير القسم ===
-   خاص بلوحة متابعة مهام القطاعات فقط.
-   هذا التصحيح يبقي نموذج الإضافة بسيطًا، ويعرض ضمن اختيار المسند إليهم:
-   - موظفي نفس القطاع
-   - مدراء الأقسام داخل نفس القطاع
-   - رئيس القطاع داخل نفس القطاع، حتى لو كان قسم الموظف محددًا.
-*/
-const __employeeAssignManagersSectorHeadPermitted = permittedAssigneeUsers;
-permittedAssigneeUsers = function(){
-  const type = $('assignmentType')?.value || 'employees';
-
-  if(currentRole() === 'employee' && type === 'employees'){
-    const sectorId = state.profile?.sector_id || $('taskTargetSector')?.value || '';
-    const deptId = $('taskTargetDepartment')?.value || '';
-    let rows = (state.users || []).filter(u => u.is_active !== false);
-
-    rows = rows.filter(u =>
-      u.id === state.profile?.id ||
-      (
-        u.sector_id === sectorId &&
-        ['employee','department_manager','sector_head'].includes(u.role)
-      )
-    );
-
-    if(deptId){
-      rows = rows.filter(u =>
-        u.id === state.profile?.id ||
-        u.role === 'sector_head' ||
-        u.department_id === deptId
-      );
-    }
-
-    return addCurrentUserToRows(rows);
-  }
-
-  return __employeeAssignManagersSectorHeadPermitted();
-};
-
-
-/* === FINAL SAFE PATCH: تبسيط نموذج إضافة المهمة + المرفقات + إسناد الموظف للمدراء ===
-   خاص بلوحة متابعة مهام القطاعات فقط.
-*/
-function toggleTaskAdvancedOptions(force){
-  const box = $('taskAdvancedOptions');
-  const btn = $('taskAdvancedToggle');
-  if(!box) return;
-  const shouldShow = typeof force === 'boolean' ? force : box.classList.contains('hidden');
-  box.classList.toggle('hidden', !shouldShow);
-  if(btn) btn.textContent = shouldShow ? 'إخفاء الخيارات الإضافية' : 'خيارات إضافية';
-}
-
-function openTaskFilePicker(){
-  const input = $('taskFiles');
-  if(input) input.click();
-}
-
-function handleTaskFileDropzoneKey(event){
-  if(event.key === 'Enter' || event.key === ' '){
-    event.preventDefault();
-    openTaskFilePicker();
-  }
-}
-
-function updateTaskFileSummary(){
-  const input = $('taskFiles');
-  const summary = $('taskFilesSummary');
-  if(!input || !summary) return;
-  const files = [...(input.files || [])];
-  if(!files.length){
-    summary.textContent = 'لم يتم اختيار ملفات';
-    return;
-  }
-  summary.textContent = files.length === 1 ? files[0].name : `${files.length} ملفات مختارة`;
-}
-
-function setupTaskFileDropzone(){
-  const zone = $('taskFilesDropzone');
-  const input = $('taskFiles');
-  if(!zone || !input || zone.dataset.ready === '1') return;
-  zone.dataset.ready = '1';
-
-  ['dragenter','dragover'].forEach(eventName => {
-    zone.addEventListener(eventName, event => {
-      event.preventDefault();
-      event.stopPropagation();
-      zone.classList.add('dragover');
-    });
-  });
-
-  ['dragleave','drop'].forEach(eventName => {
-    zone.addEventListener(eventName, event => {
-      event.preventDefault();
-      event.stopPropagation();
-      zone.classList.remove('dragover');
-    });
-  });
-
-  zone.addEventListener('drop', event => {
-    const droppedFiles = [...(event.dataTransfer?.files || [])];
-    if(!droppedFiles.length) return;
-    const dt = new DataTransfer();
-    droppedFiles.forEach(file => dt.items.add(file));
-    input.files = dt.files;
-    updateTaskFileSummary();
-  });
-}
-
-/* إسناد الموظف: يظهر له موظفو نفس القطاع + مدراء الأقسام + رئيس القطاع ضمن نفس القطاع */
-const __finalSafePermittedAssigneeUsers = permittedAssigneeUsers;
-permittedAssigneeUsers = function(){
-  const type = $('assignmentType')?.value || 'employees';
-
-  if(currentRole() === 'employee' && type === 'employees'){
-    const sectorId = state.profile?.sector_id || '';
-    let rows = (state.users || []).filter(u =>
-      u &&
-      u.is_active !== false &&
-      (
-        u.id === state.profile?.id ||
-        (
-          u.sector_id === sectorId &&
-          ['employee','department_manager','sector_head'].includes(u.role)
-        )
-      )
-    );
-    return addCurrentUserToRows(rows);
-  }
-
-  return __finalSafePermittedAssigneeUsers();
-};
-
-/* ضمان أن فتح النموذج لا يتعطل بسبب خيارات مخفية أو مرفقات */
-const __finalSafeOpenTaskModal = openTaskModal;
-openTaskModal = function(){
-  __finalSafeOpenTaskModal();
-  toggleTaskAdvancedOptions(false);
-  setupTaskFileDropzone();
-  updateTaskFileSummary();
-  const due = $('taskDue');
-  if(due){
-    due.setAttribute('lang','en-US');
-    due.setAttribute('dir','ltr');
-    due.classList.add('date-en');
-  }
-};
-
-const __finalSafeClearTaskForm = clearTaskForm;
-clearTaskForm = function(){
-  __finalSafeClearTaskForm();
-  toggleTaskAdvancedOptions(false);
-  updateTaskFileSummary();
-};
-
-const __finalSafeEditTask = editTask;
-editTask = function(taskId){
-  __finalSafeEditTask(taskId);
-  setupTaskFileDropzone();
-  updateTaskFileSummary();
-};
-
-
-/* === ULTIMATE FIX: date calendar display + employee assignee permissions ===
-   خاص بلوحة متابعة مهام القطاعات فقط.
-   - يبقي تاريخ الاستحقاق كتقويم أصلي، ويعرض للمستخدم DD/MM/YYYY بدل نص المتصفح العربي.
-   - يتيح للموظف إسناد المهمة لأي مستخدم نشط داخل نفس القطاع باستثناء مدير النظام والرئيس التنفيذي، وهذا يشمل مدير القسم ورئيس القطاع.
-*/
-function formatTaskDueDisplay(value){
-  if(!value) return '';
-  const parts = String(value).split('-');
-  if(parts.length !== 3) return value;
-  return `${parts[2].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[0]}`;
-}
-
-function syncTaskDueDisplay(){
-  const due = $('taskDue');
-  const display = $('taskDueDisplay');
-  if(!due || !display) return;
-  display.value = formatTaskDueDisplay(due.value);
-}
-
-function openTaskDuePicker(event){
-  const due = $('taskDue');
-  if(!due) return;
-  if(event && event.target && event.target.id === 'taskDue') return;
-  try{
-    if(typeof due.showPicker === 'function'){
-      due.showPicker();
-      return;
-    }
-  }catch(e){}
-  try{ due.focus(); due.click(); }catch(e){}
-}
-
-function setupTaskDueDisplay(){
-  const due = $('taskDue');
-  const display = $('taskDueDisplay');
-  if(!due || !display) return;
-  due.setAttribute('lang','en-US');
-  due.setAttribute('dir','ltr');
-  if(due.dataset.displayReady !== '1'){
-    due.dataset.displayReady = '1';
-    due.addEventListener('change', syncTaskDueDisplay);
-    due.addEventListener('input', syncTaskDueDisplay);
-  }
-  syncTaskDueDisplay();
-}
-
-const __ultimatePermittedAssigneeUsers = permittedAssigneeUsers;
-permittedAssigneeUsers = function(){
-  const type = $('assignmentType')?.value || 'employees';
-  if(currentRole() === 'employee' && type === 'employees'){
-    const sectorId = state.profile?.sector_id || '';
-    let rows = (state.users || []).filter(u => {
-      if(!u || u.is_active === false) return false;
-      if(u.id === state.profile?.id) return true;
-      if(!sectorId || u.sector_id !== sectorId) return false;
-      return !['admin','ceo'].includes(String(u.role || '').trim());
-    });
-    rows.sort((a,b)=>{
-      const order = {sector_head:1, department_manager:2, employee:3};
-      const ar = order[a.role] || 9;
-      const br = order[b.role] || 9;
-      if(ar !== br) return ar - br;
-      return String(a.name||'').localeCompare(String(b.name||''),'ar');
-    });
-    return addCurrentUserToRows(rows);
-  }
-  return __ultimatePermittedAssigneeUsers();
-};
-
-const __ultimateRenderAssigneePicker = renderAssigneePicker;
-renderAssigneePicker = function(){
-  __ultimateRenderAssigneePicker();
-  if(currentRole() !== 'employee') return;
-  const picker = $('assigneePicker');
-  if(!picker) return;
-  const hasManagerOrHead = permittedAssigneeUsers().some(u => ['sector_head','department_manager'].includes(u.role));
-  if(!hasManagerOrHead){
-    picker.insertAdjacentHTML('beforeend','<div class="meta" style="grid-column:1/-1">تنبيه: لم يتم العثور على رئيس قطاع أو مدير قسم نشط داخل قطاعك ضمن بيانات المستخدمين.</div>');
-  }
-};
-
-const __ultimateOpenTaskModal = openTaskModal;
-openTaskModal = function(){
-  __ultimateOpenTaskModal();
-  setupTaskDueDisplay();
-  renderAssigneePicker();
-};
-
-const __ultimateClearTaskForm = clearTaskForm;
-clearTaskForm = function(){
-  __ultimateClearTaskForm();
-  setupTaskDueDisplay();
-};
-
-const __ultimateEditTask = editTask;
-editTask = function(taskId){
-  __ultimateEditTask(taskId);
-  setupTaskDueDisplay();
 };
 
 init();
