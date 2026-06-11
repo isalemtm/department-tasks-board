@@ -119,6 +119,12 @@
       .sector-dashboard-section .executive-employees-row{grid-column:1 / -1;grid-template-columns:1fr;max-width:none;}
     }
 
+
+    /* === تبسيط نموذج إضافة المهمة وتثبيت صيغة التاريخ الإنجليزية === */
+    .task-quick-form .date-ltr{direction:ltr;text-align:left;font-family:Tahoma, Arial, sans-serif;letter-spacing:.5px}
+    #taskAdvancedFields{border:1px dashed var(--line);border-radius:14px;padding:14px;background:#fbf8f5;margin-top:-6px}
+    #taskAdvancedToggle{background:#f4f0ec;color:var(--primary2)}
+
   </style>
 </head>
 <body>
@@ -324,16 +330,19 @@
     </section>
   </main>
 
-  <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid">
-    <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle"></div>
-    <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
-    <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
-    <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
-    <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
-    <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
-    <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
-    <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription"></textarea></div>
+  <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid task-quick-form">
+    <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle" placeholder="اكتب عنوان المهمة باختصار"></div>
+    <div class="form-group full"><label>المسند إليه</label><div id="assigneePicker" class="checkbox-grid"></div></div>
+    <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="text" class="date-ltr" dir="ltr" inputmode="numeric" autocomplete="off" placeholder="DD/MM/YYYY"></div>
+    <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription" placeholder="اختياري: اكتب تفاصيل المهمة"></textarea></div>
     <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
+    <div class="form-group full"><button type="button" id="taskAdvancedToggle" class="btn btn-sm" onclick="toggleTaskAdvancedOptions()">خيارات إضافية</button><span class="meta" style="margin-inline-start:8px;">الأولوية ونوع التكليف والقطاع والقسم</span></div>
+    <div id="taskAdvancedFields" class="form-grid full hidden">
+      <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
+      <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
+      <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
+      <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
+    </div>
   </div><div class="actions"><button class="btn btn-primary" onclick="saveTask()">حفظ المهمة</button></div></div></div>
 
   <div id="confirmModal" class="modal-back hidden">
@@ -7322,6 +7331,99 @@ init = async function(){
   }
 
   return await __passwordRecoveryFixInit();
+};
+
+
+/* === PATCH: تبسيط نموذج إضافة المهمة وتاريخ DD/MM/YYYY ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+*/
+function convertArabicDigitsToEnglish(value=''){
+  const map={'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'};
+  return String(value||'').replace(/[٠-٩۰-۹]/g, d => map[d] || d);
+}
+function normalizeTaskDueDateInput(value=''){
+  const raw=convertArabicDigitsToEnglish(value).trim();
+  if(!raw) return null;
+  const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(iso) return raw;
+  const m=raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(!m) return undefined;
+  const day=Number(m[1]), month=Number(m[2]), year=Number(m[3]);
+  const d=new Date(year, month-1, day);
+  if(d.getFullYear()!==year || d.getMonth()!==month-1 || d.getDate()!==day) return undefined;
+  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function formatTaskDueDateForInput(value=''){
+  const raw=String(value||'').trim();
+  const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return raw;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+function getTaskDueDateForSave(){
+  const parsed=normalizeTaskDueDateInput($('taskDue')?.value||'');
+  if(parsed===undefined){
+    showToast('صيغة تاريخ الاستحقاق يجب أن تكون DD/MM/YYYY، مثال: 25/06/2026','error',6500);
+    return {ok:false,value:null};
+  }
+  return {ok:true,value:parsed};
+}
+function attachTaskDueDateMask(){
+  const el=$('taskDue');
+  if(!el || el.dataset.dateMaskAttached==='1') return;
+  el.dataset.dateMaskAttached='1';
+  el.addEventListener('input',()=>{
+    const old=el.value;
+    let v=convertArabicDigitsToEnglish(old).replace(/[^0-9]/g,'').slice(0,8);
+    if(v.length>4) v=`${v.slice(0,2)}/${v.slice(2,4)}/${v.slice(4)}`;
+    else if(v.length>2) v=`${v.slice(0,2)}/${v.slice(2)}`;
+    el.value=v;
+  });
+}
+function setTaskAdvancedOptionsVisible(visible){
+  const box=$('taskAdvancedFields');
+  const btn=$('taskAdvancedToggle');
+  if(!box) return;
+  box.classList.toggle('hidden',!visible);
+  if(btn) btn.textContent=visible?'إخفاء الخيارات الإضافية':'خيارات إضافية';
+}
+function toggleTaskAdvancedOptions(){
+  const box=$('taskAdvancedFields');
+  setTaskAdvancedOptionsVisible(box?.classList.contains('hidden'));
+}
+const __simpleTaskOriginalOpenTaskModal = openTaskModal;
+openTaskModal = function(){
+  __simpleTaskOriginalOpenTaskModal();
+  attachTaskDueDateMask();
+  setTaskAdvancedOptionsVisible(false);
+  if($('taskDue')) $('taskDue').placeholder='DD/MM/YYYY';
+};
+const __simpleTaskOriginalEditTask = editTask;
+editTask = function(taskId){
+  __simpleTaskOriginalEditTask(taskId);
+  attachTaskDueDateMask();
+  const t=state.tasks.find(x=>x.id===taskId);
+  if(t && $('taskDue')) $('taskDue').value=formatTaskDueDateForInput(t.due_date||'');
+  setTaskAdvancedOptionsVisible(true);
+};
+const __simpleTaskOriginalClearTaskForm = clearTaskForm;
+clearTaskForm = function(){
+  __simpleTaskOriginalClearTaskForm();
+  attachTaskDueDateMask();
+  if($('taskDue')) $('taskDue').placeholder='DD/MM/YYYY';
+  setTaskAdvancedOptionsVisible(false);
+};
+const __simpleTaskOriginalSaveTask = saveTask;
+saveTask = async function(){
+  const due=getTaskDueDateForSave();
+  if(!due.ok) return;
+  const el=$('taskDue');
+  const original=el ? el.value : '';
+  if(el) el.value=due.value || '';
+  try{
+    await __simpleTaskOriginalSaveTask();
+  }finally{
+    if(el && !$('taskModal')?.classList.contains('hidden')) el.value=original;
+  }
 };
 
 init();
