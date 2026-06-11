@@ -360,7 +360,11 @@
 
         <div class="form-group">
           <label>تاريخ الاستحقاق</label>
-          <input id="taskDue" type="date" lang="en-US" dir="ltr" class="date-en">
+          <div class="date-picker-wrap" onclick="openTaskDuePicker(event)">
+            <span class="date-display-icon">📅</span>
+            <input id="taskDueDisplay" class="date-display-input" type="text" placeholder="DD/MM/YYYY" readonly aria-label="تاريخ الاستحقاق">
+            <input id="taskDue" class="native-date-overlay" type="date" lang="en-US" dir="ltr" onchange="syncTaskDueDisplay()">
+          </div>
         </div>
 
         <div class="form-group full">
@@ -7572,6 +7576,107 @@ editTask = function(taskId){
   __finalSafeEditTask(taskId);
   setupTaskFileDropzone();
   updateTaskFileSummary();
+};
+
+
+/* === ULTIMATE FIX: date calendar display + employee assignee permissions ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+   - يبقي تاريخ الاستحقاق كتقويم أصلي، ويعرض للمستخدم DD/MM/YYYY بدل نص المتصفح العربي.
+   - يتيح للموظف إسناد المهمة لأي مستخدم نشط داخل نفس القطاع باستثناء مدير النظام والرئيس التنفيذي، وهذا يشمل مدير القسم ورئيس القطاع.
+*/
+function formatTaskDueDisplay(value){
+  if(!value) return '';
+  const parts = String(value).split('-');
+  if(parts.length !== 3) return value;
+  return `${parts[2].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[0]}`;
+}
+
+function syncTaskDueDisplay(){
+  const due = $('taskDue');
+  const display = $('taskDueDisplay');
+  if(!due || !display) return;
+  display.value = formatTaskDueDisplay(due.value);
+}
+
+function openTaskDuePicker(event){
+  const due = $('taskDue');
+  if(!due) return;
+  if(event && event.target && event.target.id === 'taskDue') return;
+  try{
+    if(typeof due.showPicker === 'function'){
+      due.showPicker();
+      return;
+    }
+  }catch(e){}
+  try{ due.focus(); due.click(); }catch(e){}
+}
+
+function setupTaskDueDisplay(){
+  const due = $('taskDue');
+  const display = $('taskDueDisplay');
+  if(!due || !display) return;
+  due.setAttribute('lang','en-US');
+  due.setAttribute('dir','ltr');
+  if(due.dataset.displayReady !== '1'){
+    due.dataset.displayReady = '1';
+    due.addEventListener('change', syncTaskDueDisplay);
+    due.addEventListener('input', syncTaskDueDisplay);
+  }
+  syncTaskDueDisplay();
+}
+
+const __ultimatePermittedAssigneeUsers = permittedAssigneeUsers;
+permittedAssigneeUsers = function(){
+  const type = $('assignmentType')?.value || 'employees';
+  if(currentRole() === 'employee' && type === 'employees'){
+    const sectorId = state.profile?.sector_id || '';
+    let rows = (state.users || []).filter(u => {
+      if(!u || u.is_active === false) return false;
+      if(u.id === state.profile?.id) return true;
+      if(!sectorId || u.sector_id !== sectorId) return false;
+      return !['admin','ceo'].includes(String(u.role || '').trim());
+    });
+    rows.sort((a,b)=>{
+      const order = {sector_head:1, department_manager:2, employee:3};
+      const ar = order[a.role] || 9;
+      const br = order[b.role] || 9;
+      if(ar !== br) return ar - br;
+      return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    });
+    return addCurrentUserToRows(rows);
+  }
+  return __ultimatePermittedAssigneeUsers();
+};
+
+const __ultimateRenderAssigneePicker = renderAssigneePicker;
+renderAssigneePicker = function(){
+  __ultimateRenderAssigneePicker();
+  if(currentRole() !== 'employee') return;
+  const picker = $('assigneePicker');
+  if(!picker) return;
+  const hasManagerOrHead = permittedAssigneeUsers().some(u => ['sector_head','department_manager'].includes(u.role));
+  if(!hasManagerOrHead){
+    picker.insertAdjacentHTML('beforeend','<div class="meta" style="grid-column:1/-1">تنبيه: لم يتم العثور على رئيس قطاع أو مدير قسم نشط داخل قطاعك ضمن بيانات المستخدمين.</div>');
+  }
+};
+
+const __ultimateOpenTaskModal = openTaskModal;
+openTaskModal = function(){
+  __ultimateOpenTaskModal();
+  setupTaskDueDisplay();
+  renderAssigneePicker();
+};
+
+const __ultimateClearTaskForm = clearTaskForm;
+clearTaskForm = function(){
+  __ultimateClearTaskForm();
+  setupTaskDueDisplay();
+};
+
+const __ultimateEditTask = editTask;
+editTask = function(taskId){
+  __ultimateEditTask(taskId);
+  setupTaskDueDisplay();
 };
 
 init();
