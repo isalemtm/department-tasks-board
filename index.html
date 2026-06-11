@@ -324,16 +324,26 @@
     </section>
   </main>
 
-  <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid">
-    <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle"></div>
-    <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
+  <div id="taskModal" class="modal-back hidden"><div class="modal"><div class="modal-head"><h2 id="taskModalTitle">إضافة مهمة</h2><button class="btn" onclick="closeTaskModal()">إغلاق</button></div><input type="hidden" id="editTaskId"><div class="form-grid task-short-form">
+    <div class="form-group full"><label>عنوان المهمة</label><input id="taskTitle" placeholder="اكتب عنوانًا واضحًا للمهمة"></div>
+    <div class="form-group full"><label>المسند إليه</label><div id="assigneePicker" class="checkbox-grid"></div></div>
     <div class="form-group"><label>تاريخ الاستحقاق</label><input id="taskDue" type="date"></div>
-    <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
-    <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
-    <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
-    <div class="form-group full"><label>المسند إليهم</label><div id="assigneePicker" class="checkbox-grid"></div></div>
-    <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription"></textarea></div>
-    <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
+    <div class="form-group full"><label>وصف المهمة</label><textarea id="taskDescription" placeholder="اكتب المطلوب باختصار..."></textarea></div>
+
+    <div class="form-group full">
+      <button type="button" id="taskAdvancedToggle" class="btn" onclick="toggleTaskAdvancedOptions()">خيارات إضافية</button>
+      <span class="meta" style="margin-inline-start:8px;">الأولوية، نوع التكليف، القطاع، القسم، والمرفقات.</span>
+    </div>
+
+    <div id="taskAdvancedOptions" class="task-advanced-options full hidden">
+      <div class="form-grid">
+        <div class="form-group"><label>الأولوية</label><select id="taskPriority"><option value="منخفضة">منخفضة</option><option value="عادية" selected>عادية</option><option value="عالية">عالية</option></select></div>
+        <div class="form-group"><label>نوع التكليف</label><select id="assignmentType" onchange="handleAssignmentTypeChange()"><option value="employees">موظفون محددون</option><option value="department_managers">مدراء أقسام</option><option value="sector_heads">رؤساء قطاعات</option><option value="all_department">كل إدارة</option><option value="all_sector">كل قطاع</option><option value="all_company">كل الشركة</option></select></div>
+        <div class="form-group"><label>القطاع المستهدف</label><select id="taskTargetSector" onchange="handleTargetSectorChange()"></select></div>
+        <div class="form-group"><label>القسم المستهدف</label><select id="taskTargetDepartment" onchange="renderAssigneePicker()"></select></div>
+        <div class="form-group full"><label>مرفقات المهمة</label><input id="taskFiles" type="file" multiple></div>
+      </div>
+    </div>
   </div><div class="actions"><button class="btn btn-primary" onclick="saveTask()">حفظ المهمة</button></div></div></div>
 
   <div id="confirmModal" class="modal-back hidden">
@@ -7322,6 +7332,255 @@ init = async function(){
   }
 
   return await __passwordRecoveryFixInit();
+};
+
+
+/* === PATCH: اختصار نموذج إضافة المهمة + سحب وإفلات لكل المرفقات === */
+function installShortTaskAndDropzoneStyle(){
+  if(document.getElementById('shortTaskAndDropzoneStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='shortTaskAndDropzoneStyle';
+  style.textContent=`
+    .task-short-form .checkbox-grid{
+      max-height:230px;
+      overflow:auto;
+    }
+
+    .task-advanced-options{
+      grid-column:1/-1;
+      border:1px dashed #d8cac0;
+      border-radius:16px;
+      background:#fffdfb;
+      padding:14px;
+      margin-top:-4px;
+    }
+
+    .file-input-hidden-for-dropzone{
+      position:absolute!important;
+      width:1px!important;
+      height:1px!important;
+      opacity:0!important;
+      pointer-events:none!important;
+    }
+
+    .file-drop-zone{
+      border:1.5px dashed #d8cac0;
+      border-radius:16px;
+      background:#fffdfb;
+      padding:16px;
+      min-height:86px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      cursor:pointer;
+      transition:.18s ease;
+      color:var(--primary2);
+    }
+
+    .file-drop-zone:hover,
+    .file-drop-zone.drag-over{
+      border-color:var(--primary);
+      background:#fbf8f5;
+      box-shadow:0 0 0 3px rgba(97,70,59,.08);
+      transform:translateY(-1px);
+    }
+
+    .file-drop-zone strong{
+      display:block;
+      font-size:15px;
+      color:var(--primary2);
+      margin-bottom:4px;
+    }
+
+    .file-drop-zone span{
+      display:block;
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.7;
+    }
+
+    .file-drop-zone .file-names{
+      margin-top:8px;
+      color:var(--primary);
+      font-size:12px;
+      line-height:1.7;
+      word-break:break-word;
+    }
+
+    .file-drop-zone.compact{
+      min-height:64px;
+      padding:12px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function toggleTaskAdvancedOptions(force){
+  const box=$('taskAdvancedOptions');
+  const btn=$('taskAdvancedToggle');
+  if(!box) return;
+
+  const show = typeof force === 'boolean' ? force : box.classList.contains('hidden');
+  box.classList.toggle('hidden', !show);
+
+  if(btn) btn.textContent = show ? 'إخفاء الخيارات الإضافية' : 'خيارات إضافية';
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+}
+
+function inputLabelText(input){
+  const label=input?.closest('.form-group')?.querySelector('label')?.textContent?.trim();
+  if(label) return label;
+  if(input?.id?.includes('commentFiles')) return 'مرفقات التعليق';
+  if(input?.id==='taskFiles') return 'مرفقات المهمة';
+  return 'المرفقات';
+}
+
+function updateDropzoneFileNames(input, zone){
+  const files=[...(input?.files || [])];
+  const names=files.map(f=>f.name);
+  const namesBox=zone.querySelector('.file-names');
+
+  if(!namesBox) return;
+
+  namesBox.textContent = names.length
+    ? names.join('، ')
+    : 'لم يتم اختيار ملف بعد.';
+}
+
+function setInputFilesFromDrop(input, files){
+  const dt=new DataTransfer();
+  [...(files||[])].forEach(file=>dt.items.add(file));
+  input.files=dt.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+}
+
+function enhanceAllFileInputsForDropzone(root=document){
+  installShortTaskAndDropzoneStyle();
+
+  const inputs=[...root.querySelectorAll('input[type="file"]')];
+
+  inputs.forEach(input=>{
+    if(input.dataset.dropzoneEnhanced==='1') return;
+
+    input.dataset.dropzoneEnhanced='1';
+
+    const zone=document.createElement('div');
+    zone.className='file-drop-zone';
+
+    if(input.id && input.id.startsWith('commentFiles-')) zone.classList.add('compact');
+
+    const label=inputLabelText(input);
+    const multiple=input.hasAttribute('multiple');
+
+    zone.innerHTML=`
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>اضغط لاختيار ملف${multiple?'ات':''} أو اسحب وأفلت هنا</span>
+        <div class="file-names">لم يتم اختيار ملف بعد.</div>
+      </div>
+    `;
+
+    input.classList.add('file-input-hidden-for-dropzone');
+    input.insertAdjacentElement('afterend', zone);
+
+    zone.addEventListener('click',()=>input.click());
+
+    zone.addEventListener('dragover',event=>{
+      event.preventDefault();
+      zone.classList.add('drag-over');
+    });
+
+    zone.addEventListener('dragleave',()=>{
+      zone.classList.remove('drag-over');
+    });
+
+    zone.addEventListener('drop',event=>{
+      event.preventDefault();
+      zone.classList.remove('drag-over');
+
+      const files=[...(event.dataTransfer?.files || [])];
+      if(!files.length) return;
+
+      if(!input.hasAttribute('multiple') && files.length>1){
+        setInputFilesFromDrop(input, files.slice(0,1));
+      }else{
+        setInputFilesFromDrop(input, files);
+      }
+    });
+
+    input.addEventListener('change',()=>updateDropzoneFileNames(input, zone));
+
+    updateDropzoneFileNames(input, zone);
+  });
+}
+
+const __shortTaskOriginalOpenTaskModal = openTaskModal;
+openTaskModal = function(){
+  __shortTaskOriginalOpenTaskModal();
+
+  $('taskModalTitle').textContent='إضافة مهمة';
+  $('assignmentType').value='employees';
+  $('taskPriority').value='عادية';
+
+  toggleTaskAdvancedOptions(false);
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+};
+
+const __shortTaskOriginalEditTask = typeof editTask === 'function' ? editTask : null;
+if(__shortTaskOriginalEditTask){
+  editTask = function(taskId){
+    __shortTaskOriginalEditTask(taskId);
+    toggleTaskAdvancedOptions(true);
+    setTimeout(enhanceAllFileInputsForDropzone, 0);
+  };
+}
+
+const __dropzoneOriginalRenderTasks = renderTasks;
+renderTasks = function(){
+  __dropzoneOriginalRenderTasks();
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+};
+
+const __dropzoneOriginalRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __dropzoneOriginalRenderAdmin();
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+};
+
+const __dropzoneOriginalShowPage = showPage;
+showPage = function(p){
+  __dropzoneOriginalShowPage(p);
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+};
+
+const __dropzoneOriginalShowApp = showApp;
+showApp = function(){
+  __dropzoneOriginalShowApp();
+  setTimeout(enhanceAllFileInputsForDropzone, 0);
+};
+
+function installDropzoneMutationObserver(){
+  if(window.__dropzoneMutationObserverInstalled) return;
+  window.__dropzoneMutationObserverInstalled=true;
+
+  let timer=null;
+  const observer=new MutationObserver(()=>{
+    clearTimeout(timer);
+    timer=setTimeout(()=>enhanceAllFileInputsForDropzone(),120);
+  });
+
+  observer.observe(document.body,{childList:true,subtree:true});
+}
+
+const __shortTaskDropzoneOriginalInit = init;
+init = async function(){
+  const result=await __shortTaskDropzoneOriginalInit();
+  installShortTaskAndDropzoneStyle();
+  enhanceAllFileInputsForDropzone();
+  installDropzoneMutationObserver();
+  return result;
 };
 
 init();
