@@ -7583,6 +7583,398 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: إشعارات البريد للحالات المهمة فقط: تعليق، تحويل، اقتراب الاستحقاق، تأخر المهمة === */
+function isValidEmailValue(email){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email||'').trim().toLowerCase());
+}
+
+function uniqueEmailsFromUserIds(userIds=[], excludeCurrent=true){
+  const emails=[];
+  const seen=new Set();
+  const currentEmail=String(state.profile?.email||'').trim().toLowerCase();
+
+  (userIds||[]).forEach(uid=>{
+    const u=(state.users||[]).find(x=>x.id===uid);
+    const email=String(u?.email||'').trim().toLowerCase();
+
+    if(!email || !isValidEmailValue(email)) return;
+    if(excludeCurrent && currentEmail && email===currentEmail) return;
+    if(seen.has(email)) return;
+
+    seen.add(email);
+    emails.push(email);
+  });
+
+  return emails;
+}
+
+function linkedUserIdsForTask(task){
+  if(!task) return [];
+  const ids=[];
+  if(task.primary_responsible_id) ids.push(task.primary_responsible_id);
+  if(task.created_by) ids.push(task.created_by);
+  (state.assignees||[])
+    .filter(a=>a.task_id===task.id)
+    .forEach(a=>ids.push(a.user_id));
+
+  return [...new Set(ids.filter(Boolean))];
+}
+
+async function notifyTaskEventByEmail({task, userIds, subject, heading, intro, details='', actorName='', excludeCurrent=true}){
+  try{
+    if(!task || !Array.isArray(userIds) || !userIds.length) return {ok:true, skipped:true};
+
+    const recipients=uniqueEmailsFromUserIds(userIds, excludeCurrent);
+    if(!recipients.length) return {ok:true, skipped:true};
+
+    const {data,error}=await supabaseClient.functions.invoke('send-task-notification',{
+      body:{
+        to:recipients,
+        notificationType:'custom',
+        subject,
+        heading,
+        intro,
+        details,
+        taskId:task.id,
+        taskTitle:task.title||'',
+        taskDescription:task.description||'',
+        priority:task.priority||'',
+        dueDate:task.due_date||'',
+        assignedBy:actorName || state.profile?.name || 'النظام'
+      }
+    });
+
+    if(error) throw error;
+    if(data && data.ok===false) throw new Error(data.error || 'تعذر إرسال الإشعار.');
+
+    return {ok:true,data};
+  }catch(e){
+    console.error('notifyTaskEventByEmail failed:', e);
+    return {ok:false,error:e};
+  }
+}
+
+function transferReviewUserIds(task){
+  if(!task) return [];
+
+  const ids=[];
+  const ownerSector=task.owner_sector_id;
+  const targetSector=task.target_sector_id;
+  const ownerDept=task.owner_department_id;
+  const targetDept=task.target_department_id;
+
+  (state.users||[]).filter(u=>u.is_active!==false).forEach(u=>{
+    if(u.role==='admin') ids.push(u.id);
+    if(u.role==='ceo') ids.push(u.id);
+    if(u.role==='sector_head' && (u.sector_id===ownerSector || u.sector_id===targetSector)) ids.push(u.id);
+    if(u.role==='department_manager' && (u.department_id===ownerDept || u.department_id===targetDept)) ids.push(u.id);
+  });
+
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function daysUntilDueDate(dateValue){
+  if(!dateValue) return null;
+
+  const today=new Date();
+  today.setHours(0,0,0,0);
+
+  const due=new Date(dateValue);
+  due.setHours(0,0,0,0);
+
+  if(Number.isNaN(due.getTime())) return null;
+
+  return Math.ceil((due - today) / 86400000);
+}
+
+function notificationOnceKey(kind, task){
+  return `department-tasks-board:${kind}:${task?.id||''}:${task?.due_date||''}`;
+}
+
+function wasNotificationSentOnce(kind, task){
+  try{
+    return localStorage.getItem(notificationOnceKey(kind, task))==='1';
+  }catch(e){
+    return false;
+  }
+}
+
+function markNotificationSentOnce(kind, task){
+  try{
+    localStorage.setItem(notificationOnceKey(kind, task), '1');
+  }catch(e){}
+}
+
+/* التعليق الجديد: إشعار للمسؤولين عن المهمة فقط، باستثناء كاتب التعليق */
+addComment = async function(taskId){
+  try{
+    const task=state.tasks.find(t=>t.id===taskId);
+    const text=$('comment-'+taskId).value.trim();
+    const files=await uploadFiles($('commentFiles-'+taskId).files,'comments/'+taskId);
+
+    if(!text && !files.urls.length){
+      showToast('اكتب تعليقًا أو أرفق ملفًا.','error');
+      return;
+    }
+
+    const finalText=text || 'مرفق بدون تعليق';
+
+    const {error}=await supabaseClient.from('task_comments').insert({
+      task_id:taskId,
+      user_id:state.profile.id,
+      comment_text:finalText,
+      attachment_urls:files.urls,
+      attachment_names:files.names
+    });
+
+    if(error) throw error;
+
+    await notifyTaskEventByEmail({
+      task,
+      userIds:linkedUserIdsForTask(task),
+      subject:`تعليق جديد على المهمة - ${task?.title || 'مهمة'}`,
+      heading:'تعليق جديد على مهمة',
+      intro:'تمت إضافة تعليق جديد على مهمة مرتبطة بك في لوحة متابعة مهام القطاعات.',
+      details:finalText,
+      actorName:state.profile?.name || 'النظام',
+      excludeCurrent:true
+    });
+
+    await loadAll();
+    renderTasks();
+    showToast('تمت إضافة التعليق.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر إضافة التعليق.','error');
+  }
+};
+
+/* طلب تحويل مهمة: إشعار للمراجعين المعنيين */
+requestTaskTransfer = async function(taskId,toUserId,reason=''){
+  try{
+    const task=state.tasks.find(t=>t.id===taskId);
+
+    if(!canRequestTransferTask(task) || canDirectTransferTask(task)){
+      return showToast('لا تملك صلاحية طلب تحويل هذه المهمة.','error');
+    }
+
+    const {error}=await supabaseClient.from('task_transfer_requests').insert({
+      task_id:taskId,
+      requested_by:state.profile.id,
+      from_user_id:state.profile.id,
+      to_user_id:toUserId,
+      reason,
+      status:'pending'
+    });
+
+    if(error) throw error;
+
+    await notifyTaskEventByEmail({
+      task,
+      userIds:transferReviewUserIds(task),
+      subject:`طلب تحويل مهمة - ${task?.title || 'مهمة'}`,
+      heading:'طلب تحويل مهمة بانتظار الاعتماد',
+      intro:'يوجد طلب تحويل مهمة يحتاج مراجعتك في لوحة متابعة مهام القطاعات.',
+      details:`طالب التحويل: ${state.profile?.name || '—'}\nالموظف الجديد: ${nameOfUser(toUserId)}\nالسبب: ${reason || '—'}`,
+      actorName:state.profile?.name || 'النظام',
+      excludeCurrent:true
+    });
+
+    cancelTransferChooser(taskId);
+    showToast('تم إرسال طلب تحويل المهمة للاعتماد.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر إرسال طلب التحويل.','error');
+  }
+};
+
+/* التحويل المباشر: إشعار للموظف الجديد والموظف السابق */
+directTransferTask = async function(taskId,toUserId){
+  try{
+    const task=state.tasks.find(t=>t.id===taskId);
+
+    if(!canDirectTransferTask(task)){
+      return showToast('ليست لديك صلاحية تحويل هذه المهمة مباشرة.','error');
+    }
+
+    const fromUserId=task.primary_responsible_id || getTaskAssignees(task.id)[0]?.id || state.profile.id;
+
+    const ok=await askConfirm({
+      title:'تحويل المهمة',
+      message:`سيتم تحويل المهمة إلى: ${nameOfUser(toUserId)}. هل تريد المتابعة؟`,
+      okText:'تحويل',
+      danger:false
+    });
+
+    if(!ok) return;
+
+    await applyTaskTransfer(taskId,fromUserId,toUserId);
+
+    await notifyTaskEventByEmail({
+      task,
+      userIds:[fromUserId,toUserId],
+      subject:`تحويل مهمة - ${task?.title || 'مهمة'}`,
+      heading:'تم تحويل مهمة',
+      intro:'تم تحويل مهمة في لوحة متابعة مهام القطاعات.',
+      details:`من: ${nameOfUser(fromUserId)}\nإلى: ${nameOfUser(toUserId)}`,
+      actorName:state.profile?.name || 'النظام',
+      excludeCurrent:true
+    });
+
+    await loadAll();
+    renderTasks();
+    renderDashboard();
+    renderAdmin();
+    showToast('تم تحويل المهمة بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تحويل المهمة.','error');
+  }
+};
+
+/* اعتماد التحويل: إشعار للموظف الجديد والسابق وطالب التحويل */
+approveTransferRequest = async function(requestId){
+  try{
+    const req=state.transferRequests.find(r=>r.id===requestId);
+
+    if(!req){
+      return showToast('لم يتم العثور على طلب التحويل.','error');
+    }
+
+    const task=state.tasks.find(t=>t.id===req.task_id);
+
+    await applyTaskTransfer(req.task_id,req.from_user_id,req.to_user_id);
+
+    const {error}=await supabaseClient.from('task_transfer_requests').update({
+      status:'approved',
+      reviewed_by:state.profile.id,
+      reviewed_at:new Date().toISOString()
+    }).eq('id',requestId);
+
+    if(error) throw error;
+
+    await notifyTaskEventByEmail({
+      task,
+      userIds:[req.requested_by, req.from_user_id, req.to_user_id],
+      subject:`اعتماد تحويل مهمة - ${task?.title || 'مهمة'}`,
+      heading:'تم اعتماد تحويل مهمة',
+      intro:'تم اعتماد طلب تحويل مهمة في لوحة متابعة مهام القطاعات.',
+      details:`من: ${nameOfUser(req.from_user_id)}\nإلى: ${nameOfUser(req.to_user_id)}`,
+      actorName:state.profile?.name || 'النظام',
+      excludeCurrent:true
+    });
+
+    await loadAll();
+    renderTasks();
+    renderDashboard();
+    renderAdmin();
+    showToast('تم اعتماد تحويل المهمة.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر اعتماد طلب التحويل.','error');
+  }
+};
+
+/* رفض التحويل: إشعار لطالب التحويل */
+rejectTransferRequest = async function(requestId){
+  try{
+    const req=state.transferRequests.find(r=>r.id===requestId);
+    const task=state.tasks.find(t=>t.id===req?.task_id);
+
+    const {error}=await supabaseClient.from('task_transfer_requests').update({
+      status:'rejected',
+      reviewed_by:state.profile.id,
+      reviewed_at:new Date().toISOString()
+    }).eq('id',requestId);
+
+    if(error) throw error;
+
+    if(req){
+      await notifyTaskEventByEmail({
+        task,
+        userIds:[req.requested_by],
+        subject:`رفض تحويل مهمة - ${task?.title || 'مهمة'}`,
+        heading:'تم رفض طلب تحويل مهمة',
+        intro:'تم رفض طلب تحويل مهمة في لوحة متابعة مهام القطاعات.',
+        details:`المهمة: ${task?.title || '—'}`,
+        actorName:state.profile?.name || 'النظام',
+        excludeCurrent:true
+      });
+    }
+
+    await loadAll();
+    renderAdmin();
+    showToast('تم رفض طلب التحويل.','info');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر رفض طلب التحويل.','error');
+  }
+};
+
+/* اقتراب الاستحقاق والتأخر: إشعار مرة واحدة لكل مهمة/تاريخ استحقاق عند فتح اللوحة */
+async function runDueDateNotificationsScan(){
+  try{
+    if(window.__dueDateNotificationScanRunning) return;
+    window.__dueDateNotificationScanRunning=true;
+
+    const rows=(visibleTasks()||[]).filter(t=>t.status!=='مكتملة' && t.due_date);
+
+    for(const task of rows){
+      const days=daysUntilDueDate(task.due_date);
+      if(days===null) continue;
+
+      const recipients=linkedUserIdsForTask(task);
+
+      if(days<0 && !wasNotificationSentOnce('late', task)){
+        const res=await notifyTaskEventByEmail({
+          task,
+          userIds:recipients,
+          subject:`مهمة متأخرة - ${task.title || 'مهمة'}`,
+          heading:'تنبيه: مهمة متأخرة',
+          intro:'لديك مهمة تجاوزت تاريخ الاستحقاق في لوحة متابعة مهام القطاعات.',
+          details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nعدد أيام التأخير: ${Math.abs(days)} يوم`,
+          actorName:'لوحة متابعة مهام القطاعات',
+          excludeCurrent:false
+        });
+
+        if(res.ok) markNotificationSentOnce('late', task);
+      }
+
+      if(days>=0 && days<=3 && !wasNotificationSentOnce('due-soon', task)){
+        const res=await notifyTaskEventByEmail({
+          task,
+          userIds:recipients,
+          subject:`اقتراب استحقاق مهمة - ${task.title || 'مهمة'}`,
+          heading:'تنبيه: اقتراب استحقاق مهمة',
+          intro:'لديك مهمة يقترب تاريخ استحقاقها في لوحة متابعة مهام القطاعات.',
+          details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nالمتبقي: ${days===0?'اليوم':days+' يوم'}`,
+          actorName:'لوحة متابعة مهام القطاعات',
+          excludeCurrent:false
+        });
+
+        if(res.ok) markNotificationSentOnce('due-soon', task);
+      }
+    }
+  }catch(e){
+    console.error('runDueDateNotificationsScan failed:', e);
+  }finally{
+    window.__dueDateNotificationScanRunning=false;
+  }
+}
+
+const __importantNotificationsShowApp = showApp;
+showApp = function(){
+  __importantNotificationsShowApp();
+  setTimeout(runDueDateNotificationsScan, 2500);
+};
+
+const __importantNotificationsRenderTasks = renderTasks;
+renderTasks = function(){
+  __importantNotificationsRenderTasks();
+  setTimeout(runDueDateNotificationsScan, 2500);
+};
+
 init();
 </script>
 </body>
