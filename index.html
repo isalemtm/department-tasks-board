@@ -7460,6 +7460,189 @@ saveTask = async function(){
   }
 };
 
+
+/* === PATCH: تقويم تاريخ الاستحقاق بصيغة ظاهرة DD/MM/YYYY + إسناد الموظف للمدير/رئيس القطاع ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+   - يبقي input type="date" لاختيار التاريخ من التقويم.
+   - يخفي العرض الداخلي المتأثر بلغة المتصفح، ويعرض قيمة واضحة DD/MM/YYYY.
+   - يسمح للموظف بإسناد المهمة لموظف، مدير قسم، أو رئيس قطاع داخل نفس القطاع.
+*/
+(function injectDueDateDisplayAndEmployeeAssignStyles(){
+  if(document.getElementById('dueDateDisplayAndEmployeeAssignStyles')) return;
+  const style=document.createElement('style');
+  style.id='dueDateDisplayAndEmployeeAssignStyles';
+  style.textContent=`
+    .date-picker-shell{position:relative;width:100%;display:block;}
+    .date-picker-shell .date-display-input{
+      width:100%;
+      direction:ltr!important;
+      text-align:left!important;
+      unicode-bidi:plaintext;
+      font-family:Tahoma, Arial, sans-serif!important;
+      padding-left:44px!important;
+      background:#fff;
+      color:var(--text);
+      cursor:pointer;
+    }
+    .date-picker-shell .date-display-input::placeholder{color:#9a8a82;opacity:1;}
+    .date-picker-shell .date-calendar-icon{
+      position:absolute;
+      left:14px;
+      top:50%;
+      transform:translateY(-50%);
+      z-index:2;
+      pointer-events:none;
+      color:var(--primary2);
+      font-size:17px;
+      line-height:1;
+    }
+    .date-picker-shell #taskDue.native-date-input-overlay{
+      position:absolute!important;
+      inset:0!important;
+      width:100%!important;
+      height:100%!important;
+      opacity:0!important;
+      cursor:pointer!important;
+      z-index:3!important;
+      padding:0!important;
+      border:0!important;
+      background:transparent!important;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+function formatDueDateDisplayDDMMYYYY(value){
+  const iso=String(value||'').trim();
+  const m=iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return '';
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function syncTaskDueDisplay(){
+  const source=$('taskDue');
+  const display=$('taskDueDisplay');
+  if(!source || !display) return;
+  display.value=formatDueDateDisplayDDMMYYYY(source.value);
+}
+
+function ensureTaskDueNativeDatePicker(){
+  const el=$('taskDue');
+  if(!el) return;
+  if(el.type!=='date') el.type='date';
+  el.setAttribute('lang','en');
+  el.setAttribute('dir','ltr');
+  el.classList.add('date-ltr');
+
+  if(el.dataset.displayPickerReady!=='1'){
+    const parent=el.parentNode;
+    const shell=document.createElement('div');
+    shell.className='date-picker-shell';
+    parent.insertBefore(shell, el);
+
+    const display=document.createElement('input');
+    display.id='taskDueDisplay';
+    display.type='text';
+    display.readOnly=true;
+    display.placeholder='DD/MM/YYYY';
+    display.setAttribute('dir','ltr');
+    display.setAttribute('lang','en');
+    display.className='date-display-input';
+    display.tabIndex=-1;
+
+    const icon=document.createElement('span');
+    icon.className='date-calendar-icon';
+    icon.textContent='📅';
+
+    shell.appendChild(display);
+    shell.appendChild(icon);
+    shell.appendChild(el);
+
+    el.dataset.displayPickerReady='1';
+    el.classList.add('native-date-input-overlay');
+    el.addEventListener('change', syncTaskDueDisplay);
+    el.addEventListener('input', syncTaskDueDisplay);
+  }
+
+  syncTaskDueDisplay();
+}
+
+const __employeeCanAssignManagersOriginalPermitted = permittedAssigneeUsers;
+permittedAssigneeUsers = function(){
+  const type=$('assignmentType')?.value || 'employees';
+
+  if(currentRole()==='employee' && type==='employees'){
+    const sector=state.profile?.sector_id || $('taskTargetSector')?.value || '';
+    const dept=$('taskTargetDepartment')?.value || '';
+    let rows=(state.users || []).filter(u => u.is_active !== false);
+
+    rows=rows.filter(u =>
+      u.id===state.profile?.id ||
+      (u.sector_id===sector && ['employee','department_manager','sector_head'].includes(u.role))
+    );
+
+    // عند وجود قسم مختار، نبقي رئيس القطاع ظاهرًا لأنه غالبًا بلا قسم،
+    // ونبقي مدير القسم والموظفين التابعين للقسم المختار.
+    if(dept){
+      rows=rows.filter(u =>
+        u.id===state.profile?.id ||
+        u.role==='sector_head' ||
+        u.department_id===dept
+      );
+    }
+
+    return addCurrentUserToRows(rows);
+  }
+
+  return __employeeCanAssignManagersOriginalPermitted();
+};
+
+const __employeeCanAssignManagersOriginalSaveTask = saveTask;
+saveTask = async function(){
+  const selected = typeof getSelectedAssigneeIdsFinal==='function' ? getSelectedAssigneeIdsFinal() : [];
+  const primaryUser = typeof getUserByIdFinal==='function' ? getUserByIdFinal(selected[0]) : null;
+  const shouldClearEmployeeDeptForSectorHead = currentRole()==='employee' && primaryUser?.role==='sector_head';
+
+  const deptEl=$('taskTargetDepartment');
+  const originalDeptValue=deptEl ? deptEl.value : '';
+  const originalProfileDept=state.profile?.department_id;
+
+  if(shouldClearEmployeeDeptForSectorHead){
+    if(deptEl) deptEl.value='';
+    if(state.profile) state.profile.department_id=null;
+  }
+
+  try{
+    await __employeeCanAssignManagersOriginalSaveTask();
+  }finally{
+    if(shouldClearEmployeeDeptForSectorHead){
+      if(state.profile) state.profile.department_id=originalProfileDept;
+      if(deptEl && !$('taskModal')?.classList.contains('hidden')) deptEl.value=originalDeptValue;
+    }
+  }
+};
+
+const __dueDisplayPatchOriginalEditTask = editTask;
+editTask = function(taskId){
+  __dueDisplayPatchOriginalEditTask(taskId);
+  ensureTaskDueNativeDatePicker();
+  syncTaskDueDisplay();
+};
+
+const __dueDisplayPatchOriginalOpenTaskModal = openTaskModal;
+openTaskModal = function(){
+  __dueDisplayPatchOriginalOpenTaskModal();
+  ensureTaskDueNativeDatePicker();
+  syncTaskDueDisplay();
+};
+
+const __dueDisplayPatchOriginalClearTaskForm = clearTaskForm;
+clearTaskForm = function(){
+  __dueDisplayPatchOriginalClearTaskForm();
+  ensureTaskDueNativeDatePicker();
+  syncTaskDueDisplay();
+};
+
 init();
 </script>
 </body>
