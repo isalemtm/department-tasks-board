@@ -7975,6 +7975,96 @@ renderTasks = function(){
   setTimeout(runDueDateNotificationsScan, 2500);
 };
 
+
+/* === PATCH: ضبط إشعارات الاستحقاق لتكون في أيام محددة فقط ===
+   يرسل فقط:
+   - قبل الاستحقاق بيومين.
+   - يوم الاستحقاق.
+   - بعد الاستحقاق بثلاثة أيام.
+   - بعد الاستحقاق بسبعة أيام.
+   ثم يتوقف.
+*/
+function dueNotificationMilestone(task){
+  const days=daysUntilDueDate(task?.due_date);
+
+  if(days===2){
+    return {
+      kind:'due-before-2',
+      subject:`تذكير قبل الاستحقاق بيومين - ${task.title || 'مهمة'}`,
+      heading:'تذكير: بقي يومان على استحقاق المهمة',
+      intro:'لديك مهمة يقترب موعد استحقاقها في لوحة متابعة مهام القطاعات.',
+      details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nالمتبقي: يومان`
+    };
+  }
+
+  if(days===0){
+    return {
+      kind:'due-today',
+      subject:`تذكير يوم الاستحقاق - ${task.title || 'مهمة'}`,
+      heading:'تذكير: اليوم هو تاريخ استحقاق المهمة',
+      intro:'لديك مهمة مستحقة اليوم في لوحة متابعة مهام القطاعات.',
+      details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nالمتبقي: اليوم`
+    };
+  }
+
+  if(days===-3){
+    return {
+      kind:'overdue-3',
+      subject:`تنبيه تأخر 3 أيام - ${task.title || 'مهمة'}`,
+      heading:'تنبيه: المهمة متأخرة 3 أيام',
+      intro:'لديك مهمة تجاوزت تاريخ الاستحقاق بثلاثة أيام في لوحة متابعة مهام القطاعات.',
+      details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nمدة التأخير: 3 أيام`
+    };
+  }
+
+  if(days===-7){
+    return {
+      kind:'overdue-7',
+      subject:`تنبيه تأخر 7 أيام - ${task.title || 'مهمة'}`,
+      heading:'تنبيه: المهمة متأخرة 7 أيام',
+      intro:'لديك مهمة تجاوزت تاريخ الاستحقاق بسبعة أيام في لوحة متابعة مهام القطاعات.',
+      details:`تاريخ الاستحقاق: ${formatDate(task.due_date)}\nمدة التأخير: 7 أيام`
+    };
+  }
+
+  return null;
+}
+
+runDueDateNotificationsScan = async function(){
+  try{
+    if(window.__dueDateNotificationScanRunning) return;
+    window.__dueDateNotificationScanRunning=true;
+
+    const rows=(visibleTasks()||[]).filter(t=>t.status!=='مكتملة' && t.due_date);
+
+    for(const task of rows){
+      const milestone=dueNotificationMilestone(task);
+      if(!milestone) continue;
+
+      if(wasNotificationSentOnce(milestone.kind, task)) continue;
+
+      const recipients=linkedUserIdsForTask(task);
+
+      const res=await notifyTaskEventByEmail({
+        task,
+        userIds:recipients,
+        subject:milestone.subject,
+        heading:milestone.heading,
+        intro:milestone.intro,
+        details:milestone.details,
+        actorName:'لوحة متابعة مهام القطاعات',
+        excludeCurrent:false
+      });
+
+      if(res.ok) markNotificationSentOnce(milestone.kind, task);
+    }
+  }catch(e){
+    console.error('runDueDateNotificationsScan failed:', e);
+  }finally{
+    window.__dueDateNotificationScanRunning=false;
+  }
+};
+
 init();
 </script>
 </body>
