@@ -137,6 +137,15 @@
   </header>
 
   <main class="container">
+    <section id="startupLoadingSection" class="auth-wrap">
+      <div class="auth-card card" style="max-width:520px;text-align:center;">
+        <h2 class="auth-title">جاري تحميل اللوحة...</h2>
+        <p style="color:var(--muted);line-height:1.9;margin:0;">
+          لحظات ويتم التحقق من جلسة الدخول.
+        </p>
+      </div>
+    </section>
+
     <section id="authSection" class="auth-wrap">
       <div class="auth-card card">
         <div id="authNotice" class="notice info"></div>
@@ -8062,6 +8071,49 @@ runDueDateNotificationsScan = async function(){
     console.error('runDueDateNotificationsScan failed:', e);
   }finally{
     window.__dueDateNotificationScanRunning=false;
+  }
+};
+
+
+/* === PATCH: شاشة تحميل بدل وميض صفحة تسجيل الدخول عند تحديث الصفحة === */
+function hideStartupLoading(){
+  $('startupLoadingSection')?.classList.add('hidden');
+}
+
+function showStartupLoading(){
+  $('startupLoadingSection')?.classList.remove('hidden');
+  $('authSection')?.classList.add('hidden');
+  $('passwordSetupSection')?.classList.add('hidden');
+  $('appSection')?.classList.add('hidden');
+  $('executiveSection')?.classList.add('hidden');
+  $('executiveAccessDeniedSection')?.classList.add('hidden');
+}
+
+const __loadingOriginalShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  hideStartupLoading();
+  __loadingOriginalShowAuthOnly();
+};
+
+const __loadingOriginalShowApp = showApp;
+showApp = function(){
+  hideStartupLoading();
+  __loadingOriginalShowApp();
+};
+
+const __loadingOriginalShowPasswordSetup = showPasswordSetup;
+showPasswordSetup = function(){
+  hideStartupLoading();
+  __loadingOriginalShowPasswordSetup();
+};
+
+const __loadingOriginalInit = init;
+init = async function(){
+  showStartupLoading();
+  try{
+    return await __loadingOriginalInit();
+  }finally{
+    setTimeout(hideStartupLoading, 250);
   }
 };
 
