@@ -8854,6 +8854,164 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: حذف عنوان مؤشرات الأداء + إغلاق بلوكات إدارة المستخدمين افتراضيًا === */
+
+/* حذف عبارة مؤشرات قياس الأداء من صفحة مؤشرات الأداء */
+function hidePerformanceMainTitle(){
+  const content=$('performanceContent');
+  if(!content) return;
+
+  [...content.querySelectorAll('h2')].forEach(h=>{
+    if((h.textContent||'').trim()==='مؤشرات قياس الأداء'){
+      const head=h.closest('.section-head');
+      if(head) head.remove();
+      else h.remove();
+    }
+  });
+}
+
+/* تحويل بلوكات إدارة المستخدمين إلى أقسام قابلة للفتح والإغلاق */
+function installAdminCollapsiblePanelsStyle(){
+  if(document.getElementById('adminCollapsiblePanelsStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='adminCollapsiblePanelsStyle';
+  style.textContent=`
+    .admin-collapsible-panel{
+      padding:0!important;
+      overflow:hidden;
+    }
+
+    .admin-collapsible-panel > summary{
+      list-style:none;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:18px 20px;
+      color:var(--primary2);
+      font-weight:900;
+      font-size:20px;
+      background:#fff;
+    }
+
+    .admin-collapsible-panel > summary::-webkit-details-marker{
+      display:none;
+    }
+
+    .admin-collapsible-panel > summary::before{
+      content:'⌄';
+      width:28px;
+      height:28px;
+      border-radius:999px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background:#efe8e3;
+      color:var(--primary2);
+      font-size:18px;
+      margin-inline-end:auto;
+      transition:.18s ease;
+    }
+
+    .admin-collapsible-panel[open] > summary{
+      border-bottom:1px solid var(--line);
+      background:#fbf8f5;
+    }
+
+    .admin-collapsible-panel[open] > summary::before{
+      transform:rotate(180deg);
+    }
+
+    .admin-collapsible-body{
+      padding:18px 20px;
+    }
+
+    .admin-collapsible-body > .section-head:first-child{
+      display:none!important;
+    }
+
+    .admin-collapsible-body > h2:first-child{
+      display:none!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function makePanelCollapsible(panelId, titleText){
+  const panel=$(panelId);
+  if(!panel || panel.dataset.collapsibleReady==='1') return;
+
+  panel.dataset.collapsibleReady='1';
+
+  const originalChildren=[...panel.childNodes];
+  const details=document.createElement('details');
+  details.className=(panel.className||'') + ' admin-collapsible-panel';
+  details.id=panel.id;
+  details.dataset.collapsibleReady='1';
+
+  if(panel.classList.contains('hidden')) details.classList.add('hidden');
+
+  const summary=document.createElement('summary');
+  summary.textContent=titleText;
+
+  const body=document.createElement('div');
+  body.className='admin-collapsible-body';
+
+  originalChildren.forEach(node=>body.appendChild(node));
+
+  details.appendChild(summary);
+  details.appendChild(body);
+
+  panel.replaceWith(details);
+}
+
+function collapseAdminUserManagementPanels(){
+  installAdminCollapsiblePanelsStyle();
+
+  makePanelCollapsible('directInvitePanel','إضافة مستخدم مباشرة');
+  makePanelCollapsible('boardUsersImportPanel','استيراد مستخدمين من Excel');
+  makePanelCollapsible('pendingUserInvitesPanel','إشعارات تعيين كلمة المرور');
+  makePanelCollapsible('bulkImportPanel','استيراد مستخدمين من لوحة أخرى');
+}
+
+const __adminCollapsibleRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __adminCollapsibleRenderAdmin();
+  collapseAdminUserManagementPanels();
+};
+
+const __adminCollapsibleShowPage = showPage;
+showPage = function(p){
+  __adminCollapsibleShowPage(p);
+  if(p==='performance') hidePerformanceMainTitle();
+  if(p==='admin') collapseAdminUserManagementPanels();
+};
+
+const __adminCollapsibleShowApp = showApp;
+showApp = function(){
+  __adminCollapsibleShowApp();
+  hidePerformanceMainTitle();
+  collapseAdminUserManagementPanels();
+};
+
+const __adminCollapsibleInit = init;
+init = async function(){
+  const result=await __adminCollapsibleInit();
+  hidePerformanceMainTitle();
+  collapseAdminUserManagementPanels();
+  return result;
+};
+
+/* نكرر بعد الرسم لأن صفحة مؤشرات الأداء يعاد بناؤها ديناميكيًا */
+const __hidePerformanceTitleRenderPerformancePage = renderPerformancePage;
+renderPerformancePage = function(){
+  __hidePerformanceTitleRenderPerformancePage();
+  hidePerformanceMainTitle();
+};
+
 init();
 </script>
 </body>
