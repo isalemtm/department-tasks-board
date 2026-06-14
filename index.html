@@ -8971,10 +8971,25 @@ function makePanelCollapsible(panelId, titleText){
 function collapseAdminUserManagementPanels(){
   installAdminCollapsiblePanelsStyle();
 
-  makePanelCollapsible('directInvitePanel','إضافة مستخدم مباشرة');
-  makePanelCollapsible('boardUsersImportPanel','استيراد مستخدمين من Excel');
-  makePanelCollapsible('pendingUserInvitesPanel','إشعارات تعيين كلمة المرور');
-  makePanelCollapsible('bulkImportPanel','استيراد مستخدمين من لوحة أخرى');
+  const adminPage = $('adminPage');
+  if(!adminPage) return;
+
+  const adminPanels = [...adminPage.children].filter(el =>
+    el && (el.matches?.('section.panel.card') || el.matches?.('details.admin-collapsible-panel'))
+  );
+
+  adminPanels.forEach((panel, index) => {
+    if(panel.tagName === 'DETAILS') return;
+
+    if(!panel.id) panel.id = `adminAutoPanel_${index+1}`;
+
+    const title =
+      panel.querySelector('.section-head h2')?.textContent?.trim() ||
+      panel.querySelector('h2')?.textContent?.trim() ||
+      `قسم ${index+1}`;
+
+    makePanelCollapsible(panel.id, title);
+  });
 }
 
 const __adminCollapsibleRenderAdmin = renderAdmin;
@@ -9010,6 +9025,112 @@ const __hidePerformanceTitleRenderPerformancePage = renderPerformancePage;
 renderPerformancePage = function(){
   __hidePerformanceTitleRenderPerformancePage();
   hidePerformanceMainTitle();
+};
+
+
+/* === PATCH: توحيد شكل بلوكات إدارة المستخدمين المغلقة مع بلوكات لوحة الموظفين === */
+function installAdminClosedBlocksLikeEmployeeCards(){
+  const old=document.getElementById('adminClosedBlocksLikeEmployeeCardsStyle');
+  old?.remove();
+
+  const style=document.createElement('style');
+  style.id='adminClosedBlocksLikeEmployeeCardsStyle';
+  style.textContent=`
+    #adminPage .admin-collapsible-panel{
+      border:1px solid var(--line)!important;
+      border-radius:18px!important;
+      background:#fffdfb!important;
+      margin:14px 0!important;
+      overflow:hidden!important;
+      box-shadow:0 8px 22px rgba(97,70,59,.05)!important;
+      padding:0!important;
+    }
+
+    #adminPage .admin-collapsible-panel > summary{
+      list-style:none!important;
+      cursor:pointer!important;
+      display:flex!important;
+      flex-direction:row!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:12px!important;
+      padding:14px 16px!important;
+      background:#fffdfb!important;
+      color:var(--primary2)!important;
+      font-weight:900!important;
+      font-size:21px!important;
+      text-align:right!important;
+      min-height:58px!important;
+      line-height:1.4!important;
+    }
+
+    #adminPage .admin-collapsible-panel > summary::-webkit-details-marker{
+      display:none!important;
+    }
+
+    #adminPage .admin-collapsible-panel > summary::before{
+      content:'⌄'!important;
+      order:2!important;
+      flex:0 0 auto!important;
+      width:24px!important;
+      height:24px!important;
+      border-radius:999px!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      font-size:15px!important;
+      line-height:1!important;
+      margin-inline-start:10px!important;
+      margin-inline-end:0!important;
+      transition:.18s ease!important;
+    }
+
+    #adminPage .admin-collapsible-panel > summary .admin-summary-title,
+    #adminPage .admin-collapsible-panel > summary{
+      direction:rtl!important;
+    }
+
+    #adminPage .admin-collapsible-panel[open] > summary{
+      border-bottom:1px solid var(--line)!important;
+      background:#fbf8f5!important;
+    }
+
+    #adminPage .admin-collapsible-panel[open] > summary::before{
+      transform:rotate(180deg)!important;
+    }
+
+    #adminPage .admin-collapsible-body{
+      padding:18px 20px!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __adminClosedBlocksLikeEmployeeRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __adminClosedBlocksLikeEmployeeRenderAdmin();
+  installAdminClosedBlocksLikeEmployeeCards();
+};
+
+const __adminClosedBlocksLikeEmployeeShowPage = showPage;
+showPage = function(p){
+  __adminClosedBlocksLikeEmployeeShowPage(p);
+  if(p==='admin') installAdminClosedBlocksLikeEmployeeCards();
+};
+
+const __adminClosedBlocksLikeEmployeeShowApp = showApp;
+showApp = function(){
+  __adminClosedBlocksLikeEmployeeShowApp();
+  installAdminClosedBlocksLikeEmployeeCards();
+};
+
+const __adminClosedBlocksLikeEmployeeInit = init;
+init = async function(){
+  const result=await __adminClosedBlocksLikeEmployeeInit();
+  installAdminClosedBlocksLikeEmployeeCards();
+  return result;
 };
 
 init();
