@@ -8632,6 +8632,51 @@ renderTasks = function(){
   renderTaskActionRequests();
 };
 
+
+/* === PATCH: توحيد مسافة بلوك الأزرار في صفحة متابعة القطاعات مع باقي الصفحات === */
+function installExecutiveFollowSpacingFix(){
+  if(document.getElementById('executiveFollowSpacingFixStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFollowSpacingFixStyle';
+  style.textContent=`
+    #executiveSection{
+      margin-top:30px!important;
+    }
+
+    #executiveSection .executive-inner-nav{
+      margin-top:0!important;
+      margin-bottom:16px!important;
+    }
+
+    @media(max-width:900px){
+      #executiveSection{
+        margin-top:22px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __execSpacingShowApp = showApp;
+showApp = function(){
+  __execSpacingShowApp();
+  installExecutiveFollowSpacingFix();
+};
+
+const __execSpacingShowPage = showPage;
+showPage = function(p){
+  __execSpacingShowPage(p);
+  installExecutiveFollowSpacingFix();
+};
+
+const __execSpacingInit = init;
+init = async function(){
+  const result = await __execSpacingInit();
+  installExecutiveFollowSpacingFix();
+  return result;
+};
+
 init();
 </script>
 </body>
