@@ -8807,6 +8807,53 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: إعادة خلفية بلوك محتوى متابعة القطاعات بعد توحيد المسافات === */
+function installExecutiveContentPanelBackgroundFix(){
+  if(document.getElementById('executiveContentPanelBackgroundFixStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveContentPanelBackgroundFixStyle';
+  style.textContent=`
+    #appSection > #executiveSection > .panel.card{
+      background:#fff!important;
+      border:1px solid var(--line)!important;
+      box-shadow:0 16px 40px rgba(97,70,59,.08)!important;
+      border-radius:18px!important;
+      padding:18px!important;
+      margin-top:16px!important;
+    }
+
+    #appSection > #executiveSection .executive-inner-nav{
+      display:none!important;
+    }
+
+    #appSection > #executiveSection .section-head:first-child{
+      display:none!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __execPanelBgShowApp = showApp;
+showApp = function(){
+  __execPanelBgShowApp();
+  installExecutiveContentPanelBackgroundFix();
+};
+
+const __execPanelBgShowPage = showPage;
+showPage = function(p){
+  __execPanelBgShowPage(p);
+  installExecutiveContentPanelBackgroundFix();
+};
+
+const __execPanelBgInit = init;
+init = async function(){
+  const result = await __execPanelBgInit();
+  installExecutiveContentPanelBackgroundFix();
+  return result;
+};
+
 init();
 </script>
 </body>
