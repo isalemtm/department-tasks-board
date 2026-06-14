@@ -9371,6 +9371,131 @@ rejectTransferRequest = async function(requestId){
   }
 };
 
+
+/* === PATCH: توحيد الهيدر في تسجيل الدخول والتحميل وبعد الدخول === */
+function installUnifiedHeaderEverywhereStyle(){
+  let style=document.getElementById('unifiedHeaderEverywhereStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='unifiedHeaderEverywhereStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    .topbar .brand{
+      display:flex!important;
+      flex-direction:column!important;
+      align-items:center!important;
+      justify-content:center!important;
+      text-align:center!important;
+      gap:0!important;
+    }
+
+    .topbar .brand img:not(.main-logo){
+      display:none!important;
+    }
+
+    .main-logo{
+      width:260px!important;
+      max-width:260px!important;
+      height:auto!important;
+      display:block!important;
+      margin:0 auto 12px!important;
+      object-fit:contain!important;
+    }
+
+    @media(max-width:900px){
+      .main-logo{
+        width:190px!important;
+        max-width:190px!important;
+      }
+    }
+
+    body.auth-mode .topbar .userbar,
+    body.loading-mode .topbar .userbar,
+    body.password-mode .topbar .userbar{
+      display:none!important;
+    }
+
+    body.app-mode .topbar .userbar{
+      display:flex!important;
+      justify-content:center!important;
+      align-items:center!important;
+      gap:10px!important;
+      flex-wrap:wrap!important;
+      margin:0 auto!important;
+      text-align:center!important;
+    }
+  `;
+}
+
+function ensureRasfLogoInHeaderEverywhere(){
+  installUnifiedHeaderEverywhereStyle();
+
+  const titleBox=document.querySelector('.topbar .title-box');
+  if(!titleBox) return;
+
+  let logo=document.getElementById('mainRasfLogo');
+
+  if(!logo){
+    logo=document.createElement('img');
+    logo.id='mainRasfLogo';
+    logo.className='main-logo';
+    logo.src='rasf-logo.png';
+    logo.alt='شعار رصف';
+  }
+
+  if(logo.parentElement !== titleBox.parentElement || logo.nextElementSibling !== titleBox){
+    titleBox.insertAdjacentElement('beforebegin', logo);
+  }
+}
+
+function setHeaderMode(mode){
+  document.body.classList.remove('auth-mode','loading-mode','password-mode','app-mode');
+  document.body.classList.add(mode + '-mode');
+  ensureRasfLogoInHeaderEverywhere();
+}
+
+const __unifiedHeaderShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __unifiedHeaderShowAuthOnly();
+  setHeaderMode('auth');
+};
+
+const __unifiedHeaderShowApp = showApp;
+showApp = function(){
+  __unifiedHeaderShowApp();
+  setHeaderMode('app');
+};
+
+const __unifiedHeaderShowPasswordSetup = showPasswordSetup;
+showPasswordSetup = function(){
+  __unifiedHeaderShowPasswordSetup();
+  setHeaderMode('password');
+};
+
+if(typeof showStartupLoading === 'function'){
+  const __unifiedHeaderShowStartupLoading = showStartupLoading;
+  showStartupLoading = function(){
+    __unifiedHeaderShowStartupLoading();
+    setHeaderMode('loading');
+  };
+}
+
+const __unifiedHeaderInit = init;
+init = async function(){
+  installUnifiedHeaderEverywhereStyle();
+  ensureRasfLogoInHeaderEverywhere();
+  setHeaderMode('loading');
+
+  const result=await __unifiedHeaderInit();
+
+  setTimeout(ensureRasfLogoInHeaderEverywhere,50);
+  setTimeout(ensureRasfLogoInHeaderEverywhere,250);
+
+  return result;
+};
+
 init();
 </script>
 </body>
