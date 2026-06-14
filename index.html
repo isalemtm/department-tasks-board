@@ -9145,8 +9145,8 @@ function installLogoSizeAndAdminApprovalCleanupStyle(){
 
   style.textContent=`
     .main-logo{
-      width:130px!important;
-      max-width:130px!important;
+      width:260px!important;
+      max-width:260px!important;
       height:auto!important;
       display:block!important;
       margin:0 auto 12px!important;
@@ -9155,8 +9155,8 @@ function installLogoSizeAndAdminApprovalCleanupStyle(){
 
     @media(max-width:900px){
       .main-logo{
-        width:95px!important;
-        max-width:95px!important;
+        width:190px!important;
+        max-width:190px!important;
       }
     }
 
@@ -9220,6 +9220,155 @@ init = async function(){
   installLogoSizeAndAdminApprovalCleanupStyle();
   removeApprovalBlocksFromAdminPage();
   return result;
+};
+
+
+/* === PATCH: تحديث طلبات بانتظار الإجراء مباشرة بعد الاعتماد أو الرفض === */
+async function refreshAfterApprovalAction(){
+  await loadAll();
+  renderTasks();
+  if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
+  if(typeof renderDashboard === 'function') renderDashboard();
+}
+
+const __instantApproveSubmittedTask = approveSubmittedTask;
+approveSubmittedTask = async function(taskId){
+  const {error}=await supabaseClient
+    .from('tasks')
+    .update({
+      approval_status:'approved',
+      approved_by:state.profile.id,
+      approved_at:new Date().toISOString()
+    })
+    .eq('id',taskId);
+
+  if(error) return showToast(error.message,'error');
+
+  await refreshAfterApprovalAction();
+  showToast('تم اعتماد المهمة وإظهارها في اللوحة.','success');
+};
+
+const __instantRejectSubmittedTask = rejectSubmittedTask;
+rejectSubmittedTask = async function(taskId){
+  const ok=await askConfirm({
+    title:'رفض المهمة',
+    message:'سيتم رفض المهمة ولن تظهر في القوائم واللوحة. هل تريد المتابعة؟',
+    okText:'رفض',
+    danger:true
+  });
+
+  if(!ok) return;
+
+  const {error}=await supabaseClient
+    .from('tasks')
+    .update({
+      approval_status:'rejected',
+      approved_by:state.profile.id,
+      approved_at:new Date().toISOString()
+    })
+    .eq('id',taskId);
+
+  if(error) return showToast(error.message,'error');
+
+  await refreshAfterApprovalAction();
+  showToast('تم رفض المهمة.','success');
+};
+
+const __instantApproveTaskCompletion = approveTaskCompletion;
+approveTaskCompletion = async function(taskId){
+  try{
+    const task = state.tasks.find(t=>t.id===taskId);
+    if(!canApproveCompletion(task)) return showToast('ليست لديك صلاحية اعتماد إكمال هذه المهمة.','error');
+
+    const {error}=await supabaseClient.from('tasks').update({
+      status:'مكتملة',
+      completion_status:'approved',
+      completion_reviewed_by:state.profile.id,
+      completion_reviewed_at:new Date().toISOString()
+    }).eq('id',taskId);
+
+    if(error) throw error;
+
+    await refreshAfterApprovalAction();
+    showToast('تم اعتماد إكمال المهمة ونقلها إلى قسم مكتملة.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر اعتماد الإكمال.','error',7000);
+  }
+};
+
+const __instantRejectTaskCompletion = rejectTaskCompletion;
+rejectTaskCompletion = async function(taskId){
+  try{
+    const task = state.tasks.find(t=>t.id===taskId);
+    if(!canApproveCompletion(task)) return showToast('ليست لديك صلاحية رفض إكمال هذه المهمة.','error');
+
+    const ok=await askConfirm({
+      title:'رفض إكمال المهمة',
+      message:'ستبقى المهمة ضمن قيد التنفيذ. هل تريد المتابعة؟',
+      okText:'رفض الإكمال',
+      danger:true
+    });
+
+    if(!ok) return;
+
+    const {error}=await supabaseClient.from('tasks').update({
+      completion_status:'rejected',
+      completion_reviewed_by:state.profile.id,
+      completion_reviewed_at:new Date().toISOString()
+    }).eq('id',taskId);
+
+    if(error) throw error;
+
+    await refreshAfterApprovalAction();
+    showToast('تم رفض إكمال المهمة وبقيت ضمن قيد التنفيذ.','info');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر رفض الإكمال.','error',7000);
+  }
+};
+
+const __instantApproveTransferRequest = approveTransferRequest;
+approveTransferRequest = async function(requestId){
+  try{
+    const req=state.transferRequests.find(r=>r.id===requestId);
+    if(!req) return showToast('لم يتم العثور على طلب التحويل.','error');
+
+    await applyTaskTransfer(req.task_id,req.from_user_id,req.to_user_id);
+
+    const {error}=await supabaseClient.from('task_transfer_requests').update({
+      status:'approved',
+      reviewed_by:state.profile.id,
+      reviewed_at:new Date().toISOString()
+    }).eq('id',requestId);
+
+    if(error) throw error;
+
+    await refreshAfterApprovalAction();
+    showToast('تم اعتماد تحويل المهمة.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر اعتماد طلب التحويل.','error');
+  }
+};
+
+const __instantRejectTransferRequest = rejectTransferRequest;
+rejectTransferRequest = async function(requestId){
+  try{
+    const {error}=await supabaseClient.from('task_transfer_requests').update({
+      status:'rejected',
+      reviewed_by:state.profile.id,
+      reviewed_at:new Date().toISOString()
+    }).eq('id',requestId);
+
+    if(error) throw error;
+
+    await refreshAfterApprovalAction();
+    showToast('تم رفض طلب التحويل.','info');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر رفض طلب التحويل.','error');
+  }
 };
 
 init();
