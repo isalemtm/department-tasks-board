@@ -8728,6 +8728,85 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: جعل صفحة متابعة القطاعات داخل نفس تدفق الصفحات لضبط المسافة نهائيًا === */
+function moveExecutiveSectionIntoAppFlow(){
+  const app=$('appSection');
+  const executive=$('executiveSection');
+  const appHeader=document.querySelector('#appSection .app-header.card');
+
+  if(!app || !executive || !appHeader) return;
+
+  /* إذا كانت صفحة متابعة القطاعات خارج appSection ننقلها بعد شريط الأزرار مباشرة */
+  if(executive.parentElement !== app){
+    appHeader.insertAdjacentElement('afterend', executive);
+  }
+
+  executive.style.marginTop='0';
+  executive.style.paddingTop='0';
+
+  const panel=executive.querySelector(':scope > .panel.card');
+  if(panel){
+    panel.style.marginTop='0';
+    panel.style.paddingTop='0';
+  }
+}
+
+function installExecutiveFlowSpacingStyle(){
+  if(document.getElementById('executiveFlowSpacingStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFlowSpacingStyle';
+  style.textContent=`
+    #appSection > #executiveSection{
+      margin-top:0!important;
+      padding-top:0!important;
+    }
+
+    #appSection > #executiveSection > .panel.card{
+      margin-top:0!important;
+      padding-top:0!important;
+    }
+
+    #appSection > #executiveSection .executive-inner-nav{
+      display:none!important;
+    }
+
+    #appSection > #executiveSection .section-head:first-child{
+      display:none!important;
+    }
+
+    #appSection > #executiveSection .panel.card{
+      background:transparent!important;
+      border:0!important;
+      box-shadow:none!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __flowExecShowApp = showApp;
+showApp = function(){
+  __flowExecShowApp();
+  installExecutiveFlowSpacingStyle();
+  moveExecutiveSectionIntoAppFlow();
+};
+
+const __flowExecShowPage = showPage;
+showPage = function(p){
+  __flowExecShowPage(p);
+  installExecutiveFlowSpacingStyle();
+  moveExecutiveSectionIntoAppFlow();
+};
+
+const __flowExecInit = init;
+init = async function(){
+  const result = await __flowExecInit();
+  installExecutiveFlowSpacingStyle();
+  moveExecutiveSectionIntoAppFlow();
+  return result;
+};
+
 init();
 </script>
 </body>
