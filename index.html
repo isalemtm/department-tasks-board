@@ -9496,6 +9496,66 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: صفحة جاري تحميل اللوحة بدون هيدر ولا شعار === */
+function installLoadingPageNoHeaderStyle(){
+  let style=document.getElementById('loadingPageNoHeaderStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='loadingPageNoHeaderStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    body.loading-mode .topbar{
+      display:none!important;
+    }
+
+    body.loading-mode main.container{
+      min-height:100vh!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      padding:24px!important;
+      background:var(--bg)!important;
+    }
+
+    body.loading-mode #startupLoadingSection{
+      width:100%!important;
+      margin:0!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+    }
+
+    body.loading-mode #startupLoadingSection.hidden{
+      display:none!important;
+    }
+  `;
+}
+
+const __loadingNoHeaderSetHeaderMode = setHeaderMode;
+setHeaderMode = function(mode){
+  __loadingNoHeaderSetHeaderMode(mode);
+  installLoadingPageNoHeaderStyle();
+};
+
+const __loadingNoHeaderShowStartupLoading = typeof showStartupLoading === 'function' ? showStartupLoading : null;
+if(__loadingNoHeaderShowStartupLoading){
+  showStartupLoading = function(){
+    __loadingNoHeaderShowStartupLoading();
+    installLoadingPageNoHeaderStyle();
+    document.body.classList.remove('auth-mode','password-mode','app-mode');
+    document.body.classList.add('loading-mode');
+  };
+}
+
+const __loadingNoHeaderInit = init;
+init = async function(){
+  installLoadingPageNoHeaderStyle();
+  return await __loadingNoHeaderInit();
+};
+
 init();
 </script>
 </body>
