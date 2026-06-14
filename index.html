@@ -9133,6 +9133,95 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: تكبير الشعار + إزالة بلوكات الاعتمادات من إدارة المستخدمين === */
+function installLogoSizeAndAdminApprovalCleanupStyle(){
+  let style=document.getElementById('logoSizeAndAdminApprovalCleanupStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='logoSizeAndAdminApprovalCleanupStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    .main-logo{
+      width:130px!important;
+      max-width:130px!important;
+      height:auto!important;
+      display:block!important;
+      margin:0 auto 12px!important;
+      object-fit:contain!important;
+    }
+
+    @media(max-width:900px){
+      .main-logo{
+        width:95px!important;
+        max-width:95px!important;
+      }
+    }
+
+    #adminPage #pendingTasksPanel,
+    #adminPage #completionRequestsPanel,
+    #adminPage #transferRequestsPanel{
+      display:none!important;
+    }
+  `;
+}
+
+function removeApprovalBlocksFromAdminPage(){
+  installLogoSizeAndAdminApprovalCleanupStyle();
+
+  ['pendingTasksPanel','completionRequestsPanel','transferRequestsPanel'].forEach(id=>{
+    const el=$(id);
+    if(el && el.closest('#adminPage')){
+      el.remove();
+    }
+  });
+}
+
+/* نوقف إعادة إنشاء بلوكات الاعتمادات داخل إدارة المستخدمين */
+const __adminCleanupEnsureFullHrFeatureDom = ensureFullHrFeatureDom;
+ensureFullHrFeatureDom = function(){
+  __adminCleanupEnsureFullHrFeatureDom();
+
+  setTimeout(removeApprovalBlocksFromAdminPage,0);
+};
+
+const __adminCleanupRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __adminCleanupRenderAdmin();
+  removeApprovalBlocksFromAdminPage();
+};
+
+const __adminCleanupShowPage = showPage;
+showPage = function(p){
+  __adminCleanupShowPage(p);
+  installLogoSizeAndAdminApprovalCleanupStyle();
+
+  if(p==='admin'){
+    removeApprovalBlocksFromAdminPage();
+  }
+
+  if(p==='tasks' && typeof renderTaskActionRequests === 'function'){
+    renderTaskActionRequests();
+  }
+};
+
+const __adminCleanupShowApp = showApp;
+showApp = function(){
+  __adminCleanupShowApp();
+  installLogoSizeAndAdminApprovalCleanupStyle();
+  removeApprovalBlocksFromAdminPage();
+};
+
+const __adminCleanupInit = init;
+init = async function(){
+  const result=await __adminCleanupInit();
+  installLogoSizeAndAdminApprovalCleanupStyle();
+  removeApprovalBlocksFromAdminPage();
+  return result;
+};
+
 init();
 </script>
 </body>
