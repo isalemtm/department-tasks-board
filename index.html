@@ -188,12 +188,12 @@
           <div class="stat card"><span>متأخرة</span><strong id="statLate">0</strong></div>
         </div>
 
-        <section class="panel card">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>إضافة مهمة</h2><button class="btn btn-primary" onclick="openTaskModal()">+ مهمة جديدة</button></div>
+        <section class="panel card add-task-panel">
+          <button class="add-task-full-btn" onclick="openTaskModal()">إضافة مهمة جديدة</button>
         </section>
 
         <section class="panel card">
-          <h2>البحث والفلترة</h2>
+          <h2>البحث</h2>
           <div class="filters"><input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()"><select id="filterSector" onchange="setupDepartmentFilter(); setupEmployeeFilter(); renderTasks()"></select><select id="filterDepartment" onchange="setupEmployeeFilter(); renderTasks()"></select><select id="filterAssignee" onchange="renderTasks()"><option value="">كل الموظفين</option></select><select id="filterStatus" onchange="renderTasks()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select></div>
         </section>
 
@@ -8115,6 +8115,521 @@ init = async function(){
   }finally{
     setTimeout(hideStartupLoading, 250);
   }
+};
+
+
+/* === PATCH: التعديلات الشكلية النهائية المطلوبة === */
+function installFinalVisualAdjustmentsStyle(){
+  if(document.getElementById('finalVisualAdjustmentsStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='finalVisualAdjustmentsStyle';
+  style.textContent=`
+    .topbar .brand{
+      gap:6px!important;
+    }
+
+    .main-logo{
+      width:96px;
+      height:auto;
+      display:block;
+      margin:0 auto 10px!important;
+      object-fit:contain;
+    }
+
+    @media(max-width:900px){
+      .main-logo{
+        width:78px;
+        margin-bottom:8px!important;
+      }
+    }
+
+    .add-task-panel{
+      padding:0!important;
+      overflow:hidden;
+      border-radius:18px!important;
+    }
+
+    .add-task-full-btn{
+      width:100%;
+      min-height:64px;
+      border:0;
+      border-radius:18px;
+      background:var(--primary);
+      color:#fff;
+      font-weight:900;
+      font-size:18px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition:.18s ease;
+      font-family:inherit;
+    }
+
+    .add-task-full-btn:hover{
+      filter:brightness(.96);
+      transform:translateY(-1px);
+    }
+
+    .employee-sector-details{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fffdfb;
+      margin-top:14px;
+      overflow:hidden;
+      box-shadow:0 8px 22px rgba(97,70,59,.05);
+    }
+
+    .employee-sector-details > summary{
+      list-style:none;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      padding:14px 16px;
+      background:#fffdfb;
+      border-bottom:0;
+    }
+
+    .employee-sector-details[open] > summary{
+      border-bottom:1px solid var(--line);
+      background:#fbf8f5;
+    }
+
+    .employee-sector-details > summary::-webkit-details-marker{
+      display:none;
+    }
+
+    .employee-sector-title-wrap{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--primary2);
+      font-weight:900;
+      font-size:21px;
+    }
+
+    .employee-sector-arrow{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:24px;
+      height:24px;
+      border-radius:999px;
+      background:#efe8e3;
+      color:var(--primary2);
+      font-size:18px;
+      line-height:1;
+    }
+
+    .employee-sector-details[open] .employee-sector-arrow{
+      transform:rotate(180deg);
+    }
+
+    .employee-sector-body{
+      padding:14px 16px 16px;
+    }
+
+    #executiveSection > .panel.card > .section-head:first-child{
+      display:none!important;
+    }
+
+    #executiveSection > .panel.card{
+      padding-top:0!important;
+      background:transparent!important;
+      box-shadow:none!important;
+      border:0!important;
+    }
+
+    #executiveSection .executive-inner-nav{
+      background:#fff!important;
+      border:1px solid var(--line)!important;
+      border-radius:18px!important;
+      margin-bottom:16px!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureRasfLogoInHeader(){
+  const brand=document.querySelector('.topbar .brand');
+  const titleBox=document.querySelector('.topbar .title-box');
+  if(!brand || !titleBox) return;
+
+  let logo=document.getElementById('mainRasfLogo');
+  if(!logo){
+    logo=document.createElement('img');
+    logo.id='mainRasfLogo';
+    logo.className='main-logo';
+    logo.src='rasf-logo.png';
+    logo.alt='شعار رصف';
+    titleBox.insertAdjacentElement('beforebegin', logo);
+  }
+}
+
+function ensureAddTaskFullButton(){
+  const sections=[...document.querySelectorAll('#tasksPage .panel.card')];
+  const target=sections.find(section=>section.textContent.includes('إضافة مهمة') && section.querySelector('button[onclick*="openTaskModal"]'));
+  if(!target || target.classList.contains('add-task-panel')) return;
+
+  target.classList.add('add-task-panel');
+  target.innerHTML='<button class="add-task-full-btn" onclick="openTaskModal()">إضافة مهمة جديدة</button>';
+}
+
+function ensureFinalVisualAdjustments(){
+  installFinalVisualAdjustmentsStyle();
+  ensureRasfLogoInHeader();
+  ensureAddTaskFullButton();
+}
+
+/* بطاقات أداء الموظفين: القطاعات مغلقة افتراضيًا وتفتح بالضغط */
+renderEmployeeCards = function(users){
+  ensureEmployeeCardsBySectorStyle?.();
+  installFinalVisualAdjustmentsStyle();
+
+  const rows=(users||[]).filter(Boolean);
+  if(!rows.length){
+    return `<section class="panel card"><h2>بطاقات أداء الموظفين</h2><div class="empty-state">لا توجد بيانات لعرضها حالياً.</div></section>`;
+  }
+
+  const sectorMap=new Map();
+
+  rows.forEach(u=>{
+    const sectorId=u.sector_id || '__no_sector__';
+    const sectorName=nameOfSector(u.sector_id) || 'بدون قطاع';
+    if(!sectorMap.has(sectorId)){
+      sectorMap.set(sectorId,{name:sectorName, users:[]});
+    }
+    sectorMap.get(sectorId).users.push(u);
+  });
+
+  const sectorBlocks=[...sectorMap.values()]
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'))
+    .map(group=>{
+      const sortedUsers=group.users
+        .slice()
+        .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+      return `
+        <details class="employee-sector-details">
+          <summary>
+            <div class="employee-sector-title-wrap">
+              <span class="employee-sector-arrow">⌄</span>
+              <span>${escapeHtml(group.name)}</span>
+            </div>
+            <span class="sector-count">${sortedUsers.length} موظف</span>
+          </summary>
+          <div class="employee-sector-body">
+            <div class="employee-dashboard-grid">
+              ${sortedUsers.map(renderSingleEmployeePerformanceCard).join('')}
+            </div>
+          </div>
+        </details>
+      `;
+    }).join('');
+
+  return `
+    <section class="panel card">
+      <h2>بطاقات أداء الموظفين</h2>
+      ${sectorBlocks}
+    </section>
+  `;
+};
+
+/* مؤشرات الأداء: حذف النصوص الوصفية، واسم القطاع فقط */
+renderPerformancePage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  const rows=perfRowsInScope();
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const sectorBlocks=sectors.map(sector=>{
+    const sectorRows=rows.filter(t=>taskBelongsToSectorForPerformance(t, sector.id));
+    const departmentRows=groupPerformance(
+      sectorRows,
+      (state.departments||[]).filter(d=>d.sector_id===sector.id),
+      d=>d.id,
+      d=>d.name||'—'
+    );
+    const employeeRows=groupPerformance(
+      sectorRows,
+      (state.users||[]).filter(u=>u.is_active!==false && u.sector_id===sector.id),
+      u=>u.id,
+      u=>u.name||'—'
+    );
+
+    return `
+      ${performanceCardsHtml((sector.name||'—'), sectorRows, '')}
+      <div class="kpi-subgrid">
+        ${performanceTable('الأداء حسب أقسام القطاع', departmentRows)}
+        ${performanceTable('الأداء حسب موظفي القطاع', employeeRows)}
+      </div>
+    `;
+  }).join('');
+
+  const allSectorRows=groupPerformance(rows,state.sectors||[],s=>s.id,s=>s.name||'—');
+  const allDepartmentRows=groupPerformance(rows,state.departments||[],d=>d.id,d=>`${d.name||'—'} / ${nameOfSector?nameOfSector(d.sector_id):''}`);
+  const allEmployeeRows=groupPerformance(rows,(state.users||[]).filter(u=>u.is_active!==false),u=>u.id,u=>u.name||'—');
+
+  $('performanceContent').innerHTML=`
+    <div class="section-head" style="margin-bottom:10px;">
+      <div>
+        <h2 style="margin:0;color:var(--primary2);">مؤشرات قياس الأداء</h2>
+      </div>
+    </div>
+    ${sectorBlocks || '<section class="panel card"><div class="empty-state">لا توجد قطاعات لعرض مؤشراتها.</div></section>'}
+    ${performanceCardsHtml('مؤشرات جميع القطاعات', rows, '')}
+    <div class="kpi-subgrid">
+      ${performanceTable('الأداء حسب القطاع', allSectorRows)}
+      ${performanceTable('الأداء حسب القسم', allDepartmentRows)}
+    </div>
+    ${performanceTable('الأداء حسب الموظف', allEmployeeRows)}
+  `;
+};
+
+/* الهيكل التنظيمي: حذف عنوان ووصف الصفحة، مع إبقاء عدد المستخدمين */
+renderOrgPage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  ensureUnifiedButtonTheme();
+
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoCards = ceos.length
+    ? ceos.map(u=>orgPersonCard(u,'head','الرئيس التنفيذي')).join('')
+    : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+  const sectorHtml = sectors.map(sector=>{
+    const heads=typeof orgSectorHeadsForSector === 'function'
+      ? orgSectorHeadsForSector(users, sector.id)
+      : users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
+
+    const departments=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    const departmentsHtml = departments.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && !['department_manager','sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+      const managerBlock = managers.length
+        ? `<div class="org-person-cards">${managers.map(u=>orgPersonCard(u,'manager','مدير القسم')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+      const employeeBlock = employees.length
+        ? `<div class="org-person-cards">${employees.map(u=>orgPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+      return `
+        <div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
+        </div>`;
+    }).join('');
+
+    const usersWithoutDepartment=users.filter(u=>u.sector_id===sector.id && !u.department_id && !['sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+    const noDeptBlock = usersWithoutDepartment.length ? `
+      <div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>orgPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+    return `
+      <div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${orgMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">
+          ${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}
+          ${noDeptBlock}
+        </div>
+      </div>`;
+  }).join('');
+
+  $('orgContent').innerHTML = `
+    <section class="panel card">
+      <div class="section-head" style="justify-content:flex-start;">
+        <span class="badge">${users.length} مستخدم</span>
+      </div>
+      <div class="org-chart-page">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>`;
+};
+
+/* طلبات بانتظار الإجراء في صفحة المهام تحت زر إضافة المهمة */
+function taskActionRequestsForCurrentUser(){
+  const pendingTasks = (typeof getPendingTasks === 'function' ? getPendingTasks() : [])
+    .filter(t=>typeof canReviewTask === 'function' ? canReviewTask(t) : false);
+
+  const completionTasks = (typeof getCompletionRequests === 'function' ? getCompletionRequests() : [])
+    .filter(t=>typeof canApproveCompletion === 'function' ? canApproveCompletion(t) : false);
+
+  const transferRequests = (state.transferRequests||[])
+    .filter(r=>r.status==='pending')
+    .filter(r=>{
+      const t=state.tasks.find(x=>x.id===r.task_id);
+      if(!t) return false;
+      if(isAdmin() || isCeo()) return true;
+      if(isSectorHead()) return t.owner_sector_id===state.profile.sector_id || t.target_sector_id===state.profile.sector_id;
+      if(isDepartmentManager()) return t.owner_department_id===state.profile.department_id || t.target_department_id===state.profile.department_id;
+      return false;
+    });
+
+  return {pendingTasks, completionTasks, transferRequests};
+}
+
+function renderTaskActionRequests(){
+  const host=$('taskActionRequestsPanel');
+  if(!host) return;
+
+  const {pendingTasks, completionTasks, transferRequests}=taskActionRequestsForCurrentUser();
+  const total=pendingTasks.length + completionTasks.length + transferRequests.length;
+
+  if(!total){
+    host.classList.add('hidden');
+    host.innerHTML='';
+    return;
+  }
+
+  const pendingHtml=pendingTasks.map(t=>`
+    <div class="task-card">
+      <div class="task-top">
+        <div>
+          <div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div>
+          <div class="meta">نوع الطلب: اعتماد مهمة جديدة<br>أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div>
+        </div>
+        <div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button>
+        <button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button>
+        <button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button>
+      </div>
+    </div>
+  `).join('');
+
+  const completionHtml=completionTasks.map(t=>`
+    <div class="task-card">
+      <div class="task-top">
+        <div>
+          <div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div>
+          <div class="meta">نوع الطلب: اعتماد إكمال مهمة<br>طالب الإكمال: ${escapeHtml(nameOfUser(t.completion_requested_by)||'—')}<br>تاريخ طلب الإكمال: ${formatDate(t.completion_requested_at)}</div>
+        </div>
+        <div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(t.priority)}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${t.id}')">اعتماد الإكمال</button>
+        <button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${t.id}')">رفض الإكمال</button>
+      </div>
+    </div>
+  `).join('');
+
+  const transferHtml=transferRequests.map(r=>{
+    const t=state.tasks.find(x=>x.id===r.task_id);
+    return `
+      <div class="task-card">
+        <div class="task-top">
+          <div>
+            <div class="task-title">${escapeHtml(t?.title||'مهمة غير موجودة')}</div>
+            <div class="meta">نوع الطلب: تحويل مهمة<br>طالب التحويل: ${escapeHtml(nameOfUser(r.requested_by))}<br>من: ${escapeHtml(nameOfUser(r.from_user_id))}<br>إلى: ${escapeHtml(nameOfUser(r.to_user_id))}<br>السبب: ${escapeHtml(r.reason||'—')}</div>
+          </div>
+          <div class="actions"><span class="chip progress">بانتظار الاعتماد</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-success btn-sm" onclick="approveTransferRequest('${r.id}')">اعتماد التحويل</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectTransferRequest('${r.id}')">رفض</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  host.classList.remove('hidden');
+  host.innerHTML=`
+    <section class="panel card">
+      <details open>
+        <summary style="cursor:pointer;font-weight:900;color:var(--primary2);font-size:20px;">
+          طلبات بانتظار الإجراء <span class="badge">${total}</span>
+        </summary>
+        <div style="margin-top:14px;">
+          ${pendingTasks.length ? `<h3 style="color:var(--primary2);">مهام بانتظار الاعتماد</h3>${pendingHtml}` : ''}
+          ${completionTasks.length ? `<h3 style="color:var(--primary2);margin-top:18px;">مهام مكتملة بانتظار الاعتماد</h3>${completionHtml}` : ''}
+          ${transferRequests.length ? `<h3 style="color:var(--primary2);margin-top:18px;">طلبات تحويل المهام</h3>${transferHtml}` : ''}
+        </div>
+      </details>
+    </section>
+  `;
+}
+
+function ensureTaskActionRequestsPanel(){
+  if($('taskActionRequestsPanel')) return;
+  const addPanel=document.querySelector('#tasksPage .add-task-panel') || [...document.querySelectorAll('#tasksPage .panel.card')].find(s=>s.textContent.includes('إضافة مهمة'));
+  if(addPanel){
+    addPanel.insertAdjacentHTML('afterend','<div id="taskActionRequestsPanel" class="hidden"></div>');
+  }
+}
+
+/* تنظيف صفحة متابعة القطاعات من رأسها الداخلي وترك شريط الأزرار مستقل */
+function cleanExecutiveFollowHeader(){
+  const section=$('executiveSection');
+  if(!section) return;
+
+  ensureExecutiveInnerNav?.();
+
+  const nav=$('executiveInnerNav');
+  if(nav && nav.parentElement && nav.parentElement.id!=='executiveSection'){
+    section.insertAdjacentElement('afterbegin', nav);
+  }
+
+  const heads=[...section.querySelectorAll('.section-head')];
+  heads.forEach(head=>{
+    const text=head.textContent || '';
+    if(text.includes('لوحة متابعة مهام القطاعات') || text.includes('عرض مباشر للرئيس التنفيذي') || text.includes('عرض فقط')){
+      head.remove();
+    }
+  });
+}
+
+const __finalVisualShowApp = showApp;
+showApp = function(){
+  __finalVisualShowApp();
+  ensureFinalVisualAdjustments();
+  ensureTaskActionRequestsPanel();
+  renderTaskActionRequests();
+  cleanExecutiveFollowHeader();
+};
+
+const __finalVisualShowPage = showPage;
+showPage = function(p){
+  __finalVisualShowPage(p);
+  ensureFinalVisualAdjustments();
+  ensureTaskActionRequestsPanel();
+  if(p==='tasks') renderTaskActionRequests();
+  if(p==='executiveFollow') cleanExecutiveFollowHeader();
+};
+
+const __finalVisualRenderTasks = renderTasks;
+renderTasks = function(){
+  __finalVisualRenderTasks();
+  ensureFinalVisualAdjustments();
+  ensureTaskActionRequestsPanel();
+  renderTaskActionRequests();
 };
 
 init();
