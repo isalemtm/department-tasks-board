@@ -8677,6 +8677,57 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: ضبط نهائي لمسافة شريط الأزرار في صفحة متابعة القطاعات === */
+function installExecutiveFollowExactTopSpacing(){
+  if(document.getElementById('executiveFollowExactTopSpacingStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFollowExactTopSpacingStyle';
+  style.textContent=`
+    /* صفحة متابعة القطاعات كانت تأخذ هامشًا إضافيًا لأنها خارج تدفق صفحات appSection */
+    #executiveSection{
+      margin-top:0!important;
+      padding-top:0!important;
+    }
+
+    #executiveSection > .panel.card{
+      margin-top:0!important;
+      padding-top:0!important;
+    }
+
+    #executiveSection .executive-inner-nav{
+      margin-top:0!important;
+      margin-bottom:16px!important;
+    }
+
+    /* نخلي أول بلوك بعد شريط الأزرار يبدأ بنفس إيقاع بقية الصفحات */
+    #executiveSection .executive-inner-nav + *{
+      margin-top:0!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __exactExecSpacingShowApp = showApp;
+showApp = function(){
+  __exactExecSpacingShowApp();
+  installExecutiveFollowExactTopSpacing();
+};
+
+const __exactExecSpacingShowPage = showPage;
+showPage = function(p){
+  __exactExecSpacingShowPage(p);
+  installExecutiveFollowExactTopSpacing();
+};
+
+const __exactExecSpacingInit = init;
+init = async function(){
+  const result = await __exactExecSpacingInit();
+  installExecutiveFollowExactTopSpacing();
+  return result;
+};
+
 init();
 </script>
 </body>
