@@ -9701,6 +9701,65 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: حذف زر تحميل نموذج Excel المكرر يمينًا والإبقاء على زر اليسار === */
+function installDuplicateTemplateButtonFix(){
+  let style=document.getElementById('duplicateTemplateButtonFixStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='duplicateTemplateButtonFixStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    /* نخفي زر تحميل النموذج الأصلي داخل رأس بلوك الاستيراد */
+    #bulkImportPanel .admin-collapsible-body > .section-head:first-child button[onclick="downloadUsersImportTemplate()"]{
+      display:none!important;
+    }
+
+    /* نبقي الزر الثابت الذي أضفناه يسارًا */
+    #downloadUsersTemplateFixedHolder{
+      display:flex!important;
+      justify-content:flex-start!important;
+      align-items:center!important;
+      margin:0 0 14px!important;
+    }
+
+    #downloadUsersTemplateFixedBtn{
+      display:inline-flex!important;
+      visibility:visible!important;
+      opacity:1!important;
+    }
+  `;
+}
+
+const __duplicateTemplateButtonRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __duplicateTemplateButtonRenderAdmin();
+  installDuplicateTemplateButtonFix();
+  if(typeof ensureUsersTemplateDownloadButtonVisible === 'function'){
+    ensureUsersTemplateDownloadButtonVisible();
+  }
+};
+
+const __duplicateTemplateButtonShowPage = showPage;
+showPage = function(p){
+  __duplicateTemplateButtonShowPage(p);
+  if(p==='admin'){
+    installDuplicateTemplateButtonFix();
+    if(typeof ensureUsersTemplateDownloadButtonVisible === 'function'){
+      ensureUsersTemplateDownloadButtonVisible();
+    }
+  }
+};
+
+const __duplicateTemplateButtonInit = init;
+init = async function(){
+  const result=await __duplicateTemplateButtonInit();
+  installDuplicateTemplateButtonFix();
+  return result;
+};
+
 init();
 </script>
 </body>
