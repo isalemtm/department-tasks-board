@@ -9760,6 +9760,81 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: حذف كل أزرار تحميل نموذج Excel المكررة والإبقاء على زر واحد فقط === */
+function removeDuplicateUsersTemplateButtons(){
+  const panel=$('bulkImportPanel');
+  if(!panel) return;
+
+  const buttons=[...panel.querySelectorAll('button[onclick*="downloadUsersImportTemplate"]')];
+
+  buttons.forEach(btn=>{
+    if(btn.id !== 'downloadUsersTemplateFixedBtn'){
+      btn.remove();
+    }
+  });
+
+  if(typeof ensureUsersTemplateDownloadButtonVisible === 'function'){
+    ensureUsersTemplateDownloadButtonVisible();
+  }
+}
+
+function installRemoveDuplicateTemplateButtonsStyle(){
+  let style=document.getElementById('removeDuplicateTemplateButtonsStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='removeDuplicateTemplateButtonsStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    #bulkImportPanel button[onclick*="downloadUsersImportTemplate"]:not(#downloadUsersTemplateFixedBtn){
+      display:none!important;
+      visibility:hidden!important;
+      opacity:0!important;
+      pointer-events:none!important;
+    }
+
+    #downloadUsersTemplateFixedHolder{
+      display:flex!important;
+      justify-content:flex-start!important;
+      align-items:center!important;
+      margin:0 0 14px!important;
+    }
+
+    #downloadUsersTemplateFixedBtn{
+      display:inline-flex!important;
+      visibility:visible!important;
+      opacity:1!important;
+      pointer-events:auto!important;
+    }
+  `;
+}
+
+const __removeDuplicateTemplateButtonsRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __removeDuplicateTemplateButtonsRenderAdmin();
+  installRemoveDuplicateTemplateButtonsStyle();
+  removeDuplicateUsersTemplateButtons();
+};
+
+const __removeDuplicateTemplateButtonsShowPage = showPage;
+showPage = function(p){
+  __removeDuplicateTemplateButtonsShowPage(p);
+  if(p==='admin'){
+    installRemoveDuplicateTemplateButtonsStyle();
+    removeDuplicateUsersTemplateButtons();
+  }
+};
+
+const __removeDuplicateTemplateButtonsInit = init;
+init = async function(){
+  const result=await __removeDuplicateTemplateButtonsInit();
+  installRemoveDuplicateTemplateButtonsStyle();
+  removeDuplicateUsersTemplateButtons();
+  return result;
+};
+
 init();
 </script>
 </body>
