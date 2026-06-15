@@ -9556,6 +9556,151 @@ init = async function(){
   return await __loadingNoHeaderInit();
 };
 
+
+/* === PATCH: إظهار أزرار تحميل النماذج داخل بلوكات إدارة المستخدمين === */
+function installAdminCollapsedBodyButtonsFix(){
+  let style=document.getElementById('adminCollapsedBodyButtonsFixStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='adminCollapsedBodyButtonsFixStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    /* لا نخفي section-head كاملًا لأن داخله أزرار مهمة مثل تحميل نموذج Excel */
+    #adminPage .admin-collapsible-body > .section-head:first-child{
+      display:flex!important;
+      align-items:flex-start!important;
+      justify-content:space-between!important;
+      gap:12px!important;
+      flex-wrap:wrap!important;
+      margin-bottom:14px!important;
+    }
+
+    /* نخفي فقط العنوان المكرر داخل البلوك المفتوح، لأن العنوان موجود في الشريط القابل للفتح */
+    #adminPage .admin-collapsible-body > .section-head:first-child h2{
+      display:none!important;
+    }
+
+    /* نُبقي الوصف والأزرار ظاهرة */
+    #adminPage .admin-collapsible-body > .section-head:first-child p.meta,
+    #adminPage .admin-collapsible-body > .section-head:first-child button{
+      display:initial!important;
+    }
+
+    #adminPage .admin-collapsible-body > .section-head:first-child button{
+      white-space:nowrap!important;
+      align-self:flex-start!important;
+    }
+  `;
+}
+
+const __adminButtonsFixRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __adminButtonsFixRenderAdmin();
+  installAdminCollapsedBodyButtonsFix();
+};
+
+const __adminButtonsFixShowPage = showPage;
+showPage = function(p){
+  __adminButtonsFixShowPage(p);
+  if(p==='admin') installAdminCollapsedBodyButtonsFix();
+};
+
+const __adminButtonsFixInit = init;
+init = async function(){
+  const result=await __adminButtonsFixInit();
+  installAdminCollapsedBodyButtonsFix();
+  return result;
+};
+
+
+/* === PATCH: إظهار زر تحميل نموذج Excel بشكل ثابت داخل بلوك الاستيراد === */
+function ensureUsersTemplateDownloadButtonVisible(){
+  const panel=$('bulkImportPanel');
+  if(!panel) return;
+
+  const body=panel.querySelector('.admin-collapsible-body') || panel;
+  if(!body) return;
+
+  let holder=body.querySelector('#downloadUsersTemplateFixedHolder');
+
+  if(!holder){
+    holder=document.createElement('div');
+    holder.id='downloadUsersTemplateFixedHolder';
+    holder.className='actions';
+    holder.innerHTML='<button id="downloadUsersTemplateFixedBtn" type="button" class="btn btn-info btn-sm" onclick="downloadUsersImportTemplate()">تحميل نموذج Excel</button>';
+    body.insertAdjacentElement('afterbegin', holder);
+  }
+
+  holder.style.display='flex';
+  holder.style.justifyContent='flex-start';
+  holder.style.alignItems='center';
+  holder.style.margin='0 0 14px';
+
+  const btn=holder.querySelector('#downloadUsersTemplateFixedBtn');
+  if(btn){
+    btn.style.display='inline-flex';
+    btn.style.visibility='visible';
+    btn.style.opacity='1';
+  }
+}
+
+function installUsersTemplateButtonStyleFix(){
+  let style=document.getElementById('usersTemplateButtonStyleFix');
+  if(!style){
+    style=document.createElement('style');
+    style.id='usersTemplateButtonStyleFix';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    #downloadUsersTemplateFixedHolder{
+      display:flex!important;
+      justify-content:flex-start!important;
+      align-items:center!important;
+      margin:0 0 14px!important;
+    }
+
+    #downloadUsersTemplateFixedBtn{
+      display:inline-flex!important;
+      visibility:visible!important;
+      opacity:1!important;
+    }
+  `;
+}
+
+const __templateButtonFixRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __templateButtonFixRenderAdmin();
+  installUsersTemplateButtonStyleFix();
+  ensureUsersTemplateDownloadButtonVisible();
+};
+
+const __templateButtonFixShowPage = showPage;
+showPage = function(p){
+  __templateButtonFixShowPage(p);
+  if(p==='admin'){
+    installUsersTemplateButtonStyleFix();
+    ensureUsersTemplateDownloadButtonVisible();
+  }
+};
+
+const __templateButtonFixShowApp = showApp;
+showApp = function(){
+  __templateButtonFixShowApp();
+  installUsersTemplateButtonStyleFix();
+  ensureUsersTemplateDownloadButtonVisible();
+};
+
+const __templateButtonFixInit = init;
+init = async function(){
+  const result=await __templateButtonFixInit();
+  installUsersTemplateButtonStyleFix();
+  ensureUsersTemplateDownloadButtonVisible();
+  return result;
+};
+
 init();
 </script>
 </body>
