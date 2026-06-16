@@ -11424,6 +11424,212 @@ applyLanguage = function(){
   }
 };
 
+
+/* === PATCH: استكمال ترجمة نموذج المهمة والقوائم - المرحلة الخامسة === */
+Object.assign(I18N_TEXT, {
+  'اختر القطاع':'Select Sector',
+  'اختر القسم':'Select Department',
+  'مدراء أقسام':'Department Managers',
+  'رؤساء قطاعات':'Sector Heads',
+  'كل إدارات':'All Departments',
+  'كل قطاع':'Entire Sector',
+  'كل الشركة':'Entire Company',
+  'منخفضة':'Low',
+  'تاريخ/يوم/شهر':'Date / Day / Month',
+  'الأولوية، نوع التكليف، القطاع، القسم والمرفقات':'Priority, assignment type, sector, department, and attachments',
+  'أرفق ملفًا أو رابطًا داعمًا للمهمة':'Attach a supporting file or link to the task',
+  'اضغط لاختيار ملف أو اسحب وأفلت هنا':'Click to choose a file or drag and drop it here',
+  'لم يتم اختيار ملف بعد':'No file selected yet',
+  'لم يتم اختيار ملف بعد.':'No file selected yet.',
+  'التطوير التنظيمي':'Organizational Development',
+  'التطوير التنظيمي ':'Organizational Development',
+  'إدارة التطوير التنظيمي':'Organizational Development',
+  'قطاع الاستراتيجية والتحول':'Strategy and Transformation Sector',
+  'قطاع الاستراتيجية والتحول ':'Strategy and Transformation Sector',
+  'الاستراتيجية والتحول':'Strategy and Transformation',
+  'إدارة المالية':'Finance Department',
+  'المالية':'Finance',
+  'إدارة الموارد البشرية':'Human Resources',
+  'الموارد البشرية':'Human Resources',
+  'إدارة الشؤون الإدارية':'Administrative Affairs',
+  'الشؤون الإدارية':'Administrative Affairs'
+});
+
+const EN_STRONG_MAP = {
+  'اختر القطاع':'Select Sector',
+  'اختر القسم':'Select Department',
+  'بدون تحديد':'Not Selected',
+  'موظفين محددين':'Specific Employees',
+  'موظفون محددون':'Specific Employees',
+  'مدراء أقسام':'Department Managers',
+  'رؤساء قطاعات':'Sector Heads',
+  'كل إدارات':'All Departments',
+  'كل قطاع':'Entire Sector',
+  'كل الشركة':'Entire Company',
+  'كل موظفي القطاع':'All Sector Employees',
+  'كل موظفي القسم':'All Department Employees',
+  'منخفضة':'Low',
+  'عادية':'Normal',
+  'عالية':'High',
+  'عاجلة':'Urgent',
+  'قيد التنفيذ':'In Progress',
+  'مكتملة':'Completed',
+  'متأخرة':'Overdue',
+  'الإدارة التنفيذية':'Executive Management',
+  'القطاع التجاري':'Commercial Sector',
+  'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+  'قطاع المالية':'Finance Sector',
+  'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+  'قطاع تطوير الأعمال':'Business Development Sector',
+  'قطاع الاستراتيجية والتحول':'Strategy and Transformation Sector',
+  'التطوير التنظيمي':'Organizational Development',
+  'إدارة التطوير التنظيمي':'Organizational Development',
+  'إدارة الموارد البشرية':'Human Resources',
+  'الموارد البشرية':'Human Resources',
+  'إدارة الشؤون الإدارية':'Administrative Affairs',
+  'الشؤون الإدارية':'Administrative Affairs',
+  'إدارة المالية':'Finance Department',
+  'المالية':'Finance',
+  'المحاسبة والضبط المالي':'Accounting and Financial Control',
+  'مكتب إدارة المشاريع':'Project Management Office',
+  'التصميم والابتكار':'Design and Innovation',
+  'علاقات المستثمرين':'Investor Relations',
+  'المشتريات':'Procurement',
+  'إرفاق الملفات والروابط':'Attach Files and Links',
+  'مرفقات المهمة':'Task Attachments',
+  'أرفق ملفًا أو رابطًا داعمًا للمهمة':'Attach a supporting file or link to the task',
+  'اضغط لاختيار ملف أو اسحب وأفلت هنا':'Click to choose a file or drag and drop it here',
+  'لم يتم اختيار ملف بعد':'No file selected yet',
+  'لم يتم اختيار ملف بعد.':'No file selected yet.',
+  'تاريخ/يوم/شهر':'Date / Day / Month'
+};
+
+function replaceArabicStrongText(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  /* تنظيف خلط الترجمة السابق */
+  out = out.replace(/Employee\s*محددين|Employeeمحددين|Employees\s*محددين/gi,'Specific Employees');
+  out = out.replace(/No\s*تم\s*selected\s*yet\.?/gi,'No file selected yet.');
+  out = out.replace(/تم\s*selected\s*yet\.?/gi,'No file selected yet.');
+
+  Object.entries(EN_STRONG_MAP)
+    .sort((a,b)=>b[0].length-a[0].length)
+    .forEach(([ar,en])=>{
+      out = out.split(ar).join(en);
+    });
+
+  return out;
+}
+
+function translateAllSelectsVeryStrong(){
+  if(!isEnglish()) return;
+
+  document.querySelectorAll('select').forEach(select=>{
+    [...select.options].forEach(opt=>{
+      const old = opt.textContent || '';
+      const fixed = replaceArabicStrongText(old).trim();
+      if(fixed && fixed !== old.trim()) opt.textContent = fixed;
+    });
+  });
+}
+
+function translateTaskModalTextVeryStrong(){
+  if(!isEnglish()) return;
+
+  translateAllSelectsVeryStrong();
+
+  /* نعالج كل النصوص داخل نموذج المهمة تحديدًا */
+  const scope = document.querySelector('#taskModal') || document.body;
+
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const old=node.nodeValue;
+    const fixed=replaceArabicStrongText(old);
+    if(fixed !== old) node.nodeValue=fixed;
+  });
+
+  /* placeholders مثل تاريخ/يوم/شهر */
+  scope.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el=>{
+    const ph=el.getAttribute('placeholder') || '';
+    const fixed=replaceArabicStrongText(ph);
+    if(fixed !== ph) el.setAttribute('placeholder', fixed);
+  });
+
+  /* أسماء الموظفين: لا نترجم الأسماء، لكن نترجم الأدوار فقط */
+  scope.querySelectorAll('.checkbox-item, .assignee-card, label').forEach(el=>{
+    let html=el.innerHTML || '';
+    html=html.replace(/\(مدير النظام\)/g,'(System Admin)');
+    html=html.replace(/\(الرئيس التنفيذي\)/g,'(CEO)');
+    html=html.replace(/\(رئيس قطاع\)/g,'(Sector Head)');
+    html=html.replace(/\(مدير قسم\)/g,'(Department Manager)');
+    html=html.replace(/\(موظف\)/g,'(Employee)');
+    html=html.replace(/مدير النظام/g,'System Admin');
+    html=html.replace(/الرئيس التنفيذي/g,'CEO');
+    html=html.replace(/رئيس قطاع/g,'Sector Head');
+    html=html.replace(/مدير قسم/g,'Department Manager');
+    /* لا نستبدل كلمة موظف العامة هنا إذا كانت جزءًا من اسم/نص غير دور إلا إذا داخل أقواس تمت أعلاه */
+    if(html !== el.innerHTML) el.innerHTML=html;
+  });
+}
+
+/* نعيد الترجمة بعد أي تغيير لأن القطاع والقسم يعاد تعبئتهما ديناميكيًا */
+function scheduleStrongTaskTranslation(){
+  if(!isEnglish()) return;
+  setTimeout(translateTaskModalTextVeryStrong,0);
+  setTimeout(translateTaskModalTextVeryStrong,120);
+  setTimeout(translateTaskModalTextVeryStrong,350);
+  setTimeout(translateTaskModalTextVeryStrong,800);
+}
+
+const __phase5OpenTaskModal = typeof openTaskModal === 'function' ? openTaskModal : null;
+if(__phase5OpenTaskModal){
+  openTaskModal = function(...args){
+    const result=__phase5OpenTaskModal.apply(this,args);
+    scheduleStrongTaskTranslation();
+    return result;
+  };
+}
+
+const __phase5EditTask = typeof editTask === 'function' ? editTask : null;
+if(__phase5EditTask){
+  editTask = function(...args){
+    const result=__phase5EditTask.apply(this,args);
+    scheduleStrongTaskTranslation();
+    return result;
+  };
+}
+
+document.addEventListener('change', function(e){
+  if(!isEnglish()) return;
+  if(e.target && (e.target.tagName === 'SELECT' || e.target.id === 'taskTargetSector' || e.target.id === 'taskTargetDepartment')){
+    scheduleStrongTaskTranslation();
+  }
+}, true);
+
+document.addEventListener('click', function(){
+  if(isEnglish()) setTimeout(translateTaskModalTextVeryStrong,60);
+}, true);
+
+const __phase5ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase5ApplyLanguage();
+  scheduleStrongTaskTranslation();
+};
+
 init();
 </script>
 </body>
