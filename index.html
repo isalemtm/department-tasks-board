@@ -12214,6 +12214,128 @@ applyLanguage = function(){
   schedulePhase9CleanEmployeePerformance();
 };
 
+
+/* === PATCH: منع ترجمة أسماء الموظفين وإيقاف الوميض === */
+function installDoNotTranslateEmployeeNames(){
+  /* إزالة الأسماء من القواميس حتى لا تتحول ثم ترجع وتتسبب في وميض */
+  try{
+    delete I18N_TEXT['سالم الغنام'];
+    delete I18N_TEXT['الوليد سعود العصيمي'];
+
+    if(typeof EN_DASHBOARD_STRONG_MAP !== 'undefined'){
+      delete EN_DASHBOARD_STRONG_MAP['سالم الغنام'];
+      delete EN_DASHBOARD_STRONG_MAP['الوليد سعود العصيمي'];
+    }
+
+    if(typeof EN_PHASE8_MAP !== 'undefined'){
+      delete EN_PHASE8_MAP['سالم الغنام'];
+      delete EN_PHASE8_MAP['الوليد سعود العصيمي'];
+    }
+  }catch(e){
+    console.warn('Could not remove employee names from translation maps:', e);
+  }
+}
+
+function restoreEmployeeNamesOnly(){
+  const pairs = {
+    'Salem Alghannam':'سالم الغنام',
+    'Alwaleed Saud Alosaimi':'الوليد سعود العصيمي'
+  };
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    let out=node.nodeValue;
+    Object.entries(pairs).forEach(([en,ar])=>{
+      out=out.split(en).join(ar);
+    });
+    if(out !== node.nodeValue) node.nodeValue=out;
+  });
+}
+
+/* نجعل الاسم يرجع فورًا بعد أي عملية ترجمة بدون تأخير متكرر */
+const __noNameFlickerTranslateVisibleText = translateVisibleText;
+translateVisibleText = function(root=document.body){
+  installDoNotTranslateEmployeeNames();
+  __noNameFlickerTranslateVisibleText(root);
+  restoreEmployeeNamesOnly();
+};
+
+if(typeof replaceDashboardArabicText === 'function'){
+  const __noNameFlickerReplaceDashboardArabicText = replaceDashboardArabicText;
+  replaceDashboardArabicText = function(text){
+    installDoNotTranslateEmployeeNames();
+    return __noNameFlickerReplaceDashboardArabicText(text);
+  };
+}
+
+if(typeof replacePhase8Arabic === 'function'){
+  const __noNameFlickerReplacePhase8Arabic = replacePhase8Arabic;
+  replacePhase8Arabic = function(text){
+    installDoNotTranslateEmployeeNames();
+    return __noNameFlickerReplacePhase8Arabic(text);
+  };
+}
+
+if(typeof phase9FixEmployeePerformanceText === 'function'){
+  const __noNameFlickerPhase9FixEmployeePerformanceText = phase9FixEmployeePerformanceText;
+  phase9FixEmployeePerformanceText = function(text){
+    installDoNotTranslateEmployeeNames();
+    return __noNameFlickerPhase9FixEmployeePerformanceText(text);
+  };
+}
+
+function scheduleNameRestoreNoFlicker(){
+  installDoNotTranslateEmployeeNames();
+  restoreEmployeeNamesOnly();
+  setTimeout(restoreEmployeeNamesOnly,0);
+  setTimeout(restoreEmployeeNamesOnly,60);
+}
+
+if(typeof renderEmployeeCards === 'function'){
+  const __noNameFlickerRenderEmployeeCards = renderEmployeeCards;
+  renderEmployeeCards = function(...args){
+    installDoNotTranslateEmployeeNames();
+    const result=__noNameFlickerRenderEmployeeCards.apply(this,args);
+    scheduleNameRestoreNoFlicker();
+    return result;
+  };
+}
+
+const __noNameFlickerShowPage = showPage;
+showPage = function(p){
+  installDoNotTranslateEmployeeNames();
+  __noNameFlickerShowPage(p);
+  scheduleNameRestoreNoFlicker();
+};
+
+const __noNameFlickerApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  installDoNotTranslateEmployeeNames();
+  __noNameFlickerApplyLanguage();
+  scheduleNameRestoreNoFlicker();
+};
+
+const __noNameFlickerInit = init;
+init = async function(){
+  installDoNotTranslateEmployeeNames();
+  const result=await __noNameFlickerInit();
+  scheduleNameRestoreNoFlicker();
+  return result;
+};
+
 init();
 </script>
 </body>
