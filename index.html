@@ -10934,6 +10934,164 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: توسيع قاموس الترجمة الإنجليزية - المرحلة الثانية === */
+Object.assign(I18N_TEXT, {
+  'أهم مؤشرات المتابعة':'Key Follow-up Indicators',
+  'المهام المنجزة حتى الآن':'Completed to Date',
+  'المهام المنجزة هذا الشهر':'Completed This Month',
+  'المهام المستحقة هذا الشهر':'Due This Month',
+  'المهام المتأخرة':'Overdue Tasks',
+  'كل المهام المستندة ضمن نطاق العرض':'All assigned tasks within the current view',
+  'إجمالي المكتمل لرؤساء القطاعات':'Total completed tasks for sector heads',
+  'حسب تاريخ اعتماد الإكمال خلال الشهر الحالي':'Based on completion approval date during the current month',
+  'حسب تاريخ الاستحقاق خلال الشهر الحالي':'Based on due date during the current month',
+  'تجاوزت تاريخ الاستحقاق':'Past due date',
+  'مهام تحت المتابعة':'Tasks under follow-up',
+  'لا يوجد مهام':'No tasks',
+  'أكثر موظف لديه مهام':'Employee with Most Tasks',
+  'أقل موظف لديه مهام':'Employee with Fewest Tasks',
+  'أكثر رئيس قطاع لديه مهام':'Sector Head with Most Tasks',
+  'أقل رئيس قطاع لديه مهام':'Sector Head with Fewest Tasks',
+  'جدول مختصر للمهام المعتمدة':'Approved Tasks Summary',
+  'المهام حديثة حسب تاريخ الاستحقاق وتصنيف قوائم مهام رئيسية بالتوثيق':'Recent tasks by due date and main task lists',
+  'أداء القطاعات':'Sector Performance',
+  'الإدارة التنفيذية':'Executive Management',
+  'القطاع التجاري':'Commercial Sector',
+  'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+  'قطاع المالية':'Finance Sector',
+  'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+  'قطاع تطوير الأعمال':'Business Development Sector',
+  'إدارة الشؤون الإدارية':'Administrative Affairs Department',
+  'إدارة الموارد البشرية':'Human Resources Department',
+  'إدارة التسويق':'Marketing Department',
+  'إدارة المبيعات':'Sales Department',
+  'إدارة التطوير التنظيمي':'Organizational Development Department',
+  'الإدارة المالية':'Finance Department',
+  'إدارة المشاريع':'Projects Department',
+  'إدارة العمليات':'Operations Department',
+  'غير محدد':'Not specified',
+  'بدون قسم':'No Department',
+  'بدون قطاع':'No Sector',
+  'مهام':'Tasks',
+  'مهمة':'Task',
+  'موظفين':'Employees',
+  'موظف':'Employee',
+  'مستخدم':'User',
+  'مستخدمين':'Users'
+});
+
+function translateArabicPhrasesInsideText(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  const phraseMap = {
+    'مدير النظام':'System Admin',
+    'الرئيس التنفيذي':'CEO',
+    'رئيس قطاع':'Sector Head',
+    'مدير قسم':'Department Manager',
+    'موظف':'Employee',
+    'قيد التنفيذ':'In Progress',
+    'مكتملة':'Completed',
+    'متأخرة':'Overdue',
+    'عادية':'Normal',
+    'عالية':'High',
+    'عاجلة':'Urgent',
+    'الإدارة التنفيذية':'Executive Management',
+    'القطاع التجاري':'Commercial Sector',
+    'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+    'قطاع المالية':'Finance Sector',
+    'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+    'قطاع تطوير الأعمال':'Business Development Sector',
+    'إجمالي مهام رؤساء القطاعات':'Total Sector Heads Tasks',
+    'المهام المنجزة حتى الآن':'Completed to Date',
+    'المهام المنجزة هذا الشهر':'Completed This Month',
+    'المهام المستحقة هذا الشهر':'Due This Month',
+    'المهام المتأخرة':'Overdue Tasks'
+  };
+
+  Object.entries(phraseMap).forEach(([ar,en])=>{
+    out = out.split(ar).join(en);
+  });
+
+  out = out.replace(/(\d+)\s*مهام/g, '$1 tasks');
+  out = out.replace(/(\d+)\s*مهمة/g, '$1 task');
+  out = out.replace(/(\d+)\s*موظفين/g, '$1 employees');
+  out = out.replace(/(\d+)\s*موظف/g, '$1 employee');
+  out = out.replace(/(\d+)\s*مستخدمين/g, '$1 users');
+  out = out.replace(/(\d+)\s*مستخدم/g, '$1 user');
+
+  return out;
+}
+
+const __phase2TranslateVisibleText = translateVisibleText;
+translateVisibleText = function(root=document.body){
+  if(!isEnglish() || !root) return;
+
+  __phase2TranslateVisibleText(root);
+
+  const skipTags=new Set(['SCRIPT','STYLE','TEXTAREA']);
+  const walker=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent || skipTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      const text=node.nodeValue;
+      if(!text || !text.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const translated=translateArabicPhrasesInsideText(node.nodeValue);
+    if(translated !== node.nodeValue) node.nodeValue=translated;
+  });
+
+  translateAttributes(root);
+};
+
+function applyEnglishPhase2AfterRender(){
+  if(isEnglish()){
+    setTimeout(()=>translateVisibleText(document.body),0);
+    setTimeout(()=>translateVisibleText(document.body),120);
+    setTimeout(()=>translateVisibleText(document.body),350);
+  }
+}
+
+const __phase2RenderEmployeeCards = renderEmployeeCards;
+renderEmployeeCards = function(users){
+  const html = __phase2RenderEmployeeCards(users);
+  setTimeout(applyEnglishPhase2AfterRender,0);
+  return html;
+};
+
+if(typeof renderDashboard === 'function'){
+  const __phase2RenderDashboard = renderDashboard;
+  renderDashboard = function(){
+    const result = __phase2RenderDashboard();
+    applyEnglishPhase2AfterRender();
+    return result;
+  };
+}
+
+if(typeof renderExecutiveDirect === 'function'){
+  const __phase2RenderExecutiveDirect = renderExecutiveDirect;
+  renderExecutiveDirect = function(){
+    const result = __phase2RenderExecutiveDirect();
+    applyEnglishPhase2AfterRender();
+    return result;
+  };
+}
+
+const __phase2ShowPage = showPage;
+showPage = function(p){
+  __phase2ShowPage(p);
+  applyEnglishPhase2AfterRender();
+};
+
 init();
 </script>
 </body>
