@@ -12336,6 +12336,143 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: تنظيف ترجمة مسارات القطاع/القسم في جدول أداء جميع الموظفين - المرحلة الحادية عشرة === */
+Object.assign(I18N_TEXT, {
+  'جديدة':'New',
+  'قطاع':'Sector',
+  'التجاري':'Commercial',
+  'قطاع التجاري':'Commercial Sector',
+  'قطاع Business Development':'Business Development Sector',
+  'Sector التجاري':'Commercial Sector',
+  'الدراسات والتحليل':'Research and Analysis',
+  'التجارية والتشغيل':'Commercial and Operations',
+  'الخزينة والتمويل':'Treasury and Finance',
+  'التسويق والإدارة':'Marketing and Management',
+  'التسويق والادارة':'Marketing and Management',
+  'الاستثمار والعلاقات':'Investment and Relations',
+  'المبيعات والتحصيل':'Sales and Collection',
+  'التصميم والابتكار':'Design and Innovation'
+});
+
+const EN_PHASE11_MAP = {
+  'جديدة':'New',
+  'قطاع Business Development':'Business Development Sector',
+  'Business Development قطاع':'Business Development Sector',
+  'Sector التجاري':'Commercial Sector',
+  'القطاع التجاري':'Commercial Sector',
+  'قطاع التجاري':'Commercial Sector',
+  'قطاع المالية':'Finance Sector',
+  'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+  'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+  'قطاع تطوير الأعمال':'Business Development Sector',
+  'قطاع الاستراتيجية والتحول':'Strategy and Transformation Sector',
+
+  'الدراسات والتحليل':'Research and Analysis',
+  'التجارية والتشغيل':'Commercial and Operations',
+  'الخزينة والتمويل':'Treasury and Finance',
+  'التسويق والإدارة':'Marketing and Management',
+  'التسويق والادارة':'Marketing and Management',
+  'الاستثمار والعلاقات':'Investment and Relations',
+  'المبيعات والتحصيل':'Sales and Collection',
+  'المبيعات':'Sales',
+  'التحصيل':'Collection',
+  'التسويق':'Marketing',
+  'التصميم والابتكار':'Design and Innovation',
+  'التطوير التنظيمي':'Organizational Development',
+  'الشؤون الإدارية':'Administrative Affairs',
+  'الموارد البشرية':'Human Resources',
+  'المحاسبة والضبط المالي':'Accounting and Financial Control',
+  'إدارة المشاريع':'Projects Department',
+  'مكتب إدارة المشاريع':'Project Management Office',
+  'المشتريات':'Procurement'
+};
+
+function fixMixedSectorDepartmentPath(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  Object.entries(EN_PHASE11_MAP)
+    .sort((a,b)=>b[0].length-a[0].length)
+    .forEach(([bad,good])=>{
+      out = out.split(bad).join(good);
+    });
+
+  /* تنظيف حالات الخلط الشائعة داخل مسار القطاع / القسم */
+  out = out.replace(/Sector\s+Commercial/gi, 'Commercial Sector');
+  out = out.replace(/Business Development\s+Sector\s*\/\s*Investment and Relations/gi, 'Business Development Sector / Investment and Relations');
+  out = out.replace(/Business Development\s+Sector\s*\/\s*Research and Analysis/gi, 'Business Development Sector / Research and Analysis');
+  out = out.replace(/Commercial\s+Sector\s*\/\s*Sales\s*Collection/gi, 'Commercial Sector / Sales and Collection');
+  out = out.replace(/Commercial\s+Sector\s*\/\s*Sales\s*and\s*Collection/gi, 'Commercial Sector / Sales and Collection');
+  out = out.replace(/Finance\s+Sector\s*\/\s*Treasury\s*and\s*Finance/gi, 'Finance Sector / Treasury and Finance');
+  out = out.replace(/Business Development\s+Sector\s*\/\s*Commercial\s*and\s*Operations/gi, 'Business Development Sector / Commercial and Operations');
+  out = out.replace(/Commercial\s+Sector\s*\/\s*Marketing\s*and\s*Management/gi, 'Commercial Sector / Marketing and Management');
+
+  return out;
+}
+
+function phase11CleanAllEmployeesTable(){
+  if(!isEnglish()) return;
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const old=node.nodeValue;
+    const fixed=fixMixedSectorDepartmentPath(old);
+    if(fixed !== old) node.nodeValue=fixed;
+  });
+}
+
+function schedulePhase11Clean(){
+  if(!isEnglish()) return;
+  setTimeout(phase11CleanAllEmployeesTable,0);
+  setTimeout(phase11CleanAllEmployeesTable,150);
+  setTimeout(phase11CleanAllEmployeesTable,500);
+  setTimeout(phase11CleanAllEmployeesTable,1000);
+}
+
+if(typeof renderDashboard === 'function'){
+  const __phase11RenderDashboard = renderDashboard;
+  renderDashboard = function(...args){
+    const result = __phase11RenderDashboard.apply(this,args);
+    schedulePhase11Clean();
+    return result;
+  };
+}
+
+if(typeof renderPerformancePage === 'function'){
+  const __phase11RenderPerformancePage = renderPerformancePage;
+  renderPerformancePage = function(...args){
+    const result = __phase11RenderPerformancePage.apply(this,args);
+    schedulePhase11Clean();
+    return result;
+  };
+}
+
+const __phase11ShowPage = showPage;
+showPage = function(p){
+  __phase11ShowPage(p);
+  schedulePhase11Clean();
+};
+
+const __phase11ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase11ApplyLanguage();
+  schedulePhase11Clean();
+};
+
 init();
 </script>
 </body>
