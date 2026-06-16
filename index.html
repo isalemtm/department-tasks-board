@@ -10569,6 +10569,371 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: إضافة خيار اللغة الإنجليزية / العربية - المرحلة الأولى === */
+const LANG_STORAGE_KEY = 'rasf_tasks_lang';
+
+const I18N_TEXT = {
+  'لوحة متابعة مهام القطاعات':'Sector Tasks Board',
+  'نظام داخلي لإدارة ومتابعة مهام القطاعات':'Internal system for managing and tracking sector tasks',
+  'تسجيل الخروج':'Logout',
+  'تسجيل الدخول':'Login',
+  'طلب انضمام':'Join Request',
+  'المهام':'Tasks',
+  'لوحة الموظفين':'Employee Dashboard',
+  'مؤشرات الأداء':'Performance Indicators',
+  'الهيكل التنظيمي':'Organization Chart',
+  'متابعة القطاعات':'Sector Follow-up',
+  'إدارة المستخدمين':'User Management',
+  'إضافة مهمة جديدة':'Add New Task',
+  'البحث':'Search',
+  'قائمة المهام':'Task List',
+  'تصدير Excel':'Export Excel',
+  'إجمالي المهام':'Total Tasks',
+  'قيد التنفيذ':'In Progress',
+  'مكتملة':'Completed',
+  'متأخرة':'Overdue',
+  'الأولوية':'Priority',
+  'عادية':'Normal',
+  'عالية':'High',
+  'عاجلة':'Urgent',
+  'الحالة':'Status',
+  'كل الحالات':'All Statuses',
+  'كل القطاعات':'All Sectors',
+  'كل الأقسام':'All Departments',
+  'كل الموظفين':'All Employees',
+  'عنوان المهمة':'Task Title',
+  'وصف المهمة':'Task Description',
+  'وصف المهمة':'Task Description',
+  'تاريخ الاستحقاق':'Due Date',
+  'المسند إليه':'Assigned To',
+  'إضافة مهمة':'Add Task',
+  'تعديل المهمة':'Edit Task',
+  'حفظ المهمة':'Save Task',
+  'إغلاق':'Close',
+  'إلغاء':'Cancel',
+  'حفظ':'Save',
+  'تعديل':'Edit',
+  'حذف':'Delete',
+  'اعتماد':'Approve',
+  'رفض':'Reject',
+  'تعليق':'Comment',
+  'التعليقات':'Comments',
+  'المرفقات':'Attachments',
+  'إضافة تعليق':'Add Comment',
+  'طلب تحويل':'Transfer Request',
+  'طلبات بانتظار الإجراء':'Pending Actions',
+  'مهام بانتظار الاعتماد':'Tasks Pending Approval',
+  'مهام مكتملة بانتظار الاعتماد':'Completed Tasks Pending Approval',
+  'طلبات تحويل المهام':'Task Transfer Requests',
+  'اعتماد الإكمال':'Approve Completion',
+  'رفض الإكمال':'Reject Completion',
+  'اعتماد التحويل':'Approve Transfer',
+  'طلبات الانضمام':'Join Requests',
+  'المستخدمون':'Users',
+  'إضافة مستخدم مباشرة':'Add User Directly',
+  'استيراد مستخدمين من Excel':'Import Users from Excel',
+  'استيراد مستخدمين من لوحة أخرى':'Import Users from Another Board',
+  'استيراد مهام من لوحة أخرى':'Import Tasks from Another Board',
+  'إشعارات تعيين كلمة المرور':'Password Setup Notifications',
+  'إعداد طلب الانضمام':'Join Request Settings',
+  'إيقاف طلب الانضمام':'Disable Join Request',
+  'تفعيل طلب الانضمام':'Enable Join Request',
+  'طلب الانضمام مفعّل حاليًا':'Join requests are currently enabled',
+  'طلب الانضمام موقوف حاليًا':'Join requests are currently disabled',
+  'لا يمكنك الانضمام حاليًا.':'You cannot join at this time.',
+  'بطاقات أداء الموظفين':'Employee Performance Cards',
+  'مؤشرات جميع القطاعات':'All Sectors Indicators',
+  'الأداء حسب القطاع':'Performance by Sector',
+  'الأداء حسب القسم':'Performance by Department',
+  'الأداء حسب الموظف':'Performance by Employee',
+  'الأداء حسب أقسام القطاع':'Performance by Sector Departments',
+  'الأداء حسب موظفي القطاع':'Performance by Sector Employees',
+  'نسبة الإنجاز':'Completion Rate',
+  'المستحقة هذا الشهر':'Due This Month',
+  'المنجزة هذا الشهر':'Completed This Month',
+  'المنجزة حتى الآن':'Completed To Date',
+  'إجمالي مهام رؤساء القطاعات':'Total Sector Heads Tasks',
+  'أكثر رئيس قطاع لديه مهام':'Sector Head with Most Tasks',
+  'أقل رئيس قطاع لديه مهام':'Sector Head with Fewest Tasks',
+  'لا توجد مهام.':'No tasks found.',
+  'لا توجد بيانات لعرضها.':'No data to display.',
+  'لا توجد بيانات لعرضها حالياً.':'No data to display currently.',
+  'لا توجد قطاعات لعرض مؤشراتها.':'No sectors to display indicators.',
+  'الاسم الكامل':'Full Name',
+  'البريد الإلكتروني':'Email',
+  'كلمة المرور':'Password',
+  'كلمة المرور الجديدة':'New Password',
+  'تأكيد كلمة المرور':'Confirm Password',
+  'تعيين كلمة المرور':'Set Password',
+  'حفظ كلمة المرور والدخول':'Save Password and Login',
+  'استعادة كلمة المرور':'Reset Password',
+  'إرسال رابط الاستعادة':'Send Reset Link',
+  'العودة لتسجيل الدخول':'Back to Login',
+  'نسيت كلمة المرور؟':'Forgot Password?',
+  'الدور':'Role',
+  'المسمى الوظيفي':'Job Title',
+  'القطاع':'Sector',
+  'القسم':'Department',
+  'نشط':'Active',
+  'معطل':'Disabled',
+  'مدير النظام':'System Admin',
+  'الرئيس التنفيذي':'CEO',
+  'رئيس قطاع':'Sector Head',
+  'مدير قسم':'Department Manager',
+  'موظف':'Employee',
+  'تحميل نموذج Excel':'Download Excel Template',
+  'مسح الملف':'Clear File',
+  'حفظ المستخدمين كحسابات نشطة بدون إرسال بريد':'Save users as active accounts without sending email',
+  'إرسال إشعار تعيين كلمة المرور':'Send Password Setup Notification',
+  'إرسال إشعارات تعيين كلمة المرور للمحتاجين':'Send Password Setup Notifications',
+  'جاري تحميل اللوحة...':'Loading board...',
+  'لحظات ويتم التحقق من جلسة الدخول.':'Please wait while your session is verified.',
+  'لا توجد مهام':'No tasks',
+  'لا توجد مهام حاليًا.':'No tasks currently.'
+};
+
+const I18N_PLACEHOLDERS = {
+  'ابحث بعنوان المهمة أو الوصف':'Search by task title or description',
+  'اكتب عنوانًا واضحًا للمهمة':'Write a clear task title',
+  'اكتب المطلوب باختصار...':'Briefly describe the required task...',
+  'example@rasf.sa':'example@rasf.sa',
+  'مثال: محمد أحمد':'Example: Mohammed Ahmed',
+  'اختياري':'Optional',
+  'اكتب كلمة مرور قوية':'Enter a strong password',
+  'أعد كتابة كلمة المرور':'Re-enter password'
+};
+
+function currentLang(){
+  return localStorage.getItem(LANG_STORAGE_KEY) || 'ar';
+}
+
+function isEnglish(){
+  return currentLang() === 'en';
+}
+
+function translateExactText(text){
+  const raw = String(text || '');
+  const trimmed = raw.trim();
+  if(!trimmed) return raw;
+
+  if(isEnglish()){
+    if(I18N_TEXT[trimmed]){
+      return raw.replace(trimmed, I18N_TEXT[trimmed]);
+    }
+
+    /* تعبيرات متكررة تحتوي أرقام */
+    let m = trimmed.match(/^(\d+)\s+مهمة$/);
+    if(m) return raw.replace(trimmed, `${m[1]} tasks`);
+
+    m = trimmed.match(/^(\d+)\s+موظف$/);
+    if(m) return raw.replace(trimmed, `${m[1]} employees`);
+
+    m = trimmed.match(/^(\d+)\s+مستخدم$/);
+    if(m) return raw.replace(trimmed, `${m[1]} users`);
+
+    m = trimmed.match(/^مكتملة من\s+(\d+)$/);
+    if(m) return raw.replace(trimmed, `completed out of ${m[1]}`);
+
+    m = trimmed.match(/^(\d+)\s+مكتملة من\s+(\d+)$/);
+    if(m) return raw.replace(trimmed, `${m[1]} completed out of ${m[2]}`);
+  }
+
+  return raw;
+}
+
+function translateAttributes(root=document){
+  if(!isEnglish()) return;
+
+  root.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el=>{
+    const ph=el.getAttribute('placeholder');
+    if(I18N_PLACEHOLDERS[ph]) el.setAttribute('placeholder', I18N_PLACEHOLDERS[ph]);
+  });
+
+  root.querySelectorAll('option').forEach(opt=>{
+    const t=opt.textContent.trim();
+    if(I18N_TEXT[t]) opt.textContent=I18N_TEXT[t];
+  });
+
+  root.querySelectorAll('input[type="submit"], input[type="button"]').forEach(el=>{
+    const v=el.value?.trim();
+    if(I18N_TEXT[v]) el.value=I18N_TEXT[v];
+  });
+}
+
+function translateVisibleText(root=document.body){
+  if(!isEnglish() || !root) return;
+
+  const skipTags=new Set(['SCRIPT','STYLE','TEXTAREA']);
+  const walker=document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent || skipTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      const text=node.nodeValue;
+      if(!text || !text.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const translated=translateExactText(node.nodeValue);
+    if(translated !== node.nodeValue) node.nodeValue=translated;
+  });
+
+  translateAttributes(root);
+}
+
+function installLanguageToggleStyle(){
+  if(document.getElementById('languageToggleStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='languageToggleStyle';
+  style.textContent=`
+    #languageToggleBtn{
+      font-weight:900!important;
+      min-height:38px!important;
+      padding:8px 13px!important;
+    }
+
+    body.lang-en{
+      direction:ltr!important;
+      text-align:left!important;
+    }
+
+    body.lang-en .topbar,
+    body.lang-en .panel,
+    body.lang-en .card,
+    body.lang-en .modal,
+    body.lang-en input,
+    body.lang-en textarea,
+    body.lang-en select,
+    body.lang-en table{
+      direction:ltr!important;
+      text-align:left!important;
+    }
+
+    body.lang-en .topbar .brand,
+    body.lang-en .topbar .title-box,
+    body.lang-en .auth-card,
+    body.lang-en #startupLoadingSection,
+    body.lang-en #passwordSetupSection{
+      text-align:center!important;
+    }
+
+    body.lang-en .actions{
+      justify-content:flex-start!important;
+    }
+
+    body.lang-en .section-head{
+      text-align:left!important;
+    }
+
+    body.lang-en .employee-sector-details > summary,
+    body.lang-en #adminPage .admin-collapsible-panel > summary{
+      direction:ltr!important;
+      text-align:left!important;
+    }
+
+    body.lang-en .employee-sector-title-wrap{
+      direction:ltr!important;
+    }
+
+    body.lang-en th,
+    body.lang-en td{
+      text-align:left!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureLanguageToggle(){
+  installLanguageToggleStyle();
+
+  const userbar=document.querySelector('.topbar .userbar');
+  if(!userbar || document.getElementById('languageToggleBtn')) return;
+
+  const btn=document.createElement('button');
+  btn.id='languageToggleBtn';
+  btn.type='button';
+  btn.className='btn';
+  btn.onclick=toggleLanguage;
+  userbar.insertBefore(btn, userbar.firstChild);
+  updateLanguageToggleLabel();
+}
+
+function updateLanguageToggleLabel(){
+  const btn=document.getElementById('languageToggleBtn');
+  if(btn) btn.textContent = isEnglish() ? 'العربية' : 'English';
+}
+
+function applyLanguage(){
+  const lang=currentLang();
+  document.documentElement.lang=lang;
+  document.documentElement.dir=lang==='en' ? 'ltr' : 'rtl';
+  document.body.classList.toggle('lang-en', lang==='en');
+  document.body.classList.toggle('lang-ar', lang!=='en');
+
+  ensureLanguageToggle();
+  updateLanguageToggleLabel();
+
+  if(lang==='en'){
+    setTimeout(()=>translateVisibleText(document.body),0);
+    setTimeout(()=>translateVisibleText(document.body),150);
+  }
+}
+
+function toggleLanguage(){
+  const next=isEnglish() ? 'ar' : 'en';
+  localStorage.setItem(LANG_STORAGE_KEY,next);
+  location.reload();
+}
+
+function installLanguageRuntime(){
+  ensureLanguageToggle();
+  applyLanguage();
+}
+
+const __langShowApp = showApp;
+showApp = function(){
+  __langShowApp();
+  installLanguageRuntime();
+};
+
+const __langShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __langShowAuthOnly();
+  installLanguageRuntime();
+};
+
+const __langShowPage = showPage;
+showPage = function(p){
+  __langShowPage(p);
+  installLanguageRuntime();
+};
+
+const __langRenderTasks = renderTasks;
+renderTasks = function(){
+  __langRenderTasks();
+  installLanguageRuntime();
+};
+
+const __langRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __langRenderAdmin();
+  installLanguageRuntime();
+};
+
+const __langInit = init;
+init = async function(){
+  const result=await __langInit();
+  installLanguageRuntime();
+  return result;
+};
+
 init();
 </script>
 </body>
