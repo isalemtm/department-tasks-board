@@ -9835,6 +9835,261 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: تصحيح حالات المهام في تصدير Excel إلى ثلاث حالات فقط === */
+function excelExportStatus(task){
+  if(typeof taskDisplayStatus === 'function'){
+    const status = taskDisplayStatus(task);
+    if(status === 'مكتملة') return 'مكتملة';
+    if(status === 'متأخرة') return 'متأخرة';
+    return 'قيد التنفيذ';
+  }
+
+  if(task?.status === 'مكتملة') return 'مكتملة';
+  if(isLate(task)) return 'متأخرة';
+  return 'قيد التنفيذ';
+}
+
+exportTasksToExcel = function(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+
+    const rows=getFilteredTasks().map(t=>({
+      'عنوان المهمة':t.title,
+      'وصف المهمة':t.description||'',
+      'الحالة':excelExportStatus(t),
+      'الأولوية':t.priority||'عادية',
+      'القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),
+      'القسم':nameOfDept(t.target_department_id||t.owner_department_id),
+      'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
+      'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
+      'تاريخ الاستحقاق':formatDate(t.due_date),
+      'تاريخ الإنشاء':formatDate(t.created_at)
+    }));
+
+    if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[
+      {wch:30},{wch:45},{wch:14},{wch:12},{wch:26},
+      {wch:26},{wch:24},{wch:38},{wch:16},{wch:16}
+    ];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'مهام القطاعات');
+    XLSX.writeFile(wb,`مهام_القطاعات_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    showToast('تم تصدير ملف Excel بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تصدير ملف Excel.','error');
+  }
+};
+
+
+/* === PATCH: تفعيل/إيقاف طلب الانضمام من إدارة المستخدمين === */
+state.joinRequestsEnabled = true;
+
+async function loadJoinRequestsSetting(){
+  try{
+    const {data,error}=await supabaseClient
+      .from('app_settings')
+      .select('value')
+      .eq('key','join_requests_enabled')
+      .maybeSingle();
+
+    if(error){
+      console.warn('join_requests_enabled setting read failed:', error);
+      state.joinRequestsEnabled = true;
+      return true;
+    }
+
+    const enabled = data?.value?.enabled !== false;
+    state.joinRequestsEnabled = enabled;
+    return enabled;
+  }catch(e){
+    console.warn('join_requests_enabled setting read exception:', e);
+    state.joinRequestsEnabled = true;
+    return true;
+  }
+}
+
+async function setJoinRequestsEnabled(enabled){
+  try{
+    if(!isAdmin()) return showToast('هذا الخيار متاح لمدير النظام فقط.','error');
+
+    const {error}=await supabaseClient
+      .from('app_settings')
+      .update({
+        value:{enabled:!!enabled},
+        updated_at:new Date().toISOString()
+      })
+      .eq('key','join_requests_enabled');
+
+    if(error) throw error;
+
+    state.joinRequestsEnabled = !!enabled;
+    renderJoinRequestsSettingsPanel();
+
+    showToast(enabled ? 'تم تفعيل طلب الانضمام.' : 'تم إيقاف طلب الانضمام.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تحديث إعداد طلب الانضمام.','error',7000);
+  }
+}
+
+async function toggleJoinRequestsEnabled(){
+  await setJoinRequestsEnabled(!state.joinRequestsEnabled);
+}
+
+function installJoinRequestsSettingsStyle(){
+  if(document.getElementById('joinRequestsSettingsStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='joinRequestsSettingsStyle';
+  style.textContent=`
+    #joinRequestsSettingsPanel .join-setting-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      padding:10px 0;
+    }
+
+    #joinRequestsSettingsPanel .join-setting-status{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-weight:900;
+      color:var(--primary2);
+    }
+
+    #joinRequestsSettingsPanel .join-status-dot{
+      width:12px;
+      height:12px;
+      border-radius:999px;
+      display:inline-block;
+      background:#26a69a;
+    }
+
+    #joinRequestsSettingsPanel .join-status-dot.off{
+      background:#c95757;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureJoinRequestsSettingsPanel(){
+  if(!$('adminPage') || $('joinRequestsSettingsPanel')) return;
+
+  const html=`
+    <details id="joinRequestsSettingsPanel" class="panel card admin-collapsible-panel">
+      <summary>إعداد طلب الانضمام</summary>
+      <div class="admin-collapsible-body">
+        <div class="join-setting-row">
+          <div>
+            <div class="join-setting-status" id="joinRequestsSettingStatus"></div>
+            <p class="meta" style="margin-top:8px;">
+              عند إيقاف طلب الانضمام، سيظهر للزائر عند الضغط على زر طلب الانضمام تنبيه: لا يمكنك الانضمام حاليًا.
+            </p>
+          </div>
+          <button id="toggleJoinRequestsBtn" class="btn btn-primary" onclick="toggleJoinRequestsEnabled()">تغيير الحالة</button>
+        </div>
+      </div>
+    </details>
+  `;
+
+  const first=$('adminPage').querySelector(':scope > section, :scope > details');
+  if(first) first.insertAdjacentHTML('beforebegin', html);
+  else $('adminPage').insertAdjacentHTML('afterbegin', html);
+}
+
+function renderJoinRequestsSettingsPanel(){
+  installJoinRequestsSettingsStyle();
+  ensureJoinRequestsSettingsPanel();
+
+  const enabled=state.joinRequestsEnabled !== false;
+  const status=$('joinRequestsSettingStatus');
+  const btn=$('toggleJoinRequestsBtn');
+
+  if(status){
+    status.innerHTML=`
+      <span class="join-status-dot ${enabled ? '' : 'off'}"></span>
+      <span>${enabled ? 'طلب الانضمام مفعّل حاليًا' : 'طلب الانضمام موقوف حاليًا'}</span>
+    `;
+  }
+
+  if(btn){
+    btn.textContent = enabled ? 'إيقاف طلب الانضمام' : 'تفعيل طلب الانضمام';
+    btn.className = enabled ? 'btn btn-danger' : 'btn btn-success';
+  }
+}
+
+async function notifyJoinRequestDisabled(){
+  await loadJoinRequestsSetting();
+  if(state.joinRequestsEnabled === false){
+    showNotice?.('لا يمكنك الانضمام حاليًا.','info');
+    showToast?.('لا يمكنك الانضمام حاليًا.','info',5000);
+    return true;
+  }
+  return false;
+}
+
+const __joinRequestShowAuthView = showAuthView;
+showAuthView = function(v){
+  if(v==='request' && state.joinRequestsEnabled === false){
+    showNotice?.('لا يمكنك الانضمام حاليًا.','info');
+    return __joinRequestShowAuthView('login');
+  }
+  return __joinRequestShowAuthView(v);
+};
+
+const __joinRequestSubmitJoinRequest = submitJoinRequest;
+submitJoinRequest = async function(){
+  const disabled = await notifyJoinRequestDisabled();
+  if(disabled) return;
+  return await __joinRequestSubmitJoinRequest();
+};
+
+const __joinRequestShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __joinRequestShowAuthOnly();
+  loadJoinRequestsSetting().then(enabled=>{
+    state.joinRequestsEnabled=enabled;
+    const requestTab=$('requestTab');
+    if(requestTab){
+      requestTab.title = enabled ? '' : 'لا يمكنك الانضمام حاليًا';
+    }
+  });
+};
+
+const __joinRequestRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __joinRequestRenderAdmin();
+  if(isAdmin()){
+    loadJoinRequestsSetting().then(()=>{
+      renderJoinRequestsSettingsPanel();
+    });
+  }
+};
+
+const __joinRequestShowPage = showPage;
+showPage = function(p){
+  __joinRequestShowPage(p);
+  if(p==='admin' && isAdmin()){
+    loadJoinRequestsSetting().then(()=>{
+      renderJoinRequestsSettingsPanel();
+    });
+  }
+};
+
+const __joinRequestInit = init;
+init = async function(){
+  await loadJoinRequestsSetting();
+  return await __joinRequestInit();
+};
+
 init();
 </script>
 </body>
