@@ -11875,6 +11875,217 @@ applyLanguage = function(){
   scheduleDashboardTranslation();
 };
 
+
+/* === PATCH: تنظيف ترجمة لوحة الموظفين والمؤشرات - المرحلة الثامنة === */
+Object.assign(I18N_TEXT, {
+  'كل المهام المسندة ضمن نطاق العرض':'All assigned tasks within the current view',
+  'Total المكتمل':'Completed Total',
+  'بدل بطاقة المهام الجديدة':'Excludes new-task card',
+  'مهام تحت المعالجة':'Tasks under processing',
+  'مهام ضمن المعالجة':'Tasks under processing',
+  'مهام تحت المتابعة':'Tasks under follow-up',
+  'جدول مختصر للمهام المعتمدة':'Approved Tasks Summary',
+  'المهام حديثة حسب تاريخ الاستحقاق وتصنيف قوائم مهام رئيسية بالتوثيق':'Recent tasks by due date and main task lists',
+  'التسويق والمبيعات':'Marketing and Sales',
+  'المبيعات والتحصيل':'Sales and Collection',
+  'المالية والمحاسبة':'Finance and Accounting',
+  'التخطيط والمشتريات':'Planning and Procurement',
+  'الإستراتيجية':'Strategy',
+  'الاستراتيجية':'Strategy',
+  'التحول':'Transformation',
+  'مساعد تنفيذي':'Executive Assistant',
+  'الرئيس التنفيذي':'CEO',
+  'مدير مالي':'Finance Manager',
+  'محاسب أول':'Senior Accountant',
+  'محاسب':'Accountant',
+  'مسؤول البنوك والمستثمرين':'Banks and Investors Officer',
+  'مدير مكتب إدارة المشاريع':'PMO Manager',
+  'منسق مشروعات':'Projects Coordinator',
+  'معماري إدارة التطوير':'Development Architect',
+  'أخصائي مشتريات':'Procurement Specialist',
+  'مسؤول علاقات':'Relations Officer',
+  'مدير مبيعات':'Sales Manager',
+  'مسؤول مبيعات':'Sales Officer',
+  'مدير تسويق':'Marketing Manager',
+  'مصمم':'Designer',
+  'مطوّر أعمال':'Business Developer',
+  'تطوير الأعمال':'Business Development'
+});
+
+const EN_PHASE8_MAP = {
+  'كل المهام المسندة ضمن نطاق العرض':'All assigned tasks within the current view',
+  'Total المكتمل':'Completed Total',
+  'بدل بطاقة المهام الجديدة':'Excludes new-task card',
+  'مهام تحت المعالجة':'Tasks under processing',
+  'مهام ضمن المعالجة':'Tasks under processing',
+  'مهام تحت المتابعة':'Tasks under follow-up',
+  'جدول مختصر للمهام المعتمدة':'Approved Tasks Summary',
+  'المهام حديثة حسب تاريخ الاستحقاق وتصنيف قوائم مهام رئيسية بالتوثيق':'Recent tasks by due date and main task lists',
+  'إدارة المالية':'Finance Department',
+  'الإدارة المالية':'Finance Department',
+  'المحاسبة والضبط المالي':'Accounting and Financial Control',
+  'المالية والمحاسبة':'Finance and Accounting',
+  'مكتب إدارة المشاريع':'Project Management Office',
+  'إدارة المشاريع':'Projects Department',
+  'إدارة العمليات':'Operations Department',
+  'التصميم والابتكار':'Design and Innovation',
+  'التطوير التنظيمي':'Organizational Development',
+  'إدارة التطوير التنظيمي':'Organizational Development',
+  'التسويق والمبيعات':'Marketing and Sales',
+  'التسويق':'Marketing',
+  'المبيعات':'Sales',
+  'المبيعات والتحصيل':'Sales and Collection',
+  'التحصيل':'Collection',
+  'علاقات المستثمرين':'Investor Relations',
+  'المشتريات':'Procurement',
+  'التخطيط والمشتريات':'Planning and Procurement',
+  'الشؤون الإدارية':'Administrative Affairs',
+  'إدارة الشؤون الإدارية':'Administrative Affairs',
+  'الموارد البشرية':'Human Resources',
+  'إدارة الموارد البشرية':'Human Resources',
+  'الاستراتيجية والتحول':'Strategy and Transformation',
+  'الإستراتيجية والتحول':'Strategy and Transformation',
+  'الإستراتيجية':'Strategy',
+  'الاستراتيجية':'Strategy',
+  'التحول':'Transformation',
+  'التطوير':'Development',
+  'مكتب الرئيس التنفيذي':'CEO Office',
+  'مساعد تنفيذي':'Executive Assistant',
+  'الرئيس التنفيذي':'CEO',
+  'مدير مالي':'Finance Manager',
+  'محاسب أول':'Senior Accountant',
+  'محاسب':'Accountant',
+  'مسؤول البنوك والمستثمرين':'Banks and Investors Officer',
+  'مدير مكتب إدارة المشاريع':'PMO Manager',
+  'مدير مشروع':'Project Manager',
+  'منسق مشروعات':'Projects Coordinator',
+  'منسق مشاريع':'Projects Coordinator',
+  'معماري إدارة التطوير':'Development Architect',
+  'أخصائي مشتريات':'Procurement Specialist',
+  'مسؤول علاقات':'Relations Officer',
+  'مدير مبيعات':'Sales Manager',
+  'مسؤول مبيعات':'Sales Officer',
+  'مدير تسويق':'Marketing Manager',
+  'مصمم':'Designer',
+  'مطوّر أعمال':'Business Developer',
+  'مطور أعمال':'Business Developer',
+  'تطوير الأعمال':'Business Development',
+  'إجماليTotal':'Total',
+  'Totalإجمالي':'Total',
+  'إجمالي':'Total',
+  'المكتمل':'Completed',
+  'المكتملة':'Completed',
+  'المنجزة':'Completed',
+  'المتأخرة':'Overdue',
+  'قيد التنفيذ':'In Progress',
+  'نسبة الإنجاز':'Completion Rate',
+  'القسم':'Department',
+  'القطاع':'Sector'
+};
+
+function replacePhase8Arabic(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  Object.entries(EN_PHASE8_MAP)
+    .sort((a,b)=>b[0].length-a[0].length)
+    .forEach(([ar,en])=>{
+      out = out.split(ar).join(en);
+    });
+
+  /* تنظيف التركيبات المختلطة بعد الاستبدال */
+  out = out.replace(/Completed\s*Total|Total\s*Completed/gi, 'Completed Total');
+  out = out.replace(/Total\s*0%|0%\s*Total/gi, 'Total 0%');
+  out = out.replace(/\/\s*—/g, '/ —');
+  out = out.replace(/Commercial Sector\s*\/\s*Sales\s*and\s*Collection/gi, 'Commercial Sector / Sales and Collection');
+  out = out.replace(/Commercial Sector\s*\/\s*Marketing\s*and\s*Sales/gi, 'Commercial Sector / Marketing and Sales');
+  out = out.replace(/Finance Sector\s*\/\s*Accounting\s*and\s*Financial\s*Control/gi, 'Finance Sector / Accounting and Financial Control');
+  out = out.replace(/Strategy and Transformation Sector\s*\/\s*Strategy and Transformation/gi, 'Strategy and Transformation Sector / Strategy and Transformation');
+
+  return out;
+}
+
+function translatePhase8DashboardDeep(){
+  if(!isEnglish()) return;
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const old=node.nodeValue;
+    const fixed=replacePhase8Arabic(old);
+    if(fixed !== old) node.nodeValue=fixed;
+  });
+
+  document.querySelectorAll('th, td, .badge, .chip, .meta, .employee-card, .stat-card, button, option').forEach(el=>{
+    if(!el || !el.childNodes) return;
+    [...el.childNodes].forEach(node=>{
+      if(node.nodeType !== Node.TEXT_NODE) return;
+      const old=node.nodeValue;
+      const fixed=replacePhase8Arabic(old);
+      if(fixed !== old) node.nodeValue=fixed;
+    });
+  });
+}
+
+function schedulePhase8DashboardTranslation(){
+  if(!isEnglish()) return;
+  setTimeout(translatePhase8DashboardDeep,0);
+  setTimeout(translatePhase8DashboardDeep,150);
+  setTimeout(translatePhase8DashboardDeep,450);
+  setTimeout(translatePhase8DashboardDeep,1000);
+}
+
+if(typeof renderEmployeeCards === 'function'){
+  const __phase8RenderEmployeeCards = renderEmployeeCards;
+  renderEmployeeCards = function(...args){
+    const result = __phase8RenderEmployeeCards.apply(this,args);
+    schedulePhase8DashboardTranslation();
+    return result;
+  };
+}
+
+if(typeof renderDashboard === 'function'){
+  const __phase8RenderDashboard = renderDashboard;
+  renderDashboard = function(...args){
+    const result = __phase8RenderDashboard.apply(this,args);
+    schedulePhase8DashboardTranslation();
+    return result;
+  };
+}
+
+if(typeof renderPerformancePage === 'function'){
+  const __phase8RenderPerformancePage = renderPerformancePage;
+  renderPerformancePage = function(...args){
+    const result = __phase8RenderPerformancePage.apply(this,args);
+    schedulePhase8DashboardTranslation();
+    return result;
+  };
+}
+
+const __phase8ShowPage = showPage;
+showPage = function(p){
+  __phase8ShowPage(p);
+  schedulePhase8DashboardTranslation();
+};
+
+const __phase8ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase8ApplyLanguage();
+  schedulePhase8DashboardTranslation();
+};
+
 init();
 </script>
 </body>
