@@ -11092,6 +11092,167 @@ showPage = function(p){
   applyEnglishPhase2AfterRender();
 };
 
+
+/* === PATCH: ترجمة صفحة المهام ونموذج إضافة المهمة - المرحلة الثالثة === */
+Object.assign(I18N_TEXT, {
+  'إضافة مهمة':'Add Task',
+  'عنوان المهمة':'Task Title',
+  'المسند إليهم':'Assignees',
+  'المسند إليه':'Assigned To',
+  'تاريخ الاستحقاق':'Due Date',
+  'تقدير بصري / مرن':'Visual / flexible estimate',
+  'وصف المهمة':'Task Description',
+  'إرفاق الملفات والروابط':'Attach Files and Links',
+  'الأولوية':'Priority',
+  'نوع التكليف':'Assignment Type',
+  'القطاع المستهدف':'Target Sector',
+  'القسم المستهدف':'Target Department',
+  'مرفقات المهمة':'Task Attachments',
+  'اضغط لاختيار ملف أو اسحب وأفلت هنا':'Click to choose a file or drag and drop here',
+  'لم يتم اختيار ملف بعد.':'No file selected yet.',
+  'موظفين محددين':'Specific Employees',
+  'كل موظفي القطاع':'All Sector Employees',
+  'كل موظفي القسم':'All Department Employees',
+  'بدون تحديد':'Not selected',
+  'حفظ المهمة':'Save Task',
+  'تفريغ الحقول':'Clear Form',
+  'إضافة التعليق/المرفق':'Add Comment / Attachment',
+  'تعليق جديد':'New Comment',
+  'اكتب تعليقك...':'Write your comment...',
+  'المرفق':'Attachment',
+  'إضافة التعليق':'Add Comment',
+  'إضافة تعليق':'Add Comment',
+  'Comments':'Comments',
+  'Add Comment':'Add Comment',
+  'إرسال':'Send',
+  'تمرير المهمة':'Transfer Task',
+  'تحويل المهمة':'Transfer Task',
+  'تعديل':'Edit',
+  'حذف':'Delete',
+  'Delete':'Delete',
+  'Edit':'Edit',
+  'تحويل المهمة':'Transfer Task',
+  'In Progress':'In Progress',
+  'Normal':'Normal',
+  'المسؤول':'Responsible',
+  'القطاع':'Sector',
+  'القسم':'Department',
+  'الأولوية':'Priority',
+  'الحالة':'Status',
+  'المرفقات والروابط':'Attachments and Links',
+  'أرفق ملفًا أو رابطًا داعمًا للمهمة':'Attach a supporting file or link to the task',
+  'رابط':'Link',
+  'ملف':'File',
+  'لا توجد مرفقات.':'No attachments.',
+  'طلب تحويل':'Transfer Request',
+  'سبب التحويل':'Transfer Reason',
+  'الموظف الجديد':'New Assignee',
+  'إرسال طلب التحويل':'Submit Transfer Request',
+  'تعديل قبل الاعتماد':'Edit Before Approval',
+  'اعتماد':'Approve',
+  'رفض':'Reject'
+});
+
+Object.assign(I18N_PLACEHOLDERS, {
+  'اكتب تعليقك...':'Write your comment...',
+  'اضغط لاختيار ملف أو اسحب وأفلت هنا':'Click to choose a file or drag and drop here',
+  'اختر الموظف':'Select employee',
+  'اكتب سبب التحويل':'Write the transfer reason',
+  'أدخل رابطًا':'Enter a link',
+  'مثال: https://example.com':'Example: https://example.com'
+});
+
+function translateTaskModalDynamicParts(){
+  if(!isEnglish()) return;
+
+  /* عنوان النموذج الذي يظهر بالعربي لأنه يعاد رسمه ديناميكيًا */
+  const modalTitle = document.querySelector('#taskModalTitle, .modal h2, .modal-title');
+  if(modalTitle && modalTitle.textContent.trim()==='إضافة مهمة'){
+    modalTitle.textContent='Add Task';
+  }
+
+  /* ترجمة بطاقات أسماء المستخدمين جزئيًا: نترجم الدور فقط ونترك الاسم كما هو */
+  document.querySelectorAll('.checkbox-item, .assignee-card, label').forEach(el=>{
+    if(!el || !el.textContent) return;
+    let html = el.innerHTML;
+    const replacements = {
+      'مدير النظام':'System Admin',
+      'الرئيس التنفيذي':'CEO',
+      'رئيس قطاع':'Sector Head',
+      'مدير قسم':'Department Manager',
+      'موظف':'Employee',
+      'بدون قسم':'No Department'
+    };
+    Object.entries(replacements).forEach(([ar,en])=>{
+      html = html.split(ar).join(en);
+    });
+    if(html !== el.innerHTML) el.innerHTML = html;
+  });
+
+  document.querySelectorAll('select option').forEach(opt=>{
+    const t=opt.textContent.trim();
+    const map={
+      'موظفين محددين':'Specific Employees',
+      'كل موظفي القطاع':'All Sector Employees',
+      'كل موظفي القسم':'All Department Employees',
+      'بدون تحديد':'Not selected',
+      'عادية':'Normal',
+      'عالية':'High',
+      'عاجلة':'Urgent',
+      'قيد التنفيذ':'In Progress',
+      'مكتملة':'Completed',
+      'متأخرة':'Overdue',
+      'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+      'الإدارة التنفيذية':'Executive Management',
+      'القطاع التجاري':'Commercial Sector',
+      'قطاع المالية':'Finance Sector',
+      'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+      'قطاع تطوير الأعمال':'Business Development Sector'
+    };
+    if(map[t]) opt.textContent=map[t];
+  });
+
+  translateVisibleText(document.body);
+}
+
+const __phase3OpenTaskModal = typeof openTaskModal === 'function' ? openTaskModal : null;
+if(__phase3OpenTaskModal){
+  openTaskModal = function(...args){
+    const result = __phase3OpenTaskModal.apply(this,args);
+    setTimeout(translateTaskModalDynamicParts,0);
+    setTimeout(translateTaskModalDynamicParts,150);
+    return result;
+  };
+}
+
+const __phase3EditTask = typeof editTask === 'function' ? editTask : null;
+if(__phase3EditTask){
+  editTask = function(...args){
+    const result = __phase3EditTask.apply(this,args);
+    setTimeout(translateTaskModalDynamicParts,0);
+    setTimeout(translateTaskModalDynamicParts,150);
+    return result;
+  };
+}
+
+const __phase3RenderTasks = renderTasks;
+renderTasks = function(){
+  __phase3RenderTasks();
+  if(isEnglish()){
+    setTimeout(()=>translateVisibleText(document.body),0);
+    setTimeout(()=>translateTaskModalDynamicParts(),150);
+  }
+};
+
+const __phase3ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase3ApplyLanguage();
+  if(isEnglish()){
+    setTimeout(translateTaskModalDynamicParts,0);
+    setTimeout(translateTaskModalDynamicParts,250);
+  }
+};
+
 init();
 </script>
 </body>
