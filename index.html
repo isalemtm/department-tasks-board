@@ -10090,6 +10090,485 @@ init = async function(){
   return await __joinRequestInit();
 };
 
+
+/* === PATCH: تحسين نسخة الجوال Responsive للوحة === */
+function installMobileResponsiveEnhancements(){
+  let style=document.getElementById('mobileResponsiveEnhancementsStyle');
+  if(!style){
+    style=document.createElement('style');
+    style.id='mobileResponsiveEnhancementsStyle';
+    document.head.appendChild(style);
+  }
+
+  style.textContent=`
+    html, body{
+      max-width:100%;
+      overflow-x:hidden;
+    }
+    *{ box-sizing:border-box; }
+
+    @media(max-width:900px){
+      body{
+        font-size:14px;
+        overflow-x:hidden!important;
+      }
+
+      .container{
+        width:100%!important;
+        max-width:100%!important;
+        padding:14px!important;
+        margin:0!important;
+      }
+
+      .topbar{
+        padding:18px 14px!important;
+        min-height:auto!important;
+      }
+
+      .topbar .brand,
+      .topbar .title-box{
+        width:100%!important;
+        text-align:center!important;
+        align-items:center!important;
+        justify-content:center!important;
+      }
+
+      .main-logo{
+        width:150px!important;
+        max-width:150px!important;
+        margin:0 auto 10px!important;
+      }
+
+      .topbar h1,
+      .topbar .title-box h1{
+        font-size:24px!important;
+        line-height:1.35!important;
+        margin:4px 0!important;
+        text-align:center!important;
+      }
+
+      .topbar p,
+      .topbar .title-box p{
+        font-size:13px!important;
+        line-height:1.6!important;
+        margin:0!important;
+        text-align:center!important;
+      }
+
+      .topbar .userbar{
+        width:100%!important;
+        display:flex!important;
+        justify-content:center!important;
+        align-items:center!important;
+        gap:8px!important;
+        flex-wrap:wrap!important;
+        margin-top:12px!important;
+        position:static!important;
+      }
+
+      .topbar .userbar .badge,
+      .topbar .userbar .btn{
+        font-size:12px!important;
+        padding:9px 12px!important;
+        border-radius:12px!important;
+        max-width:100%!important;
+        white-space:normal!important;
+      }
+
+      .app-header.card,
+      #appSection > .app-header.card{
+        width:100%!important;
+        margin:14px 0!important;
+        padding:10px!important;
+        border-radius:16px!important;
+      }
+
+      .main-nav,
+      .tabs,
+      .app-header .actions,
+      .app-header .nav-actions{
+        width:100%!important;
+        display:flex!important;
+        justify-content:center!important;
+        align-items:center!important;
+        gap:8px!important;
+        flex-wrap:wrap!important;
+      }
+
+      #appSection .app-header button,
+      #appSection .app-header .btn{
+        flex:1 1 calc(50% - 10px)!important;
+        min-width:135px!important;
+        padding:11px 8px!important;
+        font-size:13px!important;
+        border-radius:12px!important;
+        text-align:center!important;
+        justify-content:center!important;
+      }
+
+      .panel.card,
+      section.panel.card,
+      details.panel.card{
+        width:100%!important;
+        margin:12px 0!important;
+        padding:14px!important;
+        border-radius:16px!important;
+        overflow:hidden!important;
+      }
+
+      .section-head{
+        display:flex!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        gap:10px!important;
+        text-align:right!important;
+      }
+
+      .section-head h2,
+      .panel h2{
+        font-size:20px!important;
+        line-height:1.45!important;
+        margin:0!important;
+      }
+
+      .meta{
+        font-size:12px!important;
+        line-height:1.7!important;
+      }
+
+      .stats,
+      .executive-stats,
+      .kpi-grid,
+      .cards-grid,
+      .employee-dashboard-grid{
+        display:grid!important;
+        grid-template-columns:1fr 1fr!important;
+        gap:10px!important;
+        width:100%!important;
+      }
+
+      .stat-card,
+      .employee-card,
+      .kpi-card{
+        min-width:0!important;
+        width:100%!important;
+        padding:14px 10px!important;
+        border-radius:14px!important;
+      }
+
+      .stat-card .num,
+      .stat-card strong,
+      .kpi-card .num{
+        font-size:26px!important;
+        line-height:1.2!important;
+      }
+
+      .add-task-panel{
+        padding:0!important;
+      }
+
+      .add-task-full-btn{
+        min-height:54px!important;
+        font-size:16px!important;
+        border-radius:14px!important;
+      }
+
+      .filters,
+      .form-grid,
+      .task-short-form{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:10px!important;
+        width:100%!important;
+      }
+
+      input,
+      select,
+      textarea{
+        width:100%!important;
+        max-width:100%!important;
+        min-height:44px!important;
+        font-size:16px!important;
+        border-radius:12px!important;
+      }
+
+      textarea{
+        min-height:110px!important;
+      }
+
+      .actions{
+        display:flex!important;
+        flex-wrap:wrap!important;
+        gap:8px!important;
+        justify-content:flex-start!important;
+      }
+
+      .actions .btn,
+      button.btn,
+      .btn{
+        min-height:42px!important;
+        padding:10px 12px!important;
+        font-size:13px!important;
+        border-radius:12px!important;
+        white-space:normal!important;
+        line-height:1.35!important;
+      }
+
+      .task-card{
+        padding:14px!important;
+        border-radius:16px!important;
+        overflow:hidden!important;
+      }
+
+      .task-top,
+      .task-card .task-top{
+        display:flex!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        gap:10px!important;
+      }
+
+      .task-title{
+        font-size:17px!important;
+        line-height:1.5!important;
+      }
+
+      .task-card .actions{
+        justify-content:flex-start!important;
+      }
+
+      .task-card .actions .btn{
+        flex:1 1 calc(50% - 8px)!important;
+        min-width:120px!important;
+      }
+
+      .chip,
+      .badge{
+        font-size:12px!important;
+        padding:7px 10px!important;
+        border-radius:999px!important;
+        white-space:normal!important;
+      }
+
+      .table-wrap{
+        width:100%!important;
+        overflow-x:auto!important;
+        -webkit-overflow-scrolling:touch!important;
+        border-radius:14px!important;
+      }
+
+      table{
+        min-width:760px!important;
+        font-size:12px!important;
+      }
+
+      th, td{
+        padding:10px 8px!important;
+        vertical-align:top!important;
+        white-space:normal!important;
+      }
+
+      .modal-back{
+        padding:10px!important;
+        align-items:flex-start!important;
+        overflow-y:auto!important;
+      }
+
+      .modal{
+        width:100%!important;
+        max-width:100%!important;
+        max-height:none!important;
+        margin:18px 0!important;
+        padding:16px!important;
+        border-radius:18px!important;
+        overflow:visible!important;
+      }
+
+      .modal-head{
+        display:flex!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        gap:10px!important;
+      }
+
+      .modal-head h2{
+        font-size:20px!important;
+      }
+
+      .checkbox-grid{
+        grid-template-columns:1fr!important;
+        gap:8px!important;
+        max-height:260px!important;
+        overflow:auto!important;
+      }
+
+      .file-dropzone,
+      .dropzone{
+        min-height:120px!important;
+        padding:18px 10px!important;
+        border-radius:14px!important;
+      }
+
+      .employee-sector-details > summary,
+      #adminPage .admin-collapsible-panel > summary{
+        padding:12px 14px!important;
+        min-height:56px!important;
+        font-size:17px!important;
+        gap:8px!important;
+      }
+
+      .employee-sector-title-wrap{
+        font-size:17px!important;
+      }
+
+      .employee-sector-body,
+      .admin-collapsible-body{
+        padding:12px!important;
+      }
+
+      .org-chart-page,
+      .org-sector-stack,
+      .org-departments-grid{
+        width:100%!important;
+        max-width:100%!important;
+        overflow-x:auto!important;
+      }
+
+      .org-sector-box,
+      .org-department-box{
+        min-width:280px!important;
+        padding:12px!important;
+        border-radius:16px!important;
+      }
+
+      .org-person-cards{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:10px!important;
+      }
+
+      #executiveSection,
+      #performancePage,
+      #orgPage,
+      #adminPage,
+      #tasksPage,
+      #dashboardPage{
+        width:100%!important;
+        max-width:100%!important;
+      }
+    }
+
+    @media(max-width:520px){
+      .container{
+        padding:10px!important;
+      }
+
+      .topbar{
+        padding:16px 10px!important;
+      }
+
+      .main-logo{
+        width:130px!important;
+        max-width:130px!important;
+      }
+
+      .topbar h1,
+      .topbar .title-box h1{
+        font-size:21px!important;
+      }
+
+      .topbar p,
+      .topbar .title-box p{
+        font-size:12px!important;
+      }
+
+      #appSection .app-header button,
+      #appSection .app-header .btn{
+        flex:1 1 100%!important;
+        min-width:0!important;
+      }
+
+      .stats,
+      .executive-stats,
+      .kpi-grid,
+      .cards-grid,
+      .employee-dashboard-grid{
+        grid-template-columns:1fr!important;
+      }
+
+      .task-card .actions .btn,
+      .actions .btn{
+        flex:1 1 100%!important;
+      }
+
+      .panel.card,
+      section.panel.card,
+      details.panel.card{
+        padding:12px!important;
+      }
+
+      .stat-card .num,
+      .stat-card strong,
+      .kpi-card .num{
+        font-size:24px!important;
+      }
+
+      .auth-card,
+      #authSection .panel,
+      #passwordSetupSection .panel,
+      #startupLoadingSection .panel{
+        width:100%!important;
+        max-width:100%!important;
+        padding:18px!important;
+        border-radius:18px!important;
+      }
+
+      #loginView .actions,
+      #requestView .actions,
+      #forgotPasswordView .actions,
+      #passwordSetupSection .actions{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+      }
+    }
+  `;
+}
+
+function applyMobileBodyClass(){
+  const isMobile = window.matchMedia('(max-width: 900px)').matches;
+  document.body.classList.toggle('mobile-layout', isMobile);
+}
+
+function installMobileResponsiveRuntime(){
+  installMobileResponsiveEnhancements();
+  applyMobileBodyClass();
+
+  if(!window.__mobileResponsiveListenerInstalled){
+    window.__mobileResponsiveListenerInstalled = true;
+    window.addEventListener('resize', applyMobileBodyClass);
+    window.addEventListener('orientationchange', applyMobileBodyClass);
+  }
+}
+
+const __mobileResponsiveShowApp = showApp;
+showApp = function(){
+  __mobileResponsiveShowApp();
+  installMobileResponsiveRuntime();
+};
+
+const __mobileResponsiveShowPage = showPage;
+showPage = function(p){
+  __mobileResponsiveShowPage(p);
+  installMobileResponsiveRuntime();
+};
+
+const __mobileResponsiveInit = init;
+init = async function(){
+  const result=await __mobileResponsiveInit();
+  installMobileResponsiveRuntime();
+  return result;
+};
+
 init();
 </script>
 </body>
