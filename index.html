@@ -11668,6 +11668,213 @@ document.addEventListener('change', function(){
   if(isEnglish()) setTimeout(translateAssignmentTypeEveryDepartmentOption,50);
 }, true);
 
+
+/* === PATCH: ترجمة لوحة الموظفين والجداول - المرحلة السابعة === */
+Object.assign(I18N_TEXT, {
+  'أهم مؤشرات المتابعة':'Key Follow-up Indicators',
+  'كل المهام المسندة ضمن نطاق العرض':'All assigned tasks within the current view',
+  'إجمالي المكتمل لرؤساء القطاعات':'Total completed tasks for sector heads',
+  'حسب تاريخ اعتماد الإكمال خلال الشهر الحالي':'Based on completion approval date during this month',
+  'حسب تاريخ الاستحقاق خلال الشهر الحالي':'Based on due date during this month',
+  'تجاوزت تاريخ الاستحقاق':'Past due date',
+  'مهام تحت المتابعة':'Tasks under follow-up',
+  'سالم الغنام':'Salem Alghannam',
+  'الوليد سعود العصيمي':'Alwaleed Saud Alosaimi',
+  '21 tasks':'21 tasks',
+  '2 tasks':'2 tasks',
+  'جدول مختصر للمهام المعتمدة':'Approved Tasks Summary',
+  'المهام حديثة حسب تاريخ الاستحقاق وتصنيف قوائم مهام رئيسية بالتوثيق':'Recent tasks by due date and main task lists',
+  'جميع المهام':'All Tasks',
+  'إدارة':'Department',
+  'القسم':'Department',
+  'قسم':'Department',
+  'القطاع':'Sector',
+  'المالك':'Owner',
+  'المسؤول':'Responsible',
+  'إجمالي':'Total',
+  'المنجزة':'Completed',
+  'المتأخرة':'Overdue',
+  'نسبة الإنجاز':'Completion Rate',
+  'لا توجد بيانات':'No data',
+  'إدارة المالية':'Finance Department',
+  'المبيعات والتسويق':'Sales and Marketing',
+  'التطوير التنظيمي':'Organizational Development',
+  'الإستراتيجية والتحول':'Strategy and Transformation',
+  'الاستراتيجية والتحول':'Strategy and Transformation',
+  'علاقات المستثمرين':'Investor Relations',
+  'المحاسبة والضبط المالي':'Accounting and Financial Control',
+  'التصميم والابتكار':'Design and Innovation',
+  'المشتريات':'Procurement',
+  'الموارد البشرية':'Human Resources',
+  'الشؤون الإدارية':'Administrative Affairs',
+  'مكتب إدارة المشاريع':'Project Management Office',
+  'إدارة المشاريع':'Projects Department',
+  'إدارة العمليات':'Operations Department',
+  'مكتب الرئيس التنفيذي':'CEO Office',
+  'الرئيس التنفيذي':'CEO',
+  'رئيس تنفيذي':'CEO',
+  'المدير المالي':'CFO',
+  'المدير التنفيذي':'Executive Director',
+  'مدير إدارة':'Department Manager',
+  'مسؤول':'Officer',
+  'محاسب':'Accountant',
+  'مدير مشروع':'Project Manager',
+  'منسق':'Coordinator',
+  'معماري':'Architect'
+});
+
+const EN_DASHBOARD_STRONG_MAP = {
+  'أهم مؤشرات المتابعة':'Key Follow-up Indicators',
+  'كل المهام المسندة ضمن نطاق العرض':'All assigned tasks within the current view',
+  'إجمالي المكتمل لرؤساء القطاعات':'Total completed tasks for sector heads',
+  'حسب تاريخ اعتماد الإكمال خلال الشهر الحالي':'Based on completion approval date during this month',
+  'حسب تاريخ الاستحقاق خلال الشهر الحالي':'Based on due date during this month',
+  'تجاوزت تاريخ الاستحقاق':'Past due date',
+  'مهام تحت المتابعة':'Tasks under follow-up',
+  'أكثر موظف لديه مهام':'Employee with Most Tasks',
+  'أقل موظف لديه مهام':'Employee with Fewest Tasks',
+  'جدول مختصر للمهام المعتمدة':'Approved Tasks Summary',
+  'المهام حديثة حسب تاريخ الاستحقاق وتصنيف قوائم مهام رئيسية بالتوثيق':'Recent tasks by due date and main task lists',
+  'أداء القطاعات':'Sector Performance',
+  'أداء الأقسام':'Department Performance',
+  'أداء الموظفين':'Employee Performance',
+  'جميع المهام':'All Tasks',
+  'الإدارة التنفيذية':'Executive Management',
+  'القطاع التجاري':'Commercial Sector',
+  'قطاع الشؤون المؤسسية':'Corporate Affairs Sector',
+  'قطاع المالية':'Finance Sector',
+  'قطاع المشاريع والعمليات':'Projects and Operations Sector',
+  'قطاع تطوير الأعمال':'Business Development Sector',
+  'قطاع الاستراتيجية والتحول':'Strategy and Transformation Sector',
+  'إدارة المالية':'Finance Department',
+  'إدارة الموارد البشرية':'Human Resources',
+  'الموارد البشرية':'Human Resources',
+  'إدارة الشؤون الإدارية':'Administrative Affairs',
+  'الشؤون الإدارية':'Administrative Affairs',
+  'المحاسبة والضبط المالي':'Accounting and Financial Control',
+  'مكتب إدارة المشاريع':'Project Management Office',
+  'إدارة المشاريع':'Projects Department',
+  'إدارة العمليات':'Operations Department',
+  'التصميم والابتكار':'Design and Innovation',
+  'علاقات المستثمرين':'Investor Relations',
+  'المشتريات':'Procurement',
+  'المبيعات':'Sales',
+  'التسويق':'Marketing',
+  'التطوير التنظيمي':'Organizational Development',
+  'الإستراتيجية والتحول':'Strategy and Transformation',
+  'الاستراتيجية والتحول':'Strategy and Transformation',
+  'مكتب الرئيس التنفيذي':'CEO Office',
+  'غير محدد':'Not specified',
+  'بدون قسم':'No Department',
+  'بدون قطاع':'No Sector',
+  'القسم':'Department',
+  'القطاع':'Sector',
+  'إجمالي':'Total',
+  'قيد التنفيذ':'In Progress',
+  'مكتملة':'Completed',
+  'متأخرة':'Overdue',
+  'نسبة الإنجاز':'Completion Rate',
+  'سالم الغنام':'Salem Alghannam',
+  'الوليد سعود العصيمي':'Alwaleed Saud Alosaimi'
+};
+
+function replaceDashboardArabicText(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  Object.entries(EN_DASHBOARD_STRONG_MAP)
+    .sort((a,b)=>b[0].length-a[0].length)
+    .forEach(([ar,en])=>{
+      out = out.split(ar).join(en);
+    });
+
+  out = out.replace(/(\d+)\s*مهام/g, '$1 tasks');
+  out = out.replace(/(\d+)\s*مهمة/g, '$1 task');
+  out = out.replace(/(\d+)\s*موظفين/g, '$1 employees');
+  out = out.replace(/(\d+)\s*موظف/g, '$1 employee');
+
+  return out;
+}
+
+function translateDashboardAndTablesStrong(){
+  if(!isEnglish()) return;
+
+  const scope = document.body;
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const old=node.nodeValue;
+    const fixed=replaceDashboardArabicText(old);
+    if(fixed !== old) node.nodeValue=fixed;
+  });
+
+  document.querySelectorAll('select option, button, .badge, .chip').forEach(el=>{
+    if(!el || !el.textContent) return;
+    const old=el.textContent;
+    const fixed=replaceDashboardArabicText(old);
+    if(fixed !== old) el.textContent=fixed;
+  });
+}
+
+function scheduleDashboardTranslation(){
+  if(!isEnglish()) return;
+  setTimeout(translateDashboardAndTablesStrong,0);
+  setTimeout(translateDashboardAndTablesStrong,150);
+  setTimeout(translateDashboardAndTablesStrong,450);
+  setTimeout(translateDashboardAndTablesStrong,900);
+}
+
+if(typeof renderEmployeeCards === 'function'){
+  const __phase7RenderEmployeeCards = renderEmployeeCards;
+  renderEmployeeCards = function(...args){
+    const result = __phase7RenderEmployeeCards.apply(this,args);
+    scheduleDashboardTranslation();
+    return result;
+  };
+}
+
+if(typeof renderDashboard === 'function'){
+  const __phase7RenderDashboard = renderDashboard;
+  renderDashboard = function(...args){
+    const result = __phase7RenderDashboard.apply(this,args);
+    scheduleDashboardTranslation();
+    return result;
+  };
+}
+
+if(typeof renderPerformancePage === 'function'){
+  const __phase7RenderPerformancePage = renderPerformancePage;
+  renderPerformancePage = function(...args){
+    const result = __phase7RenderPerformancePage.apply(this,args);
+    scheduleDashboardTranslation();
+    return result;
+  };
+}
+
+const __phase7ShowPage = showPage;
+showPage = function(p){
+  __phase7ShowPage(p);
+  scheduleDashboardTranslation();
+};
+
+const __phase7ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase7ApplyLanguage();
+  scheduleDashboardTranslation();
+};
+
 init();
 </script>
 </body>
