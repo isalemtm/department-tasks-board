@@ -11630,6 +11630,44 @@ applyLanguage = function(){
   scheduleStrongTaskTranslation();
 };
 
+
+/* === PATCH: ترجمة خيار كل إدارة في نوع التكليف === */
+Object.assign(I18N_TEXT, {
+  'كل إدارة':'Entire Department',
+  'كل ادارة':'Entire Department'
+});
+
+if(typeof EN_STRONG_MAP !== 'undefined'){
+  EN_STRONG_MAP['كل إدارة'] = 'Entire Department';
+  EN_STRONG_MAP['كل ادارة'] = 'Entire Department';
+}
+
+function translateAssignmentTypeEveryDepartmentOption(){
+  if(!isEnglish()) return;
+
+  document.querySelectorAll('select option').forEach(opt=>{
+    const t=(opt.textContent||'').trim();
+    if(t==='كل إدارة' || t==='كل ادارة'){
+      opt.textContent='Entire Department';
+    }
+  });
+}
+
+const __phase6ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase6ApplyLanguage();
+  setTimeout(translateAssignmentTypeEveryDepartmentOption,0);
+  setTimeout(translateAssignmentTypeEveryDepartmentOption,200);
+};
+
+document.addEventListener('click', function(){
+  if(isEnglish()) setTimeout(translateAssignmentTypeEveryDepartmentOption,50);
+}, true);
+
+document.addEventListener('change', function(){
+  if(isEnglish()) setTimeout(translateAssignmentTypeEveryDepartmentOption,50);
+}, true);
+
 init();
 </script>
 </body>
