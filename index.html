@@ -12086,6 +12086,134 @@ applyLanguage = function(){
   schedulePhase8DashboardTranslation();
 };
 
+
+/* === PATCH: تنظيف ترجمة جدول أداء الموظفين وإبقاء الأسماء عربية - المرحلة التاسعة === */
+Object.assign(I18N_TEXT, {
+  'أداء جميع الموظفين':'All Employees Performance',
+  'Employeeأداء جميع ال':'All Employees Performance',
+  'Employee أداء جميع ال':'All Employees Performance',
+  'الاستثمار والعلاقات':'Investment and Relations',
+  'Sales والتحصيل':'Sales and Collection',
+  'Marketing والإدارة':'Marketing and Management',
+  'Marketingوالإدارة':'Marketing and Management'
+});
+
+const EN_PHASE9_MAP = {
+  'Employeeأداء جميع ال':'All Employees Performance',
+  'Employee أداء جميع ال':'All Employees Performance',
+  'أداء جميع الموظفين':'All Employees Performance',
+  'الاستثمار والعلاقات':'Investment and Relations',
+  'Sales والتحصيل':'Sales and Collection',
+  'Salesوالتحصيل':'Sales and Collection',
+  'المبيعات والتحصيل':'Sales and Collection',
+  'Marketing والإدارة':'Marketing and Management',
+  'Marketingوالإدارة':'Marketing and Management',
+  'التسويق والإدارة':'Marketing and Management',
+  'Marketing والإعلام':'Marketing and Communication',
+  'Marketingوالإعلام':'Marketing and Communication',
+  'التسويق والإعلام':'Marketing and Communication'
+};
+
+const EN_PHASE9_RESTORE_NAMES = {
+  'Salem Alghannam':'سالم الغنام',
+  'Alwaleed Saud Alosaimi':'الوليد سعود العصيمي'
+};
+
+function phase9FixEmployeePerformanceText(text){
+  if(!isEnglish()) return text;
+  let out = String(text || '');
+
+  Object.entries(EN_PHASE9_RESTORE_NAMES).forEach(([en,ar])=>{
+    out = out.split(en).join(ar);
+  });
+
+  Object.entries(EN_PHASE9_MAP)
+    .sort((a,b)=>b[0].length-a[0].length)
+    .forEach(([bad,good])=>{
+      out = out.split(bad).join(good);
+    });
+
+  /* تنظيف مسارات القطاع/القسم */
+  out = out.replace(/Commercial Sector\s*\/\s*Sales\s*والتحصيل/gi, 'Commercial Sector / Sales and Collection');
+  out = out.replace(/Commercial Sector\s*\/\s*Salesوالتحصيل/gi, 'Commercial Sector / Sales and Collection');
+  out = out.replace(/Business Development Sector\s*\/\s*الاستثمار والعلاقات/gi, 'Business Development Sector / Investment and Relations');
+  out = out.replace(/Commercial Sector\s*\/\s*Marketing\s*والإدارة/gi, 'Commercial Sector / Marketing and Management');
+  out = out.replace(/Commercial Sector\s*\/\s*Marketingوالإدارة/gi, 'Commercial Sector / Marketing and Management');
+
+  return out;
+}
+
+function phase9CleanEmployeePerformance(){
+  if(!isEnglish()) return;
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node){
+      const parent=node.parentElement;
+      if(!parent) return NodeFilter.FILTER_REJECT;
+      if(['SCRIPT','STYLE','TEXTAREA'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+      if(parent.closest('#languageToggleBtn')) return NodeFilter.FILTER_REJECT;
+      if(!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node=>{
+    const old=node.nodeValue;
+    const fixed=phase9FixEmployeePerformanceText(old);
+    if(fixed !== old) node.nodeValue=fixed;
+  });
+}
+
+function schedulePhase9CleanEmployeePerformance(){
+  if(!isEnglish()) return;
+  setTimeout(phase9CleanEmployeePerformance,0);
+  setTimeout(phase9CleanEmployeePerformance,150);
+  setTimeout(phase9CleanEmployeePerformance,500);
+  setTimeout(phase9CleanEmployeePerformance,1000);
+}
+
+if(typeof renderEmployeeCards === 'function'){
+  const __phase9RenderEmployeeCards = renderEmployeeCards;
+  renderEmployeeCards = function(...args){
+    const result = __phase9RenderEmployeeCards.apply(this,args);
+    schedulePhase9CleanEmployeePerformance();
+    return result;
+  };
+}
+
+if(typeof renderDashboard === 'function'){
+  const __phase9RenderDashboard = renderDashboard;
+  renderDashboard = function(...args){
+    const result = __phase9RenderDashboard.apply(this,args);
+    schedulePhase9CleanEmployeePerformance();
+    return result;
+  };
+}
+
+if(typeof renderPerformancePage === 'function'){
+  const __phase9RenderPerformancePage = renderPerformancePage;
+  renderPerformancePage = function(...args){
+    const result = __phase9RenderPerformancePage.apply(this,args);
+    schedulePhase9CleanEmployeePerformance();
+    return result;
+  };
+}
+
+const __phase9ShowPage = showPage;
+showPage = function(p){
+  __phase9ShowPage(p);
+  schedulePhase9CleanEmployeePerformance();
+};
+
+const __phase9ApplyLanguage = applyLanguage;
+applyLanguage = function(){
+  __phase9ApplyLanguage();
+  schedulePhase9CleanEmployeePerformance();
+};
+
 init();
 </script>
 </body>
