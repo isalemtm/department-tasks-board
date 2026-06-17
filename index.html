@@ -11328,6 +11328,251 @@ if(!window.__orgVisibleHardObserverInstalled){
   },1200);
 }
 
+
+/* === PATCH: إصلاح تكرار زر الهيكل + توضيح نطاق بيانات الموظف للقطاع === */
+function cleanupDuplicateOrgTabs(){
+  const actions=document.querySelector('#appSection .app-actions');
+  if(!actions) return;
+
+  const orgButtons=[...actions.querySelectorAll('button')].filter(btn =>
+    btn.id==='tabOrg' || (btn.textContent||'').trim()==='الهيكل التنظيمي'
+  );
+
+  if(orgButtons.length > 1){
+    const keep=orgButtons.find(btn=>btn.id==='tabOrg') || orgButtons[0];
+    keep.id='tabOrg';
+    keep.setAttribute('onclick',"showPage('org')");
+    keep.classList.remove('hidden');
+    keep.style.display='';
+
+    orgButtons.forEach(btn=>{
+      if(btn !== keep) btn.remove();
+    });
+  }else if(orgButtons.length === 1){
+    orgButtons[0].id='tabOrg';
+    orgButtons[0].setAttribute('onclick',"showPage('org')");
+    orgButtons[0].classList.remove('hidden');
+    orgButtons[0].style.display='';
+  }
+}
+
+function ensureSingleOrgTabForAll(){
+  if(typeof ensurePerformanceAndOrgPagesDom === 'function'){
+    ensurePerformanceAndOrgPagesDom();
+  }
+
+  const actions=document.querySelector('#appSection .app-actions');
+  if(actions && ![...actions.querySelectorAll('button')].some(btn => btn.id==='tabOrg' || (btn.textContent||'').trim()==='الهيكل التنظيمي')){
+    const adminBtn=$('tabAdmin');
+    const orgBtn=document.createElement('button');
+    orgBtn.id='tabOrg';
+    orgBtn.className='btn btn-secondary';
+    orgBtn.textContent='الهيكل التنظيمي';
+    orgBtn.setAttribute('onclick',"showPage('org')");
+
+    if(adminBtn) actions.insertBefore(orgBtn, adminBtn);
+    else actions.appendChild(orgBtn);
+  }
+
+  const app=$('appSection');
+  if(app && !$('orgPage')){
+    const adminPage=$('adminPage');
+    const org=document.createElement('section');
+    org.id='orgPage';
+    org.className='hidden';
+    org.innerHTML='<div id="orgContent"></div>';
+    if(adminPage) app.insertBefore(org, adminPage);
+    else app.appendChild(org);
+  }
+
+  cleanupDuplicateOrgTabs();
+}
+
+/* نطاق لوحة الموظفين: للموظف = كل موظفي وبيانات قطاعه المتاحة من Supabase */
+usersInDashboardScope = function(){
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+
+  if(isAdminOrCeo()) return users;
+
+  if(isSectorHead() || currentRole()==='employee'){
+    return users.filter(u=>u.sector_id===state.profile?.sector_id);
+  }
+
+  if(isDepartmentManager()){
+    return users.filter(u=>u.department_id===state.profile?.department_id);
+  }
+
+  return users.filter(u=>u.id===state.profile?.id);
+};
+
+function dashboardTasksScope(){
+  const rows=visibleTasks();
+  const profile=state.profile;
+
+  if(isAdminOrCeo()) return rows;
+
+  if(isSectorHead() || currentRole()==='employee'){
+    const sectorId=profile?.sector_id;
+    if(!sectorId) return [];
+
+    const sectorUserIds=new Set((state.users||[])
+      .filter(u=>u.is_active!==false && u.sector_id===sectorId)
+      .map(u=>u.id));
+
+    return rows.filter(t=>{
+      const assignees=getTaskAssignees(t.id);
+      return (
+        t.owner_sector_id===sectorId ||
+        t.target_sector_id===sectorId ||
+        sectorUserIds.has(t.primary_responsible_id) ||
+        assignees.some(u=>sectorUserIds.has(u.id))
+      );
+    });
+  }
+
+  if(isDepartmentManager()){
+    const deptId=profile?.department_id;
+    if(!deptId) return [];
+
+    const deptUserIds=new Set((state.users||[])
+      .filter(u=>u.is_active!==false && u.department_id===deptId)
+      .map(u=>u.id));
+
+    return rows.filter(t=>{
+      const assignees=getTaskAssignees(t.id);
+      return (
+        t.owner_department_id===deptId ||
+        t.target_department_id===deptId ||
+        deptUserIds.has(t.primary_responsible_id) ||
+        assignees.some(u=>deptUserIds.has(u.id))
+      );
+    });
+  }
+
+  return tasksForUser(profile?.id);
+};
+
+function dashboardTitleByRole(){
+  if(isAdminOrCeo()) return 'أداء جميع الموظفين';
+  if(isSectorHead() || currentRole()==='employee') return 'أداء موظفي القطاع';
+  if(isDepartmentManager()) return 'أداء موظفي القسم';
+  return 'لوحة مهامي';
+}
+
+function dashboardScopeLabel(){
+  if(isAdminOrCeo()) return 'كل المهام المعتمدة ضمن نطاق العرض';
+  if(isSectorHead() || currentRole()==='employee') return 'كل مهام القطاع ضمن نطاق العرض';
+  if(isDepartmentManager()) return 'كل مهام القسم ضمن نطاق العرض';
+  return 'مهامي ضمن نطاق العرض';
+}
+
+renderExecutiveSummaryCards = function(){
+  const tasks=uniqueTasks(dashboardTasksScope());
+  const total=tasks.length;
+  const doneTotal=tasks.filter(t=>t.status==='مكتملة').length;
+  const now=new Date();
+
+  const doneMonth=tasks.filter(t=>{
+    const completedAt=t.completed_at || t.completion_approved_at || t.updated_at || t.due_date;
+    if(t.status!=='مكتملة' || !completedAt) return false;
+    const d=new Date(completedAt);
+    return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  }).length;
+
+  const dueMonth=tasks.filter(t=>{
+    if(!t.due_date) return false;
+    const d=new Date(t.due_date);
+    return !isNaN(d) && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  }).length;
+
+  const inProgress=tasks.filter(t=>t.status==='قيد التنفيذ'&&!isLate(t)).length;
+  const late=tasks.filter(isLate).length;
+
+  const users=usersInDashboardScope();
+  const counts=users.map(u=>({u,count:tasksForUser(u.id).length})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+  const most=counts[0], least=[...counts].sort((a,b)=>a.count-b.count)[0];
+
+  return `<section class="panel card">
+    <h2>أهم مؤشرات المتابعة</h2>
+    <div class="executive-stats">
+      <div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>${dashboardScopeLabel()}</small></div>
+      <div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${doneTotal}</strong><small>إجمالي المكتمل</small></div>
+      <div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>حسب تاريخ اعتماد الإكمال خلال الشهر الحالي</small></div>
+      <div class="executive-stat-card"><span>المستحقة هذا الشهر</span><strong>${dueMonth}</strong><small>حسب تاريخ الاستحقاق خلال الشهر الحالي</small></div>
+      <div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${inProgress}</strong><small>مهام تحت المعالجة</small></div>
+      <div class="executive-stat-card"><span>المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+    </div>
+    <div class="executive-employees-row">
+      <div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${most?escapeHtml(most.u.name):'—'}</strong><small>${most?`${most.count} مهمة`:'لا توجد مهام'}</small></div>
+      <div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${least?escapeHtml(least.u.name):'—'}</strong><small>${least?`${least.count} مهمة`:'لا توجد مهام'}</small></div>
+    </div>
+  </section>`;
+};
+
+renderMyTasksSummary = function(){
+  let rows=uniqueTasks(dashboardTasksScope());
+
+  rows=rows.map(t=>({...t,derivedStatus:isLate(t)?'متأخرة':t.status})).sort((a,b)=>{
+    const ad=a.status==='مكتملة'?1:0, bd=b.status==='مكتملة'?1:0;
+    if(ad!==bd) return ad-bd;
+    const da=a.due_date?new Date(a.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    const db=b.due_date?new Date(b.due_date).getTime():Number.MAX_SAFE_INTEGER;
+    if(da!==db) return da-db;
+    return new Date(b.created_at||0)-new Date(a.created_at||0);
+  });
+
+  const summaryTitle = (currentRole()==='employee'||isSectorHead()) ? 'مهام القطاع الحالية' : (isDepartmentManager()?'مهام القسم الحالية':(isAdminOrCeo()?'جدول مختصر بالمهام المعتمدة':'مهامي الحالية'));
+  const body=rows.length?rows.map(t=>`<tr class="summary-task-row ${isDueSoon(t)?'task-due-soon':''}" onclick="openTaskFromSummary('${t.id}')"><td>${escapeHtml(t.title||'بدون عنوان')}</td><td>${escapeHtml(t.derivedStatus||'—')}</td><td>${escapeHtml(t.priority||'عادية')}</td><td>${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}</td><td>${formatDate(t.due_date)} ${isDueSoon(t)?`<span class="due-soon-label">${getDueSoonLabel(t)}</span>`:''}</td><td>${escapeHtml(getLatestTaskComment(t.id)?.comment_text||'—')}</td></tr>`).join(''):'<tr><td colspan="6">لا توجد مهام حالية.</td></tr>';
+
+  return `<section class="panel card"><h2>${summaryTitle}</h2><p class="meta">اضغط على أي مهمة لفتحها والتعليق عليها أو تحديث حالتها حسب الصلاحية.</p><div class="table-wrap"><table><thead><tr><th>المهمة</th><th>الحالة</th><th>الأولوية</th><th>المسند إليهم</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+};
+
+renderDashboard = function(){
+  const users=usersInDashboardScope();
+  const title=dashboardTitleByRole();
+  $('dashboardContent').innerHTML=`${renderExecutiveSummaryCards()}${renderEmployeeCards(users)}${renderMyTasksSummary()}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
+  if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
+};
+
+/* إعادة ربط showPage بدون إضافة زر ثاني */
+const __finalFixShowPage = showPage;
+showPage = function(p){
+  ensureSingleOrgTabForAll();
+
+  if(p==='org'){
+    ['tasks','dashboard','admin','performance','org','executiveFollow'].forEach(x=>{
+      const page=$(x+'Page');
+      if(page) page.classList.toggle('hidden', x!=='org');
+      const tab=$('tab'+x[0].toUpperCase()+x.slice(1));
+      if(tab) tab.classList.toggle('active', x==='org');
+    });
+
+    if(typeof renderOrgPage === 'function') renderOrgPage();
+    else $('orgContent').innerHTML='<section class="panel card"><div class="empty">تعذر تحميل الهيكل التنظيمي.</div></section>';
+    cleanupDuplicateOrgTabs();
+    return;
+  }
+
+  __finalFixShowPage(p);
+  ensureSingleOrgTabForAll();
+  cleanupDuplicateOrgTabs();
+};
+
+const __finalFixShowApp = showApp;
+showApp = function(){
+  __finalFixShowApp();
+  ensureSingleOrgTabForAll();
+  cleanupDuplicateOrgTabs();
+};
+
+const __finalFixBootstrap = bootstrap;
+bootstrap = async function(){
+  const result=await __finalFixBootstrap();
+  ensureSingleOrgTabForAll();
+  cleanupDuplicateOrgTabs();
+  return result;
+};
+
 init();
 </script>
 </body>
