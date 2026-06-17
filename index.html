@@ -10569,6 +10569,140 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: تسمية مؤشرات رؤساء القطاعات وطي مؤشرات جميع الموظفين === */
+function installIndicatorsBlocksStyle(){
+  if(document.getElementById('indicatorsBlocksStyle')) return;
+  const style=document.createElement('style');
+  style.id='indicatorsBlocksStyle';
+  style.textContent=`
+    .sector-heads-indicators-title{
+      text-align:center;
+      margin:0 0 14px;
+      color:var(--primary2);
+      font-size:22px;
+      font-weight:900;
+      line-height:1.45;
+    }
+
+    .all-employees-indicators-details{
+      margin:18px 0;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background:var(--card);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    .all-employees-indicators-details > summary{
+      list-style:none;
+      cursor:pointer;
+      padding:18px 20px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      color:var(--primary2);
+      font-size:21px;
+      font-weight:900;
+      background:#fff;
+      border-bottom:1px solid transparent;
+    }
+
+    .all-employees-indicators-details > summary::-webkit-details-marker{
+      display:none;
+    }
+
+    .all-employees-indicators-details > summary::before{
+      content:"⌄";
+      width:28px;
+      height:28px;
+      border-radius:999px;
+      background:#efe8e3;
+      color:var(--primary2);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:17px;
+      line-height:1;
+      flex:0 0 auto;
+      transition:.2s ease;
+    }
+
+    .all-employees-indicators-details[open] > summary{
+      border-bottom-color:var(--line);
+    }
+
+    .all-employees-indicators-details[open] > summary::before{
+      transform:rotate(180deg);
+    }
+
+    .all-employees-indicators-body{
+      padding:18px 20px 20px;
+      background:#fff;
+    }
+
+    .all-employees-indicators-body .panel.card{
+      margin:0 0 18px!important;
+      box-shadow:none!important;
+      border:0!important;
+      padding:0!important;
+    }
+
+    .all-employees-indicators-body .panel.card > h2:first-child{
+      margin-top:0!important;
+    }
+
+    @media(max-width:768px){
+      .sector-heads-indicators-title{
+        font-size:19px;
+      }
+      .all-employees-indicators-details > summary{
+        font-size:18px;
+        padding:14px 16px;
+      }
+      .all-employees-indicators-body{
+        padding:14px 16px 16px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function renderSectorHeadsIndicatorsBlock(){
+  const html = renderExecutiveSummaryCards();
+  return html.replace(
+    '<h2>أهم مؤشرات المتابعة</h2>',
+    '<h2 class="sector-heads-indicators-title">مؤشرات رؤساء القطاعات</h2>'
+  );
+}
+
+const __indicatorsBlocksOriginalRenderDashboard = renderDashboard;
+renderDashboard = function(){
+  installIndicatorsBlocksStyle();
+
+  const users=usersInDashboardScope();
+  let title='لوحة مهامي';
+  if(isAdminOrCeo()) title='أداء جميع الموظفين';
+  else if(isSectorHead()) title='أداء موظفي القطاع';
+  else if(isDepartmentManager()) title='أداء موظفي القسم';
+
+  const allEmployeesIndicators = `
+    <details class="all-employees-indicators-details">
+      <summary>مؤشرات جميع الموظفين</summary>
+      <div class="all-employees-indicators-body">
+        ${renderEmployeeCards(users)}
+        ${renderMyTasksSummary()}
+        ${renderSectorPerformance()}
+        ${renderDepartmentPerformance()}
+        ${renderEmployeePerformance(title,users)}
+      </div>
+    </details>
+  `;
+
+  $('dashboardContent').innerHTML = `${renderSectorHeadsIndicatorsBlock()}${allEmployeesIndicators}`;
+};
+
 init();
 </script>
 </body>
