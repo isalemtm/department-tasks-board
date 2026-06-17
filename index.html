@@ -10834,6 +10834,83 @@ showApp = function(){
   setTimeout(removeNewColumnFromPerformanceTables,100);
 };
 
+
+/* === PATCH: إخفاء عنوان الصفحة أثناء شاشة جاري تحميل اللوحة === */
+function installStartupLoadingCleanStyle(){
+  if(document.getElementById('startupLoadingCleanStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='startupLoadingCleanStyle';
+  style.textContent=`
+    body.startup-loading-clean .topbar,
+    body.startup-loading-clean header,
+    body.startup-loading-clean .app-header,
+    body.startup-loading-clean #appSection{
+      display:none!important;
+    }
+
+    body.startup-loading-clean{
+      background:var(--bg)!important;
+      min-height:100vh!important;
+    }
+
+    body.startup-loading-clean #startupLoadingSection{
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      min-height:100vh!important;
+      width:100%!important;
+      padding:24px!important;
+    }
+
+    body.startup-loading-clean #startupLoadingSection .panel,
+    body.startup-loading-clean #startupLoadingSection .card,
+    body.startup-loading-clean #startupLoadingSection > div{
+      max-width:520px!important;
+      margin:auto!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function setStartupLoadingCleanMode(){
+  installStartupLoadingCleanStyle();
+
+  const loading=$('startupLoadingSection');
+  const isLoadingVisible = loading && !loading.classList.contains('hidden') && getComputedStyle(loading).display !== 'none';
+  document.body.classList.toggle('startup-loading-clean', !!isLoadingVisible);
+}
+
+const __startupCleanShowStartupLoading = typeof showStartupLoading === 'function' ? showStartupLoading : null;
+if(__startupCleanShowStartupLoading){
+  showStartupLoading = function(){
+    const result=__startupCleanShowStartupLoading();
+    setStartupLoadingCleanMode();
+    return result;
+  };
+}
+
+const __startupCleanShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __startupCleanShowAuthOnly();
+  document.body.classList.remove('startup-loading-clean');
+};
+
+const __startupCleanShowApp = showApp;
+showApp = function(){
+  __startupCleanShowApp();
+  document.body.classList.remove('startup-loading-clean');
+};
+
+const __startupCleanInit = init;
+init = async function(){
+  installStartupLoadingCleanStyle();
+  document.body.classList.add('startup-loading-clean');
+  const result=await __startupCleanInit();
+  setStartupLoadingCleanMode();
+  return result;
+};
+
 init();
 </script>
 </body>
