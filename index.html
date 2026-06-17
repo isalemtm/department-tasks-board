@@ -10872,6 +10872,233 @@ showApp = function(){
   installExecutiveFollowAllEmployeesUnifiedStyle();
 };
 
+
+/* === PATCH: إصلاح نهائي - إدخال جدول متابعة القطاعات داخل بلوك مؤشرات جميع الموظفين === */
+function installExecutiveFollowEmployeesBlockFinalStyle(){
+  if(document.getElementById('executiveFollowEmployeesBlockFinalStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFollowEmployeesBlockFinalStyle';
+  style.textContent=`
+    .all-employees-follow-details.final-follow-block{
+      margin:18px 0!important;
+      border:1px solid var(--line)!important;
+      border-radius:var(--radius)!important;
+      background:#fff!important;
+      box-shadow:var(--shadow)!important;
+      overflow:hidden!important;
+      padding:0!important;
+    }
+
+    .all-employees-follow-details.final-follow-block > summary{
+      list-style:none!important;
+      cursor:pointer!important;
+      padding:18px 20px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:12px!important;
+      color:var(--primary2)!important;
+      font-size:21px!important;
+      font-weight:900!important;
+      background:#fff!important;
+      border-bottom:1px solid transparent!important;
+      min-height:64px!important;
+      direction:rtl!important;
+      text-align:right!important;
+    }
+
+    .all-employees-follow-details.final-follow-block > summary::-webkit-details-marker{
+      display:none!important;
+    }
+
+    .all-employees-follow-details.final-follow-block > summary::after{
+      content:"⌄"!important;
+      width:28px!important;
+      height:28px!important;
+      border-radius:999px!important;
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      font-size:17px!important;
+      line-height:1!important;
+      flex:0 0 auto!important;
+      transition:.2s ease!important;
+      margin-right:auto!important;
+    }
+
+    .all-employees-follow-details.final-follow-block > summary::before{
+      content:none!important;
+      display:none!important;
+    }
+
+    .all-employees-follow-details.final-follow-block[open] > summary{
+      border-bottom-color:var(--line)!important;
+    }
+
+    .all-employees-follow-details.final-follow-block[open] > summary::after{
+      transform:rotate(180deg)!important;
+    }
+
+    .all-employees-follow-body.final-follow-body{
+      padding:18px 20px 20px!important;
+      background:#fff!important;
+      display:block!important;
+    }
+
+    .all-employees-follow-body.final-follow-body > .executive-stats,
+    .all-employees-follow-body.final-follow-body > .filters,
+    .all-employees-follow-body.final-follow-body > .table-wrap,
+    .all-employees-follow-body.final-follow-body > .muted,
+    .all-employees-follow-body.final-follow-body > .actions{
+      margin-bottom:16px!important;
+    }
+
+    .all-employees-follow-body.final-follow-body .table-wrap{
+      width:100%!important;
+      max-width:100%!important;
+    }
+
+    @media(max-width:768px){
+      .all-employees-follow-details.final-follow-block > summary{
+        font-size:18px!important;
+        padding:14px 16px!important;
+        min-height:56px!important;
+      }
+      .all-employees-follow-body.final-follow-body{
+        padding:14px 16px 16px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function findExecutiveAllEmployeesNodes(){
+  const statsBox=$('executiveDirectStats');
+  if(!statsBox) return null;
+
+  const sectorHeadsPanel=$('executiveSectorHeadsStatsPanel');
+
+  const allEmployeesGrid=[...statsBox.querySelectorAll(':scope > .executive-stats')]
+    .find(el => !sectorHeadsPanel || !sectorHeadsPanel.contains(el));
+
+  const filters=$('executiveDirectFilters') 
+    || statsBox.querySelector('.filters')
+    || statsBox.querySelector('.filter-row')
+    || statsBox.querySelector('.form-grid');
+
+  const tableWrap=$('executiveDirectTasksWrap')
+    || statsBox.querySelector('.table-wrap')
+    || statsBox.querySelector('table')?.closest('.table-wrap');
+
+  return { statsBox, allEmployeesGrid, filters, tableWrap };
+}
+
+function applyExecutiveFollowEmployeesBlockFinal(){
+  installExecutiveFollowEmployeesBlockFinalStyle();
+
+  const nodes=findExecutiveAllEmployeesNodes();
+  if(!nodes) return;
+
+  const { statsBox, allEmployeesGrid, filters, tableWrap } = nodes;
+
+  let details=statsBox.querySelector(':scope > .all-employees-follow-details.final-follow-block')
+    || statsBox.querySelector(':scope > .all-employees-follow-details');
+
+  if(!details){
+    details=document.createElement('details');
+    details.className='all-employees-follow-details final-follow-block';
+
+    const summary=document.createElement('summary');
+    summary.textContent='مؤشرات جميع الموظفين';
+
+    const body=document.createElement('div');
+    body.className='all-employees-follow-body final-follow-body';
+
+    const insertBeforeNode=allEmployeesGrid || filters || tableWrap || null;
+    if(insertBeforeNode && insertBeforeNode.parentNode===statsBox){
+      statsBox.insertBefore(details, insertBeforeNode);
+    }else{
+      statsBox.appendChild(details);
+    }
+
+    details.appendChild(summary);
+    details.appendChild(body);
+  }else{
+    details.classList.add('final-follow-block');
+    let summary=details.querySelector(':scope > summary');
+    if(!summary){
+      summary=document.createElement('summary');
+      details.insertBefore(summary, details.firstChild);
+    }
+    summary.textContent='مؤشرات جميع الموظفين';
+
+    let body=details.querySelector(':scope > .all-employees-follow-body');
+    if(!body){
+      body=document.createElement('div');
+      body.className='all-employees-follow-body';
+      details.appendChild(body);
+    }
+    body.classList.add('final-follow-body');
+  }
+
+  const body=details.querySelector(':scope > .all-employees-follow-body');
+
+  /* مهم: التفاصيل تكون مغلقة افتراضياً، والجدول لا يظهر إلا عند الفتح */
+  details.removeAttribute('open');
+
+  [allEmployeesGrid, filters, tableWrap].forEach(node=>{
+    if(node && body && !body.contains(node)){
+      body.appendChild(node);
+    }
+  });
+
+  /* إذا كان هناك نص تنبيه/وصف أو أزرار تصدير مرتبطة بالجدول، أدخلها داخل نفس البلوك */
+  const possibleSiblings=[...statsBox.children].filter(el=>{
+    if(el===details) return false;
+    if(el.id==='executiveSectorHeadsStatsPanel') return false;
+    if(el.classList?.contains('all-employees-follow-details')) return false;
+    const txt=(el.textContent||'').trim();
+    const isRelated =
+      el.classList?.contains('muted') ||
+      el.classList?.contains('actions') ||
+      txt.includes('من أجل') ||
+      txt.includes('اضغط') ||
+      txt.includes('المهام المكتملة') ||
+      txt.includes('تصدير') ||
+      el.querySelector?.('button, .btn');
+    return isRelated && !el.closest('#executiveSectorHeadsStatsPanel');
+  });
+
+  possibleSiblings.forEach(node=>{
+    if(body && !body.contains(node)) body.appendChild(node);
+  });
+}
+
+const __finalEmployeesBlockRenderExecutiveDirect = renderExecutiveDirect;
+renderExecutiveDirect = function(){
+  __finalEmployeesBlockRenderExecutiveDirect();
+  if(typeof applyExecutiveFollowIndicatorsBlocks === 'function') applyExecutiveFollowIndicatorsBlocks();
+  applyExecutiveFollowEmployeesBlockFinal();
+};
+
+const __finalEmployeesBlockShowPage = showPage;
+showPage = function(p){
+  __finalEmployeesBlockShowPage(p);
+  if(p==='executiveFollow'){
+    if(typeof applyExecutiveFollowIndicatorsBlocks === 'function') applyExecutiveFollowIndicatorsBlocks();
+    applyExecutiveFollowEmployeesBlockFinal();
+  }
+};
+
+const __finalEmployeesBlockShowApp = showApp;
+showApp = function(){
+  __finalEmployeesBlockShowApp();
+  installExecutiveFollowEmployeesBlockFinalStyle();
+};
+
 init();
 </script>
 </body>
