@@ -11170,6 +11170,164 @@ bootstrap = async function(){
   return result;
 };
 
+
+/* === PATCH: تأكيد ظهور الهيكل للجميع + محاولة تحميل نطاق القطاع للموظف === */
+function mergeRowsById(currentRows, newRows){
+  const map=new Map();
+  (currentRows||[]).forEach(r=>{ if(r?.id) map.set(r.id,r); });
+  (newRows||[]).forEach(r=>{ if(r?.id) map.set(r.id,r); });
+  return [...map.values()];
+}
+
+async function loadEmployeeSectorDashboardContext(){
+  try{
+    if(!(currentRole()==='employee' || isSectorHead())) return;
+
+    const sectorId=state.profile?.sector_id;
+    if(!sectorId) return;
+
+    const [usersRes,tasksRes]=await Promise.all([
+      supabaseClient.from('users').select('*').eq('sector_id',sectorId).eq('is_active',true).order('name'),
+      supabaseClient.from('tasks').select('*').or(`owner_sector_id.eq.${sectorId},target_sector_id.eq.${sectorId}`).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false})
+    ]);
+
+    if(!usersRes.error && usersRes.data?.length){
+      state.users=mergeRowsById(state.users,usersRes.data);
+    }
+
+    if(!tasksRes.error && tasksRes.data?.length){
+      state.tasks=mergeRowsById(state.tasks,tasksRes.data);
+
+      const taskIds=tasksRes.data.map(t=>t.id).filter(Boolean);
+      if(taskIds.length){
+        const [assigneesRes,commentsRes]=await Promise.all([
+          supabaseClient.from('task_assignees').select('*').in('task_id',taskIds),
+          supabaseClient.from('task_comments').select('*').in('task_id',taskIds).order('created_at',{ascending:true})
+        ]);
+
+        if(!assigneesRes.error && assigneesRes.data?.length){
+          state.assignees=mergeRowsById(state.assignees,assigneesRes.data);
+        }
+
+        if(!commentsRes.error && commentsRes.data?.length){
+          state.comments=mergeRowsById(state.comments,commentsRes.data);
+        }
+      }
+    }
+  }catch(e){
+    console.warn('Could not load employee sector dashboard context:', e);
+  }
+}
+
+const __sectorContextLoadAll = loadAll;
+loadAll = async function(){
+  await __sectorContextLoadAll();
+  await loadEmployeeSectorDashboardContext();
+};
+
+function ensureOrgPageDomOnly(){
+  const actions=document.querySelector('#appSection .app-actions');
+  if(actions && !$('tabOrg')){
+    const adminBtn=$('tabAdmin');
+    const orgBtn=document.createElement('button');
+    orgBtn.id='tabOrg';
+    orgBtn.className='btn btn-secondary';
+    orgBtn.textContent='الهيكل التنظيمي';
+    orgBtn.setAttribute('onclick',"showPage('org')");
+
+    if(adminBtn) actions.insertBefore(orgBtn, adminBtn);
+    else actions.appendChild(orgBtn);
+  }
+
+  const app=$('appSection');
+  if(app && !$('orgPage')){
+    const adminPage=$('adminPage');
+    const org=document.createElement('section');
+    org.id='orgPage';
+    org.className='hidden';
+    org.innerHTML='<div id="orgContent"></div>';
+
+    if(adminPage) app.insertBefore(org, adminPage);
+    else app.appendChild(org);
+  }
+
+  const orgBtn=$('tabOrg');
+  if(orgBtn){
+    orgBtn.classList.remove('hidden');
+    orgBtn.style.display='';
+  }
+}
+
+function ensureOrgVisibleHard(){
+  ensureOrgPageDomOnly();
+
+  if(!document.getElementById('orgVisibleForAllHardStyle')){
+    const style=document.createElement('style');
+    style.id='orgVisibleForAllHardStyle';
+    style.textContent=`
+      #tabOrg{
+        display:inline-flex!important;
+        visibility:visible!important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+function renderOrgPageSafe(){
+  if(typeof renderOrgPage === 'function'){
+    renderOrgPage();
+  }else{
+    $('orgContent').innerHTML='<section class="panel card"><div class="empty">تعذر تحميل الهيكل التنظيمي.</div></section>';
+  }
+}
+
+const __orgHardShowApp = showApp;
+showApp = function(){
+  __orgHardShowApp();
+  ensureOrgVisibleHard();
+  setTimeout(ensureOrgVisibleHard,100);
+  setTimeout(ensureOrgVisibleHard,500);
+};
+
+const __orgHardShowPage = showPage;
+showPage = function(p){
+  ensureOrgVisibleHard();
+
+  if(p==='org'){
+    ['tasks','dashboard','admin','performance','org','executiveFollow'].forEach(x=>{
+      const page=$(x+'Page');
+      if(page) page.classList.toggle('hidden', x!=='org');
+
+      const tab=$('tab'+x[0].toUpperCase()+x.slice(1));
+      if(tab) tab.classList.toggle('active', x==='org');
+    });
+
+    renderOrgPageSafe();
+    ensureOrgVisibleHard();
+    return;
+  }
+
+  __orgHardShowPage(p);
+  ensureOrgVisibleHard();
+};
+
+const __orgHardBootstrap = bootstrap;
+bootstrap = async function(){
+  const result=await __orgHardBootstrap();
+  ensureOrgVisibleHard();
+  setTimeout(ensureOrgVisibleHard,300);
+  return result;
+};
+
+/* مراقبة بسيطة حتى لو أعاد كود آخر رسم الأزرار */
+if(!window.__orgVisibleHardObserverInstalled){
+  window.__orgVisibleHardObserverInstalled=true;
+  setInterval(()=>{
+    if(state?.profile) ensureOrgVisibleHard();
+  },1200);
+}
+
 init();
 </script>
 </body>
