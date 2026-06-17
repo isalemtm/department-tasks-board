@@ -10787,6 +10787,53 @@ showApp = function(){
   installExecutiveFollowNoEmployeeAreaStyle();
 };
 
+
+/* === PATCH: حذف تصنيف جديدة من جداول الأداء في لوحة الموظفين === */
+function removeNewColumnFromPerformanceTables(){
+  const dashboard=$('dashboardPage');
+  if(!dashboard) return;
+
+  const targetTitles=['أداء القطاعات','أداء الأقسام','أداء جميع الموظفين'];
+
+  [...dashboard.querySelectorAll('section.panel.card, .panel.card')].forEach(panel=>{
+    const title=(panel.querySelector('h2')?.textContent || '').trim();
+    if(!targetTitles.includes(title)) return;
+
+    const table=panel.querySelector('table');
+    if(!table) return;
+
+    const headerCells=[...table.querySelectorAll('thead th')];
+    const newIndex=headerCells.findIndex(th => (th.textContent || '').trim() === 'جديدة');
+    if(newIndex < 0) return;
+
+    table.querySelectorAll('tr').forEach(tr=>{
+      const cells=[...tr.children];
+      if(cells[newIndex]) cells[newIndex].remove();
+    });
+  });
+}
+
+const __removeNewColumnRenderDashboard = renderDashboard;
+renderDashboard = function(){
+  __removeNewColumnRenderDashboard();
+  removeNewColumnFromPerformanceTables();
+};
+
+const __removeNewColumnShowPage = showPage;
+showPage = function(p){
+  __removeNewColumnShowPage(p);
+  if(p==='dashboard'){
+    removeNewColumnFromPerformanceTables();
+    setTimeout(removeNewColumnFromPerformanceTables,100);
+  }
+};
+
+const __removeNewColumnShowApp = showApp;
+showApp = function(){
+  __removeNewColumnShowApp();
+  setTimeout(removeNewColumnFromPerformanceTables,100);
+};
+
 init();
 </script>
 </body>
