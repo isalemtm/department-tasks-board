@@ -10911,6 +10911,70 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: الموظف يرى بيانات قطاعه كاملة في لوحة الموظفين === */
+function dashboardUsersScopeByRole(){
+  let rows=state.users.filter(u=>u.is_active);
+
+  if(isAdminOrCeo()){
+    return rows;
+  }
+
+  if(isSectorHead()){
+    return rows.filter(u=>u.sector_id===state.profile.sector_id);
+  }
+
+  if(isDepartmentManager()){
+    return rows.filter(u=>u.department_id===state.profile.department_id);
+  }
+
+  if(currentRole()==='employee'){
+    return rows.filter(u=>u.sector_id===state.profile.sector_id);
+  }
+
+  return rows.filter(u=>u.id===state.profile.id);
+}
+
+function dashboardTitleByRole(){
+  if(isAdminOrCeo()) return 'أداء جميع الموظفين';
+  if(isSectorHead()) return 'أداء موظفي القطاع';
+  if(isDepartmentManager()) return 'أداء موظفي القسم';
+  if(currentRole()==='employee') return 'أداء موظفي القطاع';
+  return 'لوحة مهامي';
+}
+
+/* استبدال نطاق لوحة الموظفين فقط، بدون تغيير صلاحية صفحة المهام */
+usersInDashboardScope = function(){
+  return dashboardUsersScopeByRole();
+};
+
+const __employeeSectorDashboardRenderDashboard = renderDashboard;
+renderDashboard = function(){
+  const users=usersInDashboardScope();
+  const title=dashboardTitleByRole();
+  $('dashboardContent').innerHTML=`${renderExecutiveSummaryCards()}${renderEmployeeCards(users)}${renderMyTasksSummary()}${renderSectorPerformance()}${renderDepartmentPerformance()}${renderEmployeePerformance(title,users)}`;
+  if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
+};
+
+const __employeeSectorDashboardExportDashboardToExcel = exportDashboardToExcel;
+exportDashboardToExcel = function(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+    const users=usersInDashboardScope();
+    const rows=users.map(u=>{
+      const m=taskMetrics(tasksForUser(u.id));
+      return {'الموظف':u.name,'البريد':u.email||'','الدور':roleLabel(u.role),'القطاع':nameOfSector(u.sector_id),'الإدارة':nameOfDept(u.department_id),'إجمالي المهام':m.total,'قيد التنفيذ':m.progress,'مكتملة':m.done,'متأخرة':m.late,'نسبة الإنجاز':`${m.rate}%`};
+    });
+    if(!rows.length) return showToast('لا توجد بيانات لتصديرها.','info');
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:14},{wch:14},{wch:10},{wch:10},{wch:14}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'أداء الموظفين');
+    XLSX.writeFile(wb,`أداء_الموظفين_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير لوحة الأداء بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير اللوحة.','error'); }
+};
+
 init();
 </script>
 </body>
