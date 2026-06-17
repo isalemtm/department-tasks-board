@@ -10663,6 +10663,130 @@ showApp = function(){
   installExecutiveFollowCleanStyle();
 };
 
+
+/* === PATCH: حذف منطقة البحث والجدول والنصوص من صفحة متابعة القطاعات === */
+function installExecutiveFollowNoEmployeeAreaStyle(){
+  if(document.getElementById('executiveFollowNoEmployeeAreaStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFollowNoEmployeeAreaStyle';
+  style.textContent=`
+    #executiveSectorHeadsStatsPanel .section-head{
+      justify-content:center!important;
+      text-align:center!important;
+    }
+
+    #executiveSectorHeadsStatsPanel .section-head > div{
+      width:100%!important;
+      text-align:center!important;
+    }
+
+    #executiveSectorHeadsStatsPanel .section-head h2{
+      text-align:center!important;
+      margin:0!important;
+      color:var(--primary2)!important;
+      font-size:22px!important;
+      font-weight:900!important;
+    }
+
+    #executiveSectorHeadsStatsPanel .section-head .meta,
+    #executiveSectorHeadsStatsPanel .section-head .badge{
+      display:none!important;
+    }
+
+    /* إخفاء أي عناصر قديمة خاصة ببحث/جدول جميع الموظفين لو بقيت من النسخة السابقة */
+    #executiveSection > .panel.card > .filters,
+    #executiveSection > .panel.card > .table-wrap,
+    #executiveSection > .panel.card > p.meta,
+    #executiveSection > .panel.card > .executive-follow-clean-note,
+    #executiveDirectStats > .executive-follow-clean-note,
+    #executiveDirectStats > .all-employees-follow-details,
+    #executiveDirectStats > .executive-all-employees-details{
+      display:none!important;
+    }
+
+    @media(max-width:768px){
+      #executiveSectorHeadsStatsPanel .section-head h2{
+        font-size:19px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function removeExecutiveFollowEmployeeAreaDom(){
+  const section=$('executiveSection');
+  if(!section) return;
+
+  const panel=section.querySelector(':scope > .panel.card');
+  if(panel){
+    [...panel.children].forEach(el=>{
+      if(el.id==='executiveDirectStats') return;
+      if(el.id==='executiveAllSectorsSections') return;
+      if(el.classList?.contains('section-head')) return;
+
+      if(
+        el.classList?.contains('filters') ||
+        el.classList?.contains('table-wrap') ||
+        el.classList?.contains('executive-follow-clean-note') ||
+        (el.tagName==='P' && el.classList?.contains('meta'))
+      ){
+        el.remove();
+      }
+    });
+  }
+
+  const statsBox=$('executiveDirectStats');
+  if(statsBox){
+    [...statsBox.children].forEach(el=>{
+      if(el.id==='executiveSectorHeadsStatsPanel') return;
+      if(
+        el.classList?.contains('executive-follow-clean-note') ||
+        el.classList?.contains('all-employees-follow-details') ||
+        el.classList?.contains('executive-all-employees-details') ||
+        (el.classList?.contains('executive-stats') && !el.closest('#executiveSectorHeadsStatsPanel'))
+      ){
+        el.remove();
+      }
+    });
+  }
+}
+
+renderExecutiveDirect = function(){
+  installExecutiveFollowNoEmployeeAreaStyle();
+
+  const allRows=sortTasksByDue(visibleTasks());
+  window.__lastExecutiveFilteredRows = allRows;
+
+  const statsBox=$('executiveDirectStats');
+  if(statsBox){
+    const sectorHeadsHtml = renderSectorHeadExecutiveStats(allRows)
+      .replace('متابعة مهام رؤساء القطاعات','مؤشرات رؤساء القطاعات');
+
+    statsBox.innerHTML = sectorHeadsHtml;
+  }
+
+  renderSectorHeadExecutiveTasksPanel(allRows);
+  renderAllSectorDashboardSections(allRows);
+  removeExecutiveFollowEmployeeAreaDom();
+};
+
+const __executiveNoEmployeeAreaShowPage = showPage;
+showPage = function(p){
+  __executiveNoEmployeeAreaShowPage(p);
+  if(p==='executiveFollow'){
+    installExecutiveFollowNoEmployeeAreaStyle();
+    renderExecutiveDirect();
+    removeExecutiveFollowEmployeeAreaDom();
+  }
+};
+
+const __executiveNoEmployeeAreaShowApp = showApp;
+showApp = function(){
+  __executiveNoEmployeeAreaShowApp();
+  installExecutiveFollowNoEmployeeAreaStyle();
+};
+
 init();
 </script>
 </body>
