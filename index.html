@@ -10570,21 +10570,23 @@ init = async function(){
 };
 
 
-/* === PATCH FINAL: صفحة متابعة القطاعات - مؤشرات الموظفين مغلقة وبداخلها الجدول === */
-function installExecutiveFollowFinalStyle(){
-  if(document.getElementById('executiveFollowFinalStyle')) return;
+/* === PATCH: تنظيف صفحة متابعة القطاعات وإزالة تكرار مؤشرات جميع الموظفين === */
+function installExecutiveFollowCleanStyle(){
+  if(document.getElementById('executiveFollowCleanStyle')) return;
 
   const style=document.createElement('style');
-  style.id='executiveFollowFinalStyle';
+  style.id='executiveFollowCleanStyle';
   style.textContent=`
     #executiveSectorHeadsStatsPanel .section-head{
       justify-content:center!important;
       text-align:center!important;
     }
+
     #executiveSectorHeadsStatsPanel .section-head > div{
       width:100%!important;
       text-align:center!important;
     }
+
     #executiveSectorHeadsStatsPanel .section-head h2{
       text-align:center!important;
       margin:0!important;
@@ -10592,260 +10594,73 @@ function installExecutiveFollowFinalStyle(){
       font-size:22px!important;
       font-weight:900!important;
     }
+
     #executiveSectorHeadsStatsPanel .section-head .meta,
     #executiveSectorHeadsStatsPanel .section-head .badge{
       display:none!important;
     }
 
-    .executive-all-employees-details{
-      margin:18px 0!important;
-      border:1px solid var(--line)!important;
-      border-radius:var(--radius)!important;
-      background:#fff!important;
-      box-shadow:var(--shadow)!important;
-      overflow:hidden!important;
-      padding:0!important;
-    }
-
-    .executive-all-employees-details > summary{
-      list-style:none!important;
-      cursor:pointer!important;
-      padding:18px 20px!important;
-      display:flex!important;
-      align-items:center!important;
-      justify-content:space-between!important;
-      gap:12px!important;
-      color:var(--primary2)!important;
-      font-size:21px!important;
-      font-weight:900!important;
-      background:#fff!important;
-      border-bottom:1px solid transparent!important;
-      min-height:64px!important;
-      direction:rtl!important;
-      text-align:right!important;
-    }
-
-    .executive-all-employees-details > summary::-webkit-details-marker{
-      display:none!important;
-    }
-
-    .executive-all-employees-details > summary::after{
-      content:"⌄"!important;
-      width:28px!important;
-      height:28px!important;
-      border-radius:999px!important;
-      background:#efe8e3!important;
-      color:var(--primary2)!important;
-      display:inline-flex!important;
-      align-items:center!important;
-      justify-content:center!important;
-      font-size:17px!important;
-      line-height:1!important;
-      flex:0 0 auto!important;
-      transition:.2s ease!important;
-      margin-right:auto!important;
-    }
-
-    .executive-all-employees-details[open] > summary{
-      border-bottom-color:var(--line)!important;
-    }
-
-    .executive-all-employees-details[open] > summary::after{
-      transform:rotate(180deg)!important;
-    }
-
-    .executive-all-employees-body{
-      padding:18px 20px 20px!important;
-      background:#fff!important;
-    }
-
-    .executive-all-employees-body .executive-stats-old-layout{
-      margin-bottom:16px!important;
-    }
-
-    .executive-all-employees-body .filters{
-      margin-top:16px!important;
-    }
-
-    .executive-all-employees-body .table-wrap{
-      margin-top:12px!important;
-    }
-
-    .executive-all-employees-body table{
-      width:100%!important;
-    }
-
-    .executive-all-employees-completed-row td{
-      padding:0!important;
-      border-bottom:0!important;
-    }
-
-    #executiveSection > .panel.card > .filters,
-    #executiveSection > .panel.card > .table-wrap,
-    #executiveSection > .panel.card > p.meta.executive-direct-original-meta{
-      display:none!important;
+    .executive-follow-clean-note{
+      margin:14px 0 0;
+      padding:16px 18px;
+      border:1px dashed var(--line);
+      border-radius:14px;
+      text-align:center;
+      color:#7d6b62;
+      background:#fff;
+      line-height:1.8;
+      font-size:14px;
     }
 
     @media(max-width:768px){
       #executiveSectorHeadsStatsPanel .section-head h2{
         font-size:19px!important;
       }
-      .executive-all-employees-details > summary{
-        font-size:18px!important;
-        padding:14px 16px!important;
-        min-height:56px!important;
-      }
-      .executive-all-employees-body{
-        padding:14px 16px 16px!important;
+      .executive-follow-clean-note{
+        font-size:13px;
+        padding:13px 14px;
       }
     }
   `;
   document.head.appendChild(style);
 }
 
-function executiveFinalOption(value,label,currentValue){
-  return `<option value="${escapeHtml(value||'')}" ${String(value||'')===String(currentValue||'')?'selected':''}>${escapeHtml(label||'')}</option>`;
-}
-
-function executiveFinalFiltersHtml({q,fs,fu,st}){
-  const sectorOptions = executiveFinalOption('','كل القطاعات',fs) + (state.sectors||[]).map(s=>executiveFinalOption(s.id,s.name,fs)).join('');
-  const userOptions = executiveFinalOption('','كل المسؤولين',fu) + (state.users||[]).map(u=>executiveFinalOption(u.id,u.name,fu)).join('');
-  const statusOptions = [
-    ['','كل الحالات'],
-    ['جديدة','جديدة'],
-    ['قيد التنفيذ','قيد التنفيذ'],
-    ['مكتملة','مكتملة'],
-    ['متأخرة','متأخرة']
-  ].map(([v,l])=>executiveFinalOption(v,l,st)).join('');
-
-  return `
-    <div class="filters" style="grid-template-columns:1fr 220px 220px 220px;">
-      <input id="executiveSearchInput" value="${escapeHtml(q||'')}" placeholder="ابحث بعنوان المهمة أو الوصف أو المسؤول" oninput="renderExecutiveDirect()">
-      <select id="executiveSectorFilter" onchange="renderExecutiveDirect()">${sectorOptions}</select>
-      <select id="executiveAssigneeFilter" onchange="renderExecutiveDirect()">${userOptions}</select>
-      <select id="executiveStatusFilter" onchange="renderExecutiveDirect()">${statusOptions}</select>
-    </div>
-    <p class="meta" style="margin-top:8px;">مرّر الجدول يمينًا ويسارًا لعرض جميع الأعمدة.</p>
-  `;
-}
-
-function executiveFinalCleanupOriginalStaticElements(){
-  const section=$('executiveSection');
-  if(!section) return;
-  const panel=section.querySelector(':scope > .panel.card');
-  if(!panel) return;
-
-  [...panel.children].forEach(el=>{
-    if(el.id==='executiveDirectStats') return;
-    if(el.id==='executiveAllSectorsSections') return;
-    if(el.classList?.contains('section-head')) return;
-
-    if(el.classList?.contains('filters') || el.classList?.contains('table-wrap')){
-      el.remove();
-    }else if(el.tagName==='P' && el.classList?.contains('meta')){
-      el.classList.add('executive-direct-original-meta');
-      el.remove();
-    }
-  });
-}
-
-function executiveFinalTableHtml(rows){
-  const parts = typeof executiveCompletedDetails === 'function'
-    ? executiveCompletedDetails(rows)
-    : {
-        activeHtml: rows.length ? rows.map(executiveTaskRow).join('') : '<tr><td colspan="9">لا توجد مهام لعرضها.</td></tr>',
-        completedHtml: '<tr><td colspan="9">لا توجد مهام مكتملة.</td></tr>',
-        completedCount: rows.filter(t=>t.status==='مكتملة').length
-      };
-
-  return `
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${parts.activeHtml}
-          <tr class="executive-all-employees-completed-row">
-            <td colspan="9">
-              <details style="margin:10px;">
-                <summary style="cursor:pointer;font-weight:900;color:var(--primary2);">المهام المكتملة <span class="badge">${parts.completedCount}</span></summary>
-                <div class="table-wrap" style="margin-top:10px;">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>المهمة</th><th>الوصف</th><th>القطاع</th><th>القسم</th><th>المسؤول</th><th>الحالة</th><th>الأولوية</th><th>تاريخ الاستحقاق</th><th>آخر تعليق</th>
-                      </tr>
-                    </thead>
-                    <tbody>${parts.completedHtml}</tbody>
-                  </table>
-                </div>
-              </details>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
 renderExecutiveDirect = function(){
-  installExecutiveFollowFinalStyle();
-  executiveFinalCleanupOriginalStaticElements();
+  installExecutiveFollowCleanStyle();
 
-  const q=($('executiveSearchInput')?.value||'').trim();
-  const qLower=q.toLowerCase();
-  const fs=$('executiveSectorFilter')?.value||'';
-  const fu=$('executiveAssigneeFilter')?.value||'';
-  const st=$('executiveStatusFilter')?.value||'';
-
-  let rows=visibleTasks().filter(t=>
-    (!fs||executiveTaskSectorId(t)===fs) &&
-    (!fu||getTaskAssignees(t.id).some(u=>u.id===fu)||t.primary_responsible_id===fu) &&
-    (!st||executiveTaskStatus(t)===st) &&
-    (!qLower||executiveTaskSearchText(t).includes(qLower))
-  );
-
-  rows=sortTasksByDue(rows);
-  window.__lastExecutiveFilteredRows = rows;
+  const allRows=sortTasksByDue(visibleTasks());
+  window.__lastExecutiveFilteredRows = allRows;
 
   const statsBox=$('executiveDirectStats');
   if(statsBox){
-    const sectorHeadsHtml = renderSectorHeadExecutiveStats(rows)
+    const sectorHeadsHtml = renderSectorHeadExecutiveStats(allRows)
       .replace('متابعة مهام رؤساء القطاعات','مؤشرات رؤساء القطاعات');
 
     statsBox.innerHTML = `
       ${sectorHeadsHtml}
-      <details class="executive-all-employees-details">
-        <summary>مؤشرات جميع الموظفين</summary>
-        <div class="executive-all-employees-body">
-          ${workflowThreeCardsHtml(rows)}
-          ${executiveFinalFiltersHtml({q,fs,fu,st})}
-          ${executiveFinalTableHtml(rows)}
-        </div>
-      </details>
+      <div class="executive-follow-clean-note">
+        تم تخصيص هذه الصفحة لمتابعة رؤساء القطاعات والقطاعات فقط، وتم نقل مؤشرات جميع الموظفين والجداول التفصيلية إلى صفحة لوحة الموظفين.
+      </div>
     `;
   }
 
-  renderSectorHeadExecutiveTasksPanel(rows);
-  renderAllSectorDashboardSections(rows);
+  renderSectorHeadExecutiveTasksPanel(allRows);
+  renderAllSectorDashboardSections(allRows);
 };
 
-const __executiveFinalShowPage = showPage;
+const __executiveCleanShowPage = showPage;
 showPage = function(p){
-  __executiveFinalShowPage(p);
+  __executiveCleanShowPage(p);
   if(p==='executiveFollow'){
-    installExecutiveFollowFinalStyle();
+    installExecutiveFollowCleanStyle();
     renderExecutiveDirect();
   }
 };
 
-const __executiveFinalShowApp = showApp;
+const __executiveCleanShowApp = showApp;
 showApp = function(){
-  __executiveFinalShowApp();
-  installExecutiveFollowFinalStyle();
+  __executiveCleanShowApp();
+  installExecutiveFollowCleanStyle();
 };
 
 init();
