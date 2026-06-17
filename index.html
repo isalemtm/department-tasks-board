@@ -10721,6 +10721,157 @@ showApp = function(){
   installExecutiveFollowIndicatorsBlocksStyle();
 };
 
+
+/* === PATCH: توحيد شكل بلوك مؤشرات جميع الموظفين وإدخال الجدول داخله === */
+function installExecutiveFollowAllEmployeesUnifiedStyle(){
+  if(document.getElementById('executiveFollowAllEmployeesUnifiedStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveFollowAllEmployeesUnifiedStyle';
+  style.textContent=`
+    .all-employees-follow-details{
+      margin:18px 0!important;
+      border:1px solid var(--line)!important;
+      border-radius:var(--radius)!important;
+      background:var(--card)!important;
+      box-shadow:var(--shadow)!important;
+      overflow:hidden!important;
+    }
+
+    .all-employees-follow-details > summary{
+      list-style:none!important;
+      cursor:pointer!important;
+      padding:18px 20px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:12px!important;
+      color:var(--primary2)!important;
+      font-size:21px!important;
+      font-weight:900!important;
+      background:#fff!important;
+      border-bottom:1px solid transparent!important;
+      min-height:64px!important;
+    }
+
+    .all-employees-follow-details > summary::-webkit-details-marker{
+      display:none!important;
+    }
+
+    .all-employees-follow-details > summary::before{
+      content:"⌄"!important;
+      width:28px!important;
+      height:28px!important;
+      border-radius:999px!important;
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      font-size:17px!important;
+      line-height:1!important;
+      flex:0 0 auto!important;
+      transition:.2s ease!important;
+      order:2!important;
+    }
+
+    .all-employees-follow-details[open] > summary{
+      border-bottom-color:var(--line)!important;
+    }
+
+    .all-employees-follow-details[open] > summary::before{
+      transform:rotate(180deg)!important;
+    }
+
+    .all-employees-follow-body{
+      padding:18px 20px 20px!important;
+      background:#fff!important;
+    }
+
+    .all-employees-follow-body > .executive-stats{
+      margin-bottom:16px!important;
+    }
+
+    .all-employees-follow-body .executive-tasks-list-wrap{
+      margin-top:16px!important;
+    }
+
+    @media(max-width:768px){
+      .all-employees-follow-details > summary{
+        font-size:18px!important;
+        padding:14px 16px!important;
+        min-height:56px!important;
+      }
+      .all-employees-follow-body{
+        padding:14px 16px 16px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function applyExecutiveFollowAllEmployeesUnifiedBlock(){
+  installExecutiveFollowAllEmployeesUnifiedStyle();
+
+  const statsBox=$('executiveDirectStats');
+  if(!statsBox) return;
+
+  let details=statsBox.querySelector('.all-employees-follow-details');
+
+  const allEmployeesGrid=[...statsBox.children].find(el =>
+    el.classList &&
+    el.classList.contains('executive-stats') &&
+    !el.closest('#executiveSectorHeadsStatsPanel') &&
+    !el.closest('.all-employees-follow-details')
+  );
+
+  if(!details && allEmployeesGrid){
+    details=document.createElement('details');
+    details.className='all-employees-follow-details';
+
+    const summary=document.createElement('summary');
+    summary.textContent='مؤشرات جميع الموظفين';
+
+    const body=document.createElement('div');
+    body.className='all-employees-follow-body';
+
+    allEmployeesGrid.parentNode.insertBefore(details, allEmployeesGrid);
+    body.appendChild(allEmployeesGrid);
+    details.appendChild(summary);
+    details.appendChild(body);
+  }
+
+  if(details){
+    const body=details.querySelector('.all-employees-follow-body');
+    const tasksWrap=$('executiveDirectTasksWrap');
+    if(body && tasksWrap && !tasksWrap.closest('.all-employees-follow-details')){
+      body.appendChild(tasksWrap);
+    }
+  }
+}
+
+const __unifiedAllEmployeesRenderExecutiveDirect = renderExecutiveDirect;
+renderExecutiveDirect = function(){
+  __unifiedAllEmployeesRenderExecutiveDirect();
+  applyExecutiveFollowIndicatorsBlocks?.();
+  applyExecutiveFollowAllEmployeesUnifiedBlock();
+};
+
+const __unifiedAllEmployeesShowPage = showPage;
+showPage = function(p){
+  __unifiedAllEmployeesShowPage(p);
+  if(p==='executiveFollow'){
+    applyExecutiveFollowIndicatorsBlocks?.();
+    applyExecutiveFollowAllEmployeesUnifiedBlock();
+  }
+};
+
+const __unifiedAllEmployeesShowApp = showApp;
+showApp = function(){
+  __unifiedAllEmployeesShowApp();
+  installExecutiveFollowAllEmployeesUnifiedStyle();
+};
+
 init();
 </script>
 </body>
