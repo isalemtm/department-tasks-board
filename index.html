@@ -10570,137 +10570,155 @@ init = async function(){
 };
 
 
-/* === PATCH: تسمية مؤشرات رؤساء القطاعات وطي مؤشرات جميع الموظفين === */
-function installIndicatorsBlocksStyle(){
-  if(document.getElementById('indicatorsBlocksStyle')) return;
+/* === PATCH: صفحة متابعة القطاعات - عنوان مؤشرات رؤساء القطاعات وطي مؤشرات جميع الموظفين === */
+function installExecutiveFollowIndicatorsBlocksStyle(){
+  if(document.getElementById('executiveFollowIndicatorsBlocksStyle')) return;
+
   const style=document.createElement('style');
-  style.id='indicatorsBlocksStyle';
+  style.id='executiveFollowIndicatorsBlocksStyle';
   style.textContent=`
-    .sector-heads-indicators-title{
-      text-align:center;
-      margin:0 0 14px;
-      color:var(--primary2);
-      font-size:22px;
-      font-weight:900;
-      line-height:1.45;
+    #executiveSectorHeadsStatsPanel .section-head{
+      display:none!important;
     }
 
-    .all-employees-indicators-details{
-      margin:18px 0;
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      background:var(--card);
-      box-shadow:var(--shadow);
-      overflow:hidden;
+    .sector-heads-follow-title{
+      text-align:center!important;
+      margin:0 0 16px!important;
+      color:var(--primary2)!important;
+      font-size:22px!important;
+      font-weight:900!important;
+      line-height:1.45!important;
     }
 
-    .all-employees-indicators-details > summary{
-      list-style:none;
-      cursor:pointer;
-      padding:18px 20px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      color:var(--primary2);
-      font-size:21px;
-      font-weight:900;
-      background:#fff;
-      border-bottom:1px solid transparent;
+    .all-employees-follow-details{
+      margin:18px 0!important;
+      border:1px solid var(--line)!important;
+      border-radius:var(--radius)!important;
+      background:var(--card)!important;
+      box-shadow:var(--shadow)!important;
+      overflow:hidden!important;
     }
 
-    .all-employees-indicators-details > summary::-webkit-details-marker{
-      display:none;
+    .all-employees-follow-details > summary{
+      list-style:none!important;
+      cursor:pointer!important;
+      padding:18px 20px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:12px!important;
+      color:var(--primary2)!important;
+      font-size:21px!important;
+      font-weight:900!important;
+      background:#fff!important;
+      border-bottom:1px solid transparent!important;
     }
 
-    .all-employees-indicators-details > summary::before{
-      content:"⌄";
-      width:28px;
-      height:28px;
-      border-radius:999px;
-      background:#efe8e3;
-      color:var(--primary2);
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      font-size:17px;
-      line-height:1;
-      flex:0 0 auto;
-      transition:.2s ease;
+    .all-employees-follow-details > summary::-webkit-details-marker{
+      display:none!important;
     }
 
-    .all-employees-indicators-details[open] > summary{
-      border-bottom-color:var(--line);
+    .all-employees-follow-details > summary::before{
+      content:"⌄"!important;
+      width:28px!important;
+      height:28px!important;
+      border-radius:999px!important;
+      background:#efe8e3!important;
+      color:var(--primary2)!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      font-size:17px!important;
+      line-height:1!important;
+      flex:0 0 auto!important;
+      transition:.2s ease!important;
     }
 
-    .all-employees-indicators-details[open] > summary::before{
-      transform:rotate(180deg);
+    .all-employees-follow-details[open] > summary{
+      border-bottom-color:var(--line)!important;
     }
 
-    .all-employees-indicators-body{
-      padding:18px 20px 20px;
-      background:#fff;
+    .all-employees-follow-details[open] > summary::before{
+      transform:rotate(180deg)!important;
     }
 
-    .all-employees-indicators-body .panel.card{
-      margin:0 0 18px!important;
-      box-shadow:none!important;
-      border:0!important;
-      padding:0!important;
+    .all-employees-follow-body{
+      padding:18px 20px 20px!important;
+      background:#fff!important;
     }
 
-    .all-employees-indicators-body .panel.card > h2:first-child{
-      margin-top:0!important;
+    .all-employees-follow-body > .executive-stats{
+      margin-bottom:0!important;
     }
 
     @media(max-width:768px){
-      .sector-heads-indicators-title{
-        font-size:19px;
+      .sector-heads-follow-title{
+        font-size:19px!important;
       }
-      .all-employees-indicators-details > summary{
-        font-size:18px;
-        padding:14px 16px;
+      .all-employees-follow-details > summary{
+        font-size:18px!important;
+        padding:14px 16px!important;
       }
-      .all-employees-indicators-body{
-        padding:14px 16px 16px;
+      .all-employees-follow-body{
+        padding:14px 16px 16px!important;
       }
     }
   `;
   document.head.appendChild(style);
 }
 
-function renderSectorHeadsIndicatorsBlock(){
-  const html = renderExecutiveSummaryCards();
-  return html.replace(
-    '<h2>أهم مؤشرات المتابعة</h2>',
-    '<h2 class="sector-heads-indicators-title">مؤشرات رؤساء القطاعات</h2>'
+function applyExecutiveFollowIndicatorsBlocks(){
+  installExecutiveFollowIndicatorsBlocksStyle();
+
+  const statsBox=$('executiveDirectStats');
+  if(!statsBox) return;
+
+  const sectorHeadsPanel=$('executiveSectorHeadsStatsPanel');
+  if(sectorHeadsPanel && !sectorHeadsPanel.querySelector('.sector-heads-follow-title')){
+    sectorHeadsPanel.insertAdjacentHTML('afterbegin','<h2 class="sector-heads-follow-title">مؤشرات رؤساء القطاعات</h2>');
+  }
+
+  /* البلوك الثاني هو شبكة مؤشرات جميع الموظفين التي تأتي مباشرة داخل executiveDirectStats */
+  const allEmployeesGrid=[...statsBox.children].find(el =>
+    el.classList &&
+    el.classList.contains('executive-stats') &&
+    !el.closest('#executiveSectorHeadsStatsPanel') &&
+    !el.closest('.all-employees-follow-details')
   );
+
+  if(allEmployeesGrid){
+    const details=document.createElement('details');
+    details.className='all-employees-follow-details';
+
+    const summary=document.createElement('summary');
+    summary.textContent='مؤشرات جميع الموظفين';
+
+    const body=document.createElement('div');
+    body.className='all-employees-follow-body';
+
+    allEmployeesGrid.parentNode.insertBefore(details, allEmployeesGrid);
+    body.appendChild(allEmployeesGrid);
+    details.appendChild(summary);
+    details.appendChild(body);
+  }
 }
 
-const __indicatorsBlocksOriginalRenderDashboard = renderDashboard;
-renderDashboard = function(){
-  installIndicatorsBlocksStyle();
+const __followIndicatorsBlocksRenderExecutiveDirect = renderExecutiveDirect;
+renderExecutiveDirect = function(){
+  __followIndicatorsBlocksRenderExecutiveDirect();
+  applyExecutiveFollowIndicatorsBlocks();
+};
 
-  const users=usersInDashboardScope();
-  let title='لوحة مهامي';
-  if(isAdminOrCeo()) title='أداء جميع الموظفين';
-  else if(isSectorHead()) title='أداء موظفي القطاع';
-  else if(isDepartmentManager()) title='أداء موظفي القسم';
+const __followIndicatorsBlocksShowPage = showPage;
+showPage = function(p){
+  __followIndicatorsBlocksShowPage(p);
+  if(p==='executiveFollow') applyExecutiveFollowIndicatorsBlocks();
+};
 
-  const allEmployeesIndicators = `
-    <details class="all-employees-indicators-details">
-      <summary>مؤشرات جميع الموظفين</summary>
-      <div class="all-employees-indicators-body">
-        ${renderEmployeeCards(users)}
-        ${renderMyTasksSummary()}
-        ${renderSectorPerformance()}
-        ${renderDepartmentPerformance()}
-        ${renderEmployeePerformance(title,users)}
-      </div>
-    </details>
-  `;
-
-  $('dashboardContent').innerHTML = `${renderSectorHeadsIndicatorsBlock()}${allEmployeesIndicators}`;
+const __followIndicatorsBlocksShowApp = showApp;
+showApp = function(){
+  __followIndicatorsBlocksShowApp();
+  installExecutiveFollowIndicatorsBlocksStyle();
 };
 
 init();
