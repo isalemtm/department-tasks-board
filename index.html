@@ -11018,6 +11018,44 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: إخفاء بلوك بطاقات مؤشرات المتابعة من حساب الموظف فقط === */
+function hideEmployeeDashboardSummaryCardsOnly(){
+  const dashboard=$('dashboardPage');
+  if(!dashboard) return;
+
+  const cards=[...dashboard.querySelectorAll('section.panel.card')];
+  const summaryCard=cards.find(card=>{
+    const title=(card.querySelector('h2')?.textContent || '').trim();
+    return title==='أهم مؤشرات المتابعة';
+  });
+
+  if(summaryCard){
+    summaryCard.classList.toggle('hidden', currentRole()==='employee');
+  }
+}
+
+const __hideEmployeeSummaryRenderDashboard = renderDashboard;
+renderDashboard = function(){
+  __hideEmployeeSummaryRenderDashboard();
+  hideEmployeeDashboardSummaryCardsOnly();
+};
+
+const __hideEmployeeSummaryShowPage = showPage;
+showPage = function(p){
+  __hideEmployeeSummaryShowPage(p);
+  if(p==='dashboard'){
+    hideEmployeeDashboardSummaryCardsOnly();
+    setTimeout(hideEmployeeDashboardSummaryCardsOnly,100);
+  }
+};
+
+const __hideEmployeeSummaryShowApp = showApp;
+showApp = function(){
+  __hideEmployeeSummaryShowApp();
+  setTimeout(hideEmployeeDashboardSummaryCardsOnly,100);
+};
+
 init();
 </script>
 </body>
