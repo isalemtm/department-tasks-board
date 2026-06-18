@@ -11163,6 +11163,27 @@ function exportDashboardToExcel(){
   }
 }
 
+
+/* === PATCH: تبديل مكان بطاقات أداء الموظفين مع مهامي الحالية === */
+function renderDashboard(){
+  const users=usersInDashboardScope();
+  const title=typeof dashboardTitleForEmployeeScope === 'function'
+    ? dashboardTitleForEmployeeScope()
+    : (currentRole()==='employee' ? 'لوحة مهام موظفي القطاع' : 'لوحة مهامي');
+
+  $('dashboardContent').innerHTML=`
+    ${renderExecutiveSummaryCards()}
+    ${renderMyTasksSummary()}
+    ${renderEmployeeCards(users)}
+    ${renderSectorPerformance()}
+    ${renderDepartmentPerformance()}
+    ${renderEmployeePerformance(title,users)}
+  `;
+
+  if(typeof hideEmployeeDashboardSummaryCardsOnly === 'function') hideEmployeeDashboardSummaryCardsOnly();
+  if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
+}
+
 init();
 </script>
 </body>
