@@ -11208,6 +11208,96 @@ function renderDashboard(){
   if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
 }
 
+
+/* === PATCH: السماح لجميع الموظفين بمشاهدة الهيكل التنظيمي فقط === */
+function ensureOrgAvailableForAllUsers(){
+  if(typeof ensurePerformanceAndOrgPagesDom === 'function'){
+    ensurePerformanceAndOrgPagesDom();
+  }
+
+  const orgBtn=$('tabOrg');
+  if(orgBtn){
+    orgBtn.classList.remove('hidden');
+    orgBtn.style.display='';
+    orgBtn.setAttribute('onclick',"showPage('org')");
+  }
+
+  /* مؤشرات الأداء تبقى محصورة على مدير النظام والرئيس التنفيذي */
+  const performanceBtn=$('tabPerformance');
+  if(performanceBtn && typeof isAdminOrCeo === 'function'){
+    performanceBtn.classList.toggle('hidden', !isAdminOrCeo());
+  }
+
+  const app=$('appSection');
+  if(app && !$('orgPage')){
+    const adminPage=$('adminPage');
+    const org=document.createElement('section');
+    org.id='orgPage';
+    org.className='hidden';
+    org.innerHTML='<div id="orgContent"></div>';
+    if(adminPage) app.insertBefore(org, adminPage);
+    else app.appendChild(org);
+  }
+}
+
+function cleanupOrgButtonDuplicates(){
+  const actions=document.querySelector('#appSection .app-actions');
+  if(!actions) return;
+
+  const orgButtons=[...actions.querySelectorAll('button')].filter(btn =>
+    btn.id==='tabOrg' || (btn.textContent||'').trim()==='الهيكل التنظيمي'
+  );
+
+  if(orgButtons.length>1){
+    const keep=orgButtons.find(b=>b.id==='tabOrg') || orgButtons[0];
+    keep.id='tabOrg';
+    keep.textContent='الهيكل التنظيمي';
+    keep.setAttribute('onclick',"showPage('org')");
+    keep.classList.remove('hidden');
+    keep.style.display='';
+    orgButtons.forEach(btn=>{ if(btn!==keep) btn.remove(); });
+  }
+}
+
+const __orgForAllFinalShowPage = showPage;
+showPage = function(p){
+  ensureFullHrFeatureDom?.();
+  ensurePerformanceAndOrgPagesDom?.();
+  ensureExecutiveFollowPageButton?.();
+  installCenteredNavigationStyle?.();
+  installTopNavigationLightTheme?.();
+  ensureOrgAvailableForAllUsers();
+  cleanupOrgButtonDuplicates();
+
+  /* الهيكل التنظيمي متاح للجميع */
+  if(p === 'org'){
+    hideAllMainPagesForCleanNavigation?.();
+    clearAllPageButtonsActive?.();
+
+    $('orgPage')?.classList.remove('hidden');
+    setMainPageActive?.('org');
+
+    if(typeof renderOrgPage === 'function') renderOrgPage();
+    else if($('orgContent')) $('orgContent').innerHTML='<section class="panel card"><div class="empty">تعذر تحميل الهيكل التنظيمي.</div></section>';
+
+    ensureOrgAvailableForAllUsers();
+    cleanupOrgButtonDuplicates();
+    return;
+  }
+
+  /* باقي الصفحات تسير على الصلاحيات الأصلية */
+  __orgForAllFinalShowPage(p);
+  ensureOrgAvailableForAllUsers();
+  cleanupOrgButtonDuplicates();
+};
+
+const __orgForAllFinalShowApp = showApp;
+showApp = function(){
+  __orgForAllFinalShowApp();
+  ensureOrgAvailableForAllUsers();
+  cleanupOrgButtonDuplicates();
+};
+
 init();
 </script>
 </body>
