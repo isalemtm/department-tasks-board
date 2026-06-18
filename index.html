@@ -10911,6 +10911,113 @@ init = async function(){
   return result;
 };
 
+
+/* === PATCH: إصلاح رابط استعادة كلمة المرور حتى يفتح صفحة تعيين كلمة المرور === */
+const PASSWORD_RECOVERY_PENDING_KEY = 'rasf_password_recovery_pending';
+
+function recoveryUrlDetected(){
+  const href=String(location.href || '');
+  const hash=new URLSearchParams(location.hash.replace(/^#/,''));
+  const query=new URLSearchParams(location.search);
+
+  return (
+    hash.get('type')==='recovery' ||
+    query.get('type')==='recovery' ||
+    href.includes('type=recovery') ||
+    href.includes('access_token=') ||
+    query.has('code')
+  );
+}
+
+function markPasswordRecoveryIfNeeded(){
+  if(recoveryUrlDetected()){
+    sessionStorage.setItem(PASSWORD_RECOVERY_PENDING_KEY,'1');
+  }
+}
+
+function hasPendingPasswordRecovery(){
+  return sessionStorage.getItem(PASSWORD_RECOVERY_PENDING_KEY)==='1' || recoveryUrlDetected();
+}
+
+function clearPendingPasswordRecovery(){
+  sessionStorage.removeItem(PASSWORD_RECOVERY_PENDING_KEY);
+}
+
+function forcePasswordRecoveryScreen(session){
+  if(session) state.session=session;
+
+  state.profile=null;
+
+  showPasswordSetup();
+  const notice=$('passwordSetupNotice');
+  if(notice){
+    notice.textContent='فضلاً أدخل كلمة المرور الجديدة.';
+    notice.className='notice info show';
+  }
+
+  const title=document.querySelector('#passwordSetupSection .auth-title');
+  if(title) title.textContent='إعادة تعيين كلمة المرور';
+
+  const btn=document.querySelector('#passwordSetupSection .btn.btn-primary');
+  if(btn) btn.textContent='حفظ كلمة المرور الجديدة';
+
+  return true;
+}
+
+const __passwordRecoveryFixedCompletePasswordSetup = completePasswordSetup;
+completePasswordSetup = async function(){
+  const wasRecovery=hasPendingPasswordRecovery();
+  await __passwordRecoveryFixedCompletePasswordSetup();
+
+  if(wasRecovery){
+    clearPendingPasswordRecovery();
+    try{
+      await supabaseClient.auth.signOut();
+    }catch(e){ console.warn(e); }
+
+    history.replaceState({},document.title,location.pathname);
+    showAuthOnly();
+    showAuthView('login');
+    showNotice('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','success');
+  }
+};
+
+const __passwordRecoveryFixedLogout = logout;
+logout = async function(){
+  clearPendingPasswordRecovery();
+  await __passwordRecoveryFixedLogout();
+};
+
+const __passwordRecoveryFixedInit = init;
+init = async function(){
+  markPasswordRecoveryIfNeeded();
+
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    if(event==='PASSWORD_RECOVERY' || (event==='SIGNED_IN' && hasPendingPasswordRecovery())){
+      forcePasswordRecoveryScreen(session);
+    }
+  });
+
+  const url=new URL(location.href);
+  const code=url.searchParams.get('code');
+
+  if(code && hasPendingPasswordRecovery()){
+    const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code);
+    if(!error && data?.session){
+      return forcePasswordRecoveryScreen(data.session);
+    }
+  }
+
+  const result=await __passwordRecoveryFixedInit();
+
+  const {data}=await supabaseClient.auth.getSession();
+  if(hasPendingPasswordRecovery() && data?.session){
+    return forcePasswordRecoveryScreen(data.session);
+  }
+
+  return result;
+};
+
 init();
 </script>
 </body>
