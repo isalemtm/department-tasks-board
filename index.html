@@ -11184,6 +11184,30 @@ function renderDashboard(){
   if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
 }
 
+
+/* === PATCH: إضافة بلوك أهم مؤشرات المتابعة للموظف بدون تغيير ترتيب البلوكات الأخرى === */
+function hideEmployeeDashboardSummaryCardsOnly(){
+  /* تم إلغاء إخفاء البلوك بعد ظهور بيانات القطاع عبر RLS */
+}
+
+function renderDashboard(){
+  const users=usersInDashboardScope();
+  const title=typeof dashboardTitleForEmployeeScope === 'function'
+    ? dashboardTitleForEmployeeScope()
+    : (currentRole()==='employee' ? 'لوحة مهام موظفي القطاع' : 'لوحة مهامي');
+
+  $('dashboardContent').innerHTML=`
+    ${renderExecutiveSummaryCards()}
+    ${renderMyTasksSummary()}
+    ${renderEmployeeCards(users)}
+    ${renderSectorPerformance()}
+    ${renderDepartmentPerformance()}
+    ${renderEmployeePerformance(title,users)}
+  `;
+
+  if(typeof removeNewColumnFromPerformanceTables === 'function') removeNewColumnFromPerformanceTables();
+}
+
 init();
 </script>
 </body>
