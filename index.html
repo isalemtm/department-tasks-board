@@ -11475,6 +11475,161 @@ showApp = function(){
 
 installMobileAssigneesPickerStyle();
 
+
+/* === PATCH: إصلاح تداخل عناصر نموذج إضافة المهمة في الجوال === */
+function installMobileTaskModalLayoutFix(){
+  if(document.getElementById('mobileTaskModalLayoutFixStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='mobileTaskModalLayoutFixStyle';
+  style.textContent=`
+    @media (max-width: 768px){
+      #taskModal .modal{
+        width:calc(100vw - 18px)!important;
+        max-width:calc(100vw - 18px)!important;
+        max-height:90vh!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        padding:18px 14px!important;
+        box-sizing:border-box!important;
+      }
+
+      #taskModal .form-group,
+      #taskModal .form-grid,
+      #taskModal .field,
+      #taskModal .full{
+        width:100%!important;
+        max-width:100%!important;
+        box-sizing:border-box!important;
+        clear:both!important;
+        position:relative!important;
+      }
+
+      #taskModal .form-grid{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:14px!important;
+      }
+
+      #taskModal label{
+        display:block!important;
+        margin:0 0 8px!important;
+        line-height:1.5!important;
+        position:relative!important;
+        z-index:1!important;
+      }
+
+      #taskModal input,
+      #taskModal textarea,
+      #taskModal select{
+        width:100%!important;
+        max-width:100%!important;
+        box-sizing:border-box!important;
+        position:relative!important;
+        z-index:1!important;
+      }
+
+      #taskModal .checkbox-grid{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:10px!important;
+        width:100%!important;
+        max-width:100%!important;
+        max-height:310px!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        padding:10px!important;
+        margin:0 0 18px!important;
+        box-sizing:border-box!important;
+        position:relative!important;
+        z-index:1!important;
+      }
+
+      #taskModal .checkbox-item{
+        display:flex!important;
+        flex-direction:row!important;
+        align-items:center!important;
+        justify-content:flex-start!important;
+        gap:10px!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-height:58px!important;
+        padding:10px 12px!important;
+        box-sizing:border-box!important;
+        position:relative!important;
+        z-index:1!important;
+        overflow:hidden!important;
+        direction:rtl!important;
+        text-align:right!important;
+      }
+
+      #taskModal .checkbox-item input[type="checkbox"]{
+        width:22px!important;
+        height:22px!important;
+        min-width:22px!important;
+        flex:0 0 22px!important;
+        margin:0!important;
+        position:static!important;
+        transform:none!important;
+      }
+
+      #taskModal .checkbox-item span,
+      #taskModal .checkbox-item div,
+      #taskModal .checkbox-item label{
+        white-space:normal!important;
+        word-break:break-word!important;
+        overflow-wrap:anywhere!important;
+        line-height:1.45!important;
+        margin:0!important;
+      }
+
+      #taskModal .actions{
+        display:flex!important;
+        flex-direction:column!important;
+        gap:10px!important;
+        width:100%!important;
+        margin-top:16px!important;
+        position:relative!important;
+        z-index:1!important;
+      }
+
+      #taskModal .actions .btn{
+        width:100%!important;
+        min-height:48px!important;
+        margin:0!important;
+      }
+
+      #taskModal .btn,
+      #taskModal button{
+        position:relative!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __mobileTaskModalLayoutFixOpenTaskModal = openTaskModal;
+openTaskModal = function(){
+  __mobileTaskModalLayoutFixOpenTaskModal();
+  installMobileTaskModalLayoutFix();
+};
+
+if(typeof editTask === 'function'){
+  const __mobileTaskModalLayoutFixEditTask = editTask;
+  editTask = function(taskId){
+    __mobileTaskModalLayoutFixEditTask(taskId);
+    installMobileTaskModalLayoutFix();
+  };
+}
+
+const __mobileTaskModalLayoutFixShowApp = showApp;
+showApp = function(){
+  __mobileTaskModalLayoutFixShowApp();
+  installMobileTaskModalLayoutFix();
+};
+
+installMobileTaskModalLayoutFix();
+
 init();
 </script>
 </body>
