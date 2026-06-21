@@ -11630,6 +11630,182 @@ showApp = function(){
 
 installMobileTaskModalLayoutFix();
 
+
+/* === PATCH: حماية صفحة المهام للموظف + إصلاح ظهور الهيكل للموظف === */
+
+/* نطاق صفحة المهام فقط:
+   الموظف يرى مهامه هو فقط، حتى لو كان RLS يسمح بقراءة مهام القطاع لأغراض لوحة الموظفين. */
+function taskPageAllowedTasks(){
+  const rows=visibleTasks();
+
+  if(currentRole()==='employee'){
+    const myId=state.profile?.id;
+    if(!myId) return [];
+
+    return rows.filter(t=>{
+      const assignees=getTaskAssignees(t.id);
+      return (
+        t.primary_responsible_id===myId ||
+        t.created_by===myId ||
+        assignees.some(u=>u.id===myId)
+      );
+    });
+  }
+
+  return rows;
+}
+
+/* إعادة ضبط فلترة صفحة المهام على نطاق صفحة المهام وليس كل ما يقرأه المستخدم من RLS */
+function getFilteredTasks(){
+  let rows=taskPageAllowedTasks();
+
+  const q=$('searchInput')?.value?.trim().toLowerCase() || '';
+  const fs=$('filterSector')?.value || '';
+  const fd=$('filterDepartment')?.value || '';
+  const fa=$('filterAssignee')?.value || '';
+  const st=$('filterStatus')?.value || '';
+
+  rows=rows.filter(t=>{
+    const assignees=getTaskAssignees(t.id);
+    const matchesSearch=!q||`${t.title} ${t.description||''} ${assignees.map(u=>u.name).join(' ')} ${nameOfUser(t.primary_responsible_id)}`.toLowerCase().includes(q);
+    const matchesSector=!fs||t.owner_sector_id===fs||t.target_sector_id===fs||assignees.some(u=>u.sector_id===fs);
+    const matchesDept=!fd||t.owner_department_id===fd||t.target_department_id===fd||assignees.some(u=>u.department_id===fd);
+    const matchesAssignee=!fa||t.primary_responsible_id===fa||assignees.some(u=>u.id===fa);
+    const display=typeof taskDisplayStatus==='function'?taskDisplayStatus(t):(isLate(t)?'متأخرة':t.status);
+    const matchesStatus=!st||display===st;
+
+    return matchesSearch && matchesSector && matchesDept && matchesAssignee && matchesStatus;
+  });
+
+  return rows;
+}
+
+/* تصدير صفحة المهام للموظف = مهامه فقط، أما بقية الصلاحيات حسب نطاقها السابق */
+function exportTasksToExcel(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+
+    const rows=getFilteredTasks().map(t=>({
+      'عنوان المهمة':t.title,
+      'الوصف':t.description||'',
+      'الحالة':isLate(t)?'متأخرة':t.status,
+      'الأولوية':t.priority||'عادية',
+      'القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),
+      'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),
+      'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
+      'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
+      'تاريخ الاستحقاق':formatDate(t.due_date),
+      'تاريخ الإنشاء':formatDate(t.created_at)
+    }));
+
+    if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,currentRole()==='employee'?'مهامي':'مهام الأقسام');
+    XLSX.writeFile(wb,`${currentRole()==='employee'?'مهامي':'مهام_الأقسام'}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير ملف Excel بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تصدير ملف Excel.','error');
+  }
+}
+
+/* تصدير لوحة الموظفين للموظف = ملخص موظفي قطاعه فقط، بدون تفاصيل المهام */
+function exportDashboardToExcel(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+
+    const users=usersInDashboardScope();
+    const rows=users.map(u=>{
+      const m=taskMetrics(tasksForUser(u.id));
+      return {
+        'الموظف':u.name,
+        'البريد':u.email||'',
+        'الدور':roleLabel(u.role),
+        'القطاع':nameOfSector(u.sector_id),
+        'الإدارة':nameOfDept(u.department_id),
+        'إجمالي المهام':m.total,
+        'قيد التنفيذ':m.progress,
+        'مكتملة':m.done,
+        'متأخرة':m.late,
+        'نسبة الإنجاز':`${m.rate}%`
+      };
+    });
+
+    if(!rows.length) return showToast('لا توجد بيانات لتصديرها.','info');
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:24},{wch:32},{wch:18},{wch:24},{wch:24},{wch:14},{wch:14},{wch:10},{wch:10},{wch:14}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,currentRole()==='employee'?'أداء موظفي القطاع':'أداء الموظفين');
+    XLSX.writeFile(wb,`${currentRole()==='employee'?'أداء_موظفي_القطاع':'أداء_الموظفين'}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير لوحة الأداء بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تصدير اللوحة.','error');
+  }
+}
+
+/* إصلاح الهيكل التنظيمي:
+   دالة renderOrgPage الأصلية تستدعي ensurePerformanceAndOrgPagesDom التي قد تخفي الصفحة للموظف.
+   لذلك نعيد إظهار orgPage بعد الرسم مباشرة مع الحفاظ على التصميم الأصلي. */
+function showOrgChartForEveryoneWithOriginalDesign(){
+  ensureFullHrFeatureDom?.();
+  ensurePerformanceAndOrgPagesDom?.();
+
+  $('tabOrg')?.classList.remove('hidden');
+  if($('tabOrg')){
+    $('tabOrg').style.display='';
+    $('tabOrg').setAttribute('onclick',"showPage('org')");
+  }
+
+  if(typeof hideAllMainPagesForCleanNavigation === 'function') hideAllMainPagesForCleanNavigation();
+  if(typeof clearAllPageButtonsActive === 'function') clearAllPageButtonsActive();
+
+  $('orgPage')?.classList.remove('hidden');
+  $('tabOrg')?.classList.add('active');
+
+  if(typeof renderOrgPage === 'function') renderOrgPage();
+
+  /* مهم: بعد renderOrgPage لأن renderOrgPage قد تخفي الصفحة مرة أخرى للموظف */
+  $('orgPage')?.classList.remove('hidden');
+  $('tabOrg')?.classList.remove('hidden');
+  $('tabOrg')?.classList.add('active');
+
+  return true;
+}
+
+const __secureTasksOrgShowPage = showPage;
+showPage = function(p){
+  if(p==='org'){
+    showOrgChartForEveryoneWithOriginalDesign();
+    return;
+  }
+
+  __secureTasksOrgShowPage(p);
+
+  if(p==='tasks'){
+    renderTasks();
+  }
+
+  $('tabOrg')?.classList.remove('hidden');
+  if($('tabOrg')) $('tabOrg').style.display='';
+};
+
+const __secureTasksOrgShowApp = showApp;
+showApp = function(){
+  __secureTasksOrgShowApp();
+  $('tabOrg')?.classList.remove('hidden');
+  if($('tabOrg')){
+    $('tabOrg').style.display='';
+    $('tabOrg').setAttribute('onclick',"showPage('org')");
+  }
+};
+
 init();
 </script>
 </body>
