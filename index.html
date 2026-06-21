@@ -11926,6 +11926,98 @@ function renderUsers(){
     </div>`;
 }
 
+
+/* === PATCH: إظهار زر تصدير المستخدمين بشكل ثابت داخل بلوك المستخدمون === */
+function exportUsersListToExcel(){
+  try{
+    if(typeof XLSX === 'undefined'){
+      return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+    }
+
+    const rows=(state.users||[])
+      .filter(u=>u.is_active!==false)
+      .slice()
+      .sort((a,b)=>{
+        const sa=String(nameOfSector(a.sector_id)||'');
+        const sb=String(nameOfSector(b.sector_id)||'');
+        if(sa!==sb) return sa.localeCompare(sb,'ar');
+        const da=String(nameOfDept(a.department_id)||'');
+        const db=String(nameOfDept(b.department_id)||'');
+        if(da!==db) return da.localeCompare(db,'ar');
+        return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      })
+      .map(u=>({
+        'الاسم': u.name || '',
+        'البريد الإلكتروني': u.email || '',
+        'الدور': roleLabel(u.role),
+        'القطاع': nameOfSector(u.sector_id),
+        'القسم': nameOfDept(u.department_id)
+      }));
+
+    if(!rows.length){
+      return showToast('لا توجد بيانات مستخدمين لتصديرها.','info');
+    }
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:28},{wch:36},{wch:18},{wch:28},{wch:28}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'المستخدمون');
+    XLSX.writeFile(wb, `المستخدمون_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير ملف المستخدمين بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تصدير ملف المستخدمين.','error');
+  }
+}
+window.exportUsersListToExcel = exportUsersListToExcel;
+
+function ensureUsersExportButtonVisible(){
+  const usersTable=$('usersTable');
+  if(!usersTable) return;
+
+  const panel=usersTable.closest('.panel, .card, section') || usersTable.parentElement;
+  if(!panel) return;
+
+  let host=panel.querySelector('#usersExportFixedActions');
+  if(!host){
+    host=document.createElement('div');
+    host.id='usersExportFixedActions';
+    host.className='actions';
+    host.style.margin='0 0 12px';
+    host.innerHTML='<button type="button" class="btn btn-info" onclick="exportUsersListToExcel()">تصدير المستخدمين Excel</button>';
+
+    const sectionHead=panel.querySelector('.section-head');
+    if(sectionHead){
+      sectionHead.insertAdjacentElement('afterend', host);
+    }else{
+      panel.insertBefore(host, usersTable);
+    }
+  }
+}
+
+const __usersExportFixedRenderUsers = renderUsers;
+renderUsers = function(){
+  __usersExportFixedRenderUsers();
+  ensureUsersExportButtonVisible();
+};
+
+const __usersExportFixedRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  __usersExportFixedRenderAdmin();
+  ensureUsersExportButtonVisible();
+  setTimeout(ensureUsersExportButtonVisible,100);
+};
+
+const __usersExportFixedShowPage = showPage;
+showPage = function(p){
+  __usersExportFixedShowPage(p);
+  if(p==='admin'){
+    ensureUsersExportButtonVisible();
+    setTimeout(ensureUsersExportButtonVisible,100);
+  }
+};
+
 init();
 </script>
 </body>
