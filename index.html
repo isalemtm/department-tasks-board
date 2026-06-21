@@ -12139,6 +12139,139 @@ renderUsers = function(){
   $('usersTable').innerHTML=`${usersActions}${blocks}`;
 };
 
+
+/* === PATCH: منع خطأ insertBefore في زر تصدير المستخدمين === */
+ensureUsersExportButtonVisible = function(){
+  try{
+    const usersTable=$('usersTable');
+    if(!usersTable) return;
+
+    /* زر التصدير أصبح مدمجًا داخل renderUsers النهائي، وهذه الدالة فقط احتياطية بدون insertBefore */
+    const already = usersTable.querySelector('button[onclick="exportUsersListToExcel()"]')
+      || document.querySelector('#usersExportFixedActions button[onclick="exportUsersListToExcel()"]');
+
+    if(already) return;
+
+    const host=document.createElement('div');
+    host.id='usersExportFixedActions';
+    host.className='actions';
+    host.style.margin='0 0 12px';
+    host.style.display='flex';
+    host.style.gap='8px';
+    host.style.flexWrap='wrap';
+    host.innerHTML='<button type="button" class="btn btn-info" onclick="exportUsersListToExcel()">تصدير المستخدمين Excel</button>';
+
+    usersTable.prepend(host);
+  }catch(e){
+    console.warn('Skipped users export button fallback:', e);
+  }
+};
+
+
+/* === PATCH: إخفاء إدارة المستخدمين عن مدير القسم === */
+/* السبب: كانت canManageUserImports تسمح لمدير القسم بالدخول بصلاحيات محدودة.
+   التعديل: إدارة المستخدمين تظهر فقط لمدير النظام ورئيس القطاع. */
+function canManageUserImports(){
+  return isAdmin() || isSectorHead();
+}
+
+function enforceUserManagementVisibility(){
+  const canView = canManageUserImports();
+
+  const adminBtn = $('tabAdmin');
+  if(adminBtn){
+    adminBtn.classList.toggle('hidden', !canView);
+    adminBtn.style.display = canView ? '' : 'none';
+  }
+
+  if(!canView){
+    $('adminPage')?.classList.add('hidden');
+  }
+}
+
+const __hideAdminFromDeptShowApp = showApp;
+showApp = function(){
+  __hideAdminFromDeptShowApp();
+  enforceUserManagementVisibility();
+};
+
+const __hideAdminFromDeptShowPage = showPage;
+showPage = function(p){
+  if(p === 'admin' && !canManageUserImports()){
+    showToast('ليست لديك صلاحية الوصول إلى إدارة المستخدمين.','error');
+    __hideAdminFromDeptShowPage('tasks');
+    enforceUserManagementVisibility();
+    return;
+  }
+
+  __hideAdminFromDeptShowPage(p);
+  enforceUserManagementVisibility();
+};
+
+const __hideAdminFromDeptRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  if(!canManageUserImports()){
+    $('adminPage').innerHTML='<section class="panel card"><div class="empty">ليست لديك صلاحية الوصول إلى إدارة المستخدمين.</div></section>';
+    enforceUserManagementVisibility();
+    return;
+  }
+
+  __hideAdminFromDeptRenderAdmin();
+  enforceUserManagementVisibility();
+};
+
+
+/* === PATCH: حصر إدارة المستخدمين على مدير النظام فقط === */
+/* صفحة إدارة المستخدمين لا تظهر ولا تفتح إلا لمدير النظام فقط. */
+function canManageUserImports(){
+  return isAdmin();
+}
+
+function enforceAdminOnlyUserManagement(){
+  const canView = isAdmin();
+
+  const adminBtn = $('tabAdmin');
+  if(adminBtn){
+    adminBtn.classList.toggle('hidden', !canView);
+    adminBtn.style.display = canView ? '' : 'none';
+  }
+
+  if(!canView){
+    $('adminPage')?.classList.add('hidden');
+  }
+}
+
+const __adminOnlyUserManagementShowApp = showApp;
+showApp = function(){
+  __adminOnlyUserManagementShowApp();
+  enforceAdminOnlyUserManagement();
+};
+
+const __adminOnlyUserManagementShowPage = showPage;
+showPage = function(p){
+  if(p === 'admin' && !isAdmin()){
+    showToast('إدارة المستخدمين مخصصة لمدير النظام فقط.','error');
+    __adminOnlyUserManagementShowPage('tasks');
+    enforceAdminOnlyUserManagement();
+    return;
+  }
+
+  __adminOnlyUserManagementShowPage(p);
+  enforceAdminOnlyUserManagement();
+};
+
+const __adminOnlyUserManagementRenderAdmin = renderAdmin;
+renderAdmin = function(){
+  if(!isAdmin()){
+    $('adminPage').innerHTML='<section class="panel card"><div class="empty">إدارة المستخدمين مخصصة لمدير النظام فقط.</div></section>';
+    enforceAdminOnlyUserManagement();
+    return;
+  }
+
+  __adminOnlyUserManagementRenderAdmin();
+  enforceAdminOnlyUserManagement();
+};
+
 init();
 </script>
 </body>
