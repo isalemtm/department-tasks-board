@@ -11806,6 +11806,126 @@ showApp = function(){
   }
 };
 
+
+/* === PATCH: زر تصدير المستخدمين في بلوك المستخدمون === */
+function exportUsersListToExcel(){
+  try{
+    if(typeof XLSX === 'undefined'){
+      return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+    }
+
+    const rows=(state.users||[])
+      .filter(u=>u.is_active!==false)
+      .slice()
+      .sort((a,b)=>{
+        const sa=String(nameOfSector(a.sector_id)||'');
+        const sb=String(nameOfSector(b.sector_id)||'');
+        if(sa!==sb) return sa.localeCompare(sb,'ar');
+        const da=String(nameOfDept(a.department_id)||'');
+        const db=String(nameOfDept(b.department_id)||'');
+        if(da!==db) return da.localeCompare(db,'ar');
+        return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      })
+      .map(u=>({
+        'الاسم': u.name || '',
+        'البريد الإلكتروني': u.email || '',
+        'الدور': roleLabel(u.role),
+        'القطاع': nameOfSector(u.sector_id),
+        'القسم': nameOfDept(u.department_id)
+      }));
+
+    if(!rows.length){
+      return showToast('لا توجد بيانات مستخدمين لتصديرها.','info');
+    }
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[
+      {wch:28},
+      {wch:36},
+      {wch:18},
+      {wch:28},
+      {wch:28}
+    ];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'المستخدمون');
+    XLSX.writeFile(wb, `المستخدمون_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير ملف المستخدمين بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تصدير ملف المستخدمين.','error');
+  }
+}
+
+function renderUsers(){
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
+
+  const rows=(state.users||[]).map(u=>{
+    const active=u.is_active!==false;
+    const needsPassword=u.must_set_password===true;
+    const archivedInfo=!active
+      ? `<br><span class="meta">تاريخ التعطيل: ${formatDate(u.archived_at)}${u.archived_reason?` | السبب: ${escapeHtml(u.archived_reason)}`:''}</span>`
+      : '';
+
+    let action='—';
+    const notifyButton = active && needsPassword && canNotify
+      ? `<button class="btn btn-info btn-sm" onclick="sendPasswordSetupNotification('${escapeHtml(u.email)}')">إرسال إشعار تعيين كلمة المرور</button>`
+      : '';
+
+    if(u.id===state.profile.id){
+      action='<span class="meta">حسابك الحالي</span>';
+    }else if(isAdmin()){
+      action=active
+        ? `${notifyButton} <button class="btn btn-danger btn-sm" onclick="archiveUser('${u.id}','${escapeHtml(u.name)}')">تعطيل وأرشفة</button> <button class="btn btn-danger btn-sm" onclick="deleteUserByAdmin('${u.id}','${escapeHtml(u.email)}','${escapeHtml(u.name)}')">حذف نهائي</button>`
+        : '<span class="chip late">معطل ومؤرشف</span>';
+    }else{
+      action=notifyButton || '<span class="meta">لا توجد صلاحية</span>';
+    }
+
+    return `<tr>
+      <td>${escapeHtml(u.name)}${archivedInfo}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>${roleLabel(u.role)}</td>
+      <td>${nameOfSector(u.sector_id)}</td>
+      <td>${nameOfDept(u.department_id)}</td>
+      <td>${active?'نعم':'لا'}</td>
+      <td>${needsPassword?'نعم':'لا'}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+
+  const passwordButton = getUsersNeedingPasswordSetup().length
+    ? `<button class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button>`
+    : '';
+
+  const usersActions = `
+    <div class="actions" style="margin-bottom:12px;">
+      <button class="btn btn-info" onclick="exportUsersListToExcel()">تصدير المستخدمين Excel</button>
+      ${passwordButton}
+    </div>
+  `;
+
+  $('usersTable').innerHTML=`
+    ${usersActions}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>الاسم</th>
+            <th>البريد</th>
+            <th>الدور</th>
+            <th>القطاع</th>
+            <th>القسم</th>
+            <th>نشط</th>
+            <th>يحتاج تعيين كلمة مرور</th>
+            <th>إجراء</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 init();
 </script>
 </body>
