@@ -12018,6 +12018,127 @@ showPage = function(p){
   }
 };
 
+
+/* === PATCH: دمج زر تصدير المستخدمين داخل renderUsers النهائي === */
+function exportUsersListToExcel(){
+  try{
+    if(typeof XLSX === 'undefined'){
+      return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+    }
+
+    const rows=(state.users||[])
+      .filter(u=>u.is_active!==false)
+      .slice()
+      .sort((a,b)=>{
+        const sa=String(nameOfSector(a.sector_id)||'');
+        const sb=String(nameOfSector(b.sector_id)||'');
+        if(sa!==sb) return sa.localeCompare(sb,'ar');
+
+        const da=String(nameOfDept(a.department_id)||'');
+        const db=String(nameOfDept(b.department_id)||'');
+        if(da!==db) return da.localeCompare(db,'ar');
+
+        return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      })
+      .map(u=>({
+        'الاسم': u.name || '',
+        'البريد الإلكتروني': u.email || '',
+        'الدور': roleLabel(u.role),
+        'القطاع': nameOfSector(u.sector_id),
+        'القسم': nameOfDept(u.department_id)
+      }));
+
+    if(!rows.length){
+      return showToast('لا توجد بيانات مستخدمين لتصديرها.','info');
+    }
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:28},{wch:36},{wch:18},{wch:28},{wch:28}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'المستخدمون');
+    XLSX.writeFile(wb, `المستخدمون_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير ملف المستخدمين بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر تصدير ملف المستخدمين.','error');
+  }
+}
+window.exportUsersListToExcel = exportUsersListToExcel;
+
+/* إعادة رسم بلوك المستخدمون بصيغته الحالية المقسّمة حسب القطاع + زر التصدير */
+renderUsers = function(){
+  if(typeof ensureUsersBySectorAdminStyle === 'function'){
+    ensureUsersBySectorAdminStyle();
+  }
+
+  const canNotify = isAdmin() || isSectorHead() || isDepartmentManager();
+  const allUsers=(state.users||[]).slice();
+
+  const usersActions = `
+    <div class="actions" style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-info" onclick="exportUsersListToExcel()">تصدير المستخدمين Excel</button>
+      ${
+        getUsersNeedingPasswordSetup().length
+          ? `<button type="button" class="btn btn-info" onclick="sendPendingUserInvites()">إرسال إشعار تعيين كلمة المرور لكل المستخدمين الذين يحتاجونها</button>`
+          : ''
+      }
+    </div>
+  `;
+
+  if(!allUsers.length){
+    $('usersTable').innerHTML=`${usersActions}<div class="empty">لا يوجد مستخدمون لعرضهم.</div>`;
+    return;
+  }
+
+  const sectorGroups=new Map();
+
+  allUsers.forEach(u=>{
+    const key=u.sector_id || '__no_sector__';
+    const name=nameOfSector(u.sector_id) || 'بدون قطاع';
+
+    if(!sectorGroups.has(key)){
+      sectorGroups.set(key,{name, users:[]});
+    }
+
+    sectorGroups.get(key).users.push(u);
+  });
+
+  const blocks=[...sectorGroups.values()]
+    .sort((a,b)=>{
+      if(a.name==='بدون قطاع') return 1;
+      if(b.name==='بدون قطاع') return -1;
+      return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    })
+    .map(group=>{
+      const sortedUsers=group.users
+        .slice()
+        .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+      const activeCount=sortedUsers.filter(u=>u.is_active!==false).length;
+      const needsPasswordCount=sortedUsers.filter(u=>u.must_set_password===true).length;
+
+      return `
+        <section class="admin-sector-users-block">
+          <div class="admin-sector-users-head">
+            <div>
+              <h3>${escapeHtml(group.name)}</h3>
+              <div class="admin-sector-users-summary">
+                <span>${activeCount} نشط</span>
+                <span>•</span>
+                <span>${needsPasswordCount} يحتاج تعيين كلمة مرور</span>
+              </div>
+            </div>
+            <span class="sector-count">${sortedUsers.length} مستخدم</span>
+          </div>
+          ${typeof adminUsersTableForSector === 'function' ? adminUsersTableForSector(sortedUsers, canNotify) : ''}
+        </section>
+      `;
+    }).join('');
+
+  $('usersTable').innerHTML=`${usersActions}${blocks}`;
+};
+
 init();
 </script>
 </body>
