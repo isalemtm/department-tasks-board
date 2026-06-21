@@ -11209,8 +11209,8 @@ function renderDashboard(){
 }
 
 
-/* === PATCH: السماح لجميع الموظفين بمشاهدة الهيكل التنظيمي فقط === */
-function ensureOrgAvailableForAllUsers(){
+/* === PATCH: فتح الهيكل التنظيمي للجميع مع الحفاظ على التصميم الأصلي === */
+function allowOrgChartForAllKeepOriginalDesign(){
   if(typeof ensurePerformanceAndOrgPagesDom === 'function'){
     ensurePerformanceAndOrgPagesDom();
   }
@@ -11222,25 +11222,18 @@ function ensureOrgAvailableForAllUsers(){
     orgBtn.setAttribute('onclick',"showPage('org')");
   }
 
-  /* مؤشرات الأداء تبقى محصورة على مدير النظام والرئيس التنفيذي */
   const performanceBtn=$('tabPerformance');
   if(performanceBtn && typeof isAdminOrCeo === 'function'){
     performanceBtn.classList.toggle('hidden', !isAdminOrCeo());
   }
 
-  const app=$('appSection');
-  if(app && !$('orgPage')){
-    const adminPage=$('adminPage');
-    const org=document.createElement('section');
-    org.id='orgPage';
-    org.className='hidden';
-    org.innerHTML='<div id="orgContent"></div>';
-    if(adminPage) app.insertBefore(org, adminPage);
-    else app.appendChild(org);
+  const orgPage=$('orgPage');
+  if(orgPage){
+    orgPage.style.display='';
   }
 }
 
-function cleanupOrgButtonDuplicates(){
+function cleanupDuplicateOrgButtonsKeepOriginal(){
   const actions=document.querySelector('#appSection .app-actions');
   if(!actions) return;
 
@@ -11248,8 +11241,8 @@ function cleanupOrgButtonDuplicates(){
     btn.id==='tabOrg' || (btn.textContent||'').trim()==='الهيكل التنظيمي'
   );
 
-  if(orgButtons.length>1){
-    const keep=orgButtons.find(b=>b.id==='tabOrg') || orgButtons[0];
+  if(orgButtons.length > 1){
+    const keep=orgButtons.find(btn=>btn.id==='tabOrg') || orgButtons[0];
     keep.id='tabOrg';
     keep.textContent='الهيكل التنظيمي';
     keep.setAttribute('onclick',"showPage('org')");
@@ -11259,195 +11252,45 @@ function cleanupOrgButtonDuplicates(){
   }
 }
 
-const __orgForAllFinalShowPage = showPage;
+const __orgOriginalDesignShowPage = showPage;
 showPage = function(p){
-  ensureFullHrFeatureDom?.();
-  ensurePerformanceAndOrgPagesDom?.();
-  ensureExecutiveFollowPageButton?.();
-  installCenteredNavigationStyle?.();
-  installTopNavigationLightTheme?.();
-  ensureOrgAvailableForAllUsers();
-  cleanupOrgButtonDuplicates();
+  allowOrgChartForAllKeepOriginalDesign();
+  cleanupDuplicateOrgButtonsKeepOriginal();
 
-  /* الهيكل التنظيمي متاح للجميع */
   if(p === 'org'){
-    hideAllMainPagesForCleanNavigation?.();
-    clearAllPageButtonsActive?.();
+    if(typeof hideAllMainPagesForCleanNavigation === 'function') hideAllMainPagesForCleanNavigation();
+    if(typeof clearAllPageButtonsActive === 'function') clearAllPageButtonsActive();
 
     $('orgPage')?.classList.remove('hidden');
-    setMainPageActive?.('org');
-
-    if(typeof renderOrgPage === 'function') renderOrgPage();
-    else if($('orgContent')) $('orgContent').innerHTML='<section class="panel card"><div class="empty">تعذر تحميل الهيكل التنظيمي.</div></section>';
-
-    ensureOrgAvailableForAllUsers();
-    cleanupOrgButtonDuplicates();
-    return;
-  }
-
-  /* باقي الصفحات تسير على الصلاحيات الأصلية */
-  __orgForAllFinalShowPage(p);
-  ensureOrgAvailableForAllUsers();
-  cleanupOrgButtonDuplicates();
-};
-
-const __orgForAllFinalShowApp = showApp;
-showApp = function(){
-  __orgForAllFinalShowApp();
-  ensureOrgAvailableForAllUsers();
-  cleanupOrgButtonDuplicates();
-};
-
-
-/* === PATCH: إصلاح ظهور محتوى الهيكل التنظيمي لجميع الموظفين === */
-function ensureOrgForAllStyle(){
-  if(document.getElementById('orgForAllContentStyle')) return;
-  const style=document.createElement('style');
-  style.id='orgForAllContentStyle';
-  style.textContent=`
-    #orgPage{
-      display:block;
-    }
-    #orgPage.hidden{
-      display:none!important;
-    }
-    .org-tree{display:flex;flex-direction:column;gap:16px;}
-    .org-node{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;box-shadow:0 10px 24px rgba(97,70,59,.06);}
-    .org-node.ceo{background:#fbf8f5;border-color:#d8cac0;text-align:center;}
-    .org-node h3,.org-node h4{margin:0 0 8px;color:var(--primary2);}
-    .org-meta{color:var(--muted);font-size:13px;line-height:1.7;}
-    .org-sector-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;}
-    .org-departments{display:grid;gap:10px;margin-top:12px;}
-    .org-dept{border:1px dashed #d8cac0;border-radius:14px;padding:12px;background:#fffdfa;}
-    .org-users{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
-    .org-user-chip{border:1px solid var(--line);border-radius:999px;background:#fbf8f5;padding:8px 12px;color:var(--primary2);font-weight:800;line-height:1.5;}
-    .org-user-chip.head{background:#eef8f6;border-color:#d2e9e5;}
-    @media(max-width:768px){
-      .org-sector-grid{grid-template-columns:1fr;}
-      .org-user-chip{border-radius:12px;width:100%;}
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-function orgUserLineForAll(u){
-  if(!u) return '—';
-  const title=u.job_title ? ` - ${u.job_title}` : '';
-  return `${escapeHtml(u.name||'—')}<span class="org-meta">${escapeHtml(title)}</span>`;
-}
-
-function renderOrgPageForAllUsers(){
-  ensureOrgForAllStyle();
-
-  if(!$('orgPage')){
-    const app=$('appSection');
-    const org=document.createElement('section');
-    org.id='orgPage';
-    org.className='hidden';
-    org.innerHTML='<div id="orgContent"></div>';
-    app?.appendChild(org);
-  }
-
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
-  const ceos=users.filter(u=>u.role==='ceo');
-  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
-
-  const ceoHtml=ceos.length
-    ? ceos.map(u=>`<div class="org-user-chip head">${orgUserLineForAll(u)}</div>`).join('')
-    : '<span class="org-meta">لم يتم تحديد الرئيس التنفيذي في النظام.</span>';
-
-  const sectorHtml=sectors.map(sector=>{
-    const heads=users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
-    const deps=(state.departments||[])
-      .filter(d=>d.sector_id===sector.id)
-      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
-
-    const usersNoDept=users.filter(u=>u.sector_id===sector.id && !u.department_id && u.role!=='sector_head' && u.role!=='ceo');
-
-    const headsHtml=heads.length
-      ? heads.map(u=>`<div class="org-user-chip head">${orgUserLineForAll(u)}</div>`).join('')
-      : '<span class="org-meta">لا يوجد رئيس قطاع محدد.</span>';
-
-    const depsHtml=deps.map(dep=>{
-      const depUsers=users.filter(u=>u.department_id===dep.id && u.role!=='sector_head' && u.role!=='ceo');
-      return `<div class="org-dept">
-        <h4>${escapeHtml(dep.name||'قسم غير مسمى')}</h4>
-        <div class="org-meta">${escapeHtml(sector.name||'—')}</div>
-        <div class="org-users">
-          ${depUsers.length ? depUsers.map(u=>`<div class="org-user-chip">${orgUserLineForAll(u)}</div>`).join('') : '<span class="org-meta">لا يوجد مستخدمون في هذا القسم.</span>'}
-        </div>
-      </div>`;
-    }).join('');
-
-    const noDeptHtml=usersNoDept.length
-      ? `<div class="org-dept">
-          <h4>بدون قسم</h4>
-          <div class="org-meta">مستخدمون تابعون مباشرة للقطاع</div>
-          <div class="org-users">${usersNoDept.map(u=>`<div class="org-user-chip">${orgUserLineForAll(u)}</div>`).join('')}</div>
-        </div>`
-      : '';
-
-    return `<div class="org-node">
-      <h3>${escapeHtml(sector.name||'قطاع غير مسمى')}</h3>
-      <div class="org-meta">رئيس القطاع</div>
-      <div class="org-users">${headsHtml}</div>
-      <div class="org-departments">${depsHtml}${noDeptHtml}</div>
-    </div>`;
-  }).join('');
-
-  const content=$('orgContent');
-  if(content){
-    content.innerHTML=`
-      <section class="panel card">
-        <div class="section-head">
-          <div>
-            <h2>الهيكل التنظيمي للشركة</h2>
-            <p class="meta">عرض وظيفي مبني على بيانات المستخدمين والقطاعات والأقسام المسجلة في لوحة متابعة مهام القطاعات.</p>
-          </div>
-          <span class="badge">${users.length} مستخدم</span>
-        </div>
-        <div class="org-tree">
-          <div class="org-node ceo"><h3>الرئيس التنفيذي</h3><div class="org-users" style="justify-content:center;">${ceoHtml}</div></div>
-          <div class="org-sector-grid">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
-        </div>
-      </section>
-    `;
-  }
-}
-
-/* الهيكل التنظيمي متاح للجميع، بدون الاعتماد على دالة الصلاحيات القديمة */
-const __orgContentForAllShowPage = showPage;
-showPage = function(p){
-  if(p === 'org'){
-    ensureFullHrFeatureDom?.();
-    ensurePerformanceAndOrgPagesDom?.();
-    ensureExecutiveFollowPageButton?.();
-    installCenteredNavigationStyle?.();
-    installTopNavigationLightTheme?.();
-
-    hideAllMainPagesForCleanNavigation?.();
-    clearAllPageButtonsActive?.();
-
-    renderOrgPageForAllUsers();
-
-    $('orgPage')?.classList.remove('hidden');
-    $('tabOrg')?.classList.remove('hidden');
     $('tabOrg')?.classList.add('active');
 
+    if(typeof renderOrgPage === 'function'){
+      renderOrgPage();
+    }
+
+    allowOrgChartForAllKeepOriginalDesign();
+    cleanupDuplicateOrgButtonsKeepOriginal();
     return;
   }
 
-  __orgContentForAllShowPage(p);
+  __orgOriginalDesignShowPage(p);
+  allowOrgChartForAllKeepOriginalDesign();
+  cleanupDuplicateOrgButtonsKeepOriginal();
 };
 
-const __orgContentForAllShowApp = showApp;
+const __orgOriginalDesignShowApp = showApp;
 showApp = function(){
-  __orgContentForAllShowApp();
+  __orgOriginalDesignShowApp();
+  allowOrgChartForAllKeepOriginalDesign();
+  cleanupDuplicateOrgButtonsKeepOriginal();
+};
 
-  ensurePerformanceAndOrgPagesDom?.();
-  $('tabOrg')?.classList.remove('hidden');
-  $('tabOrg')?.attr;
-  if($('tabOrg')) $('tabOrg').setAttribute('onclick',"showPage('org')");
+const __orgOriginalDesignBootstrap = bootstrap;
+bootstrap = async function(){
+  const result=await __orgOriginalDesignBootstrap();
+  allowOrgChartForAllKeepOriginalDesign();
+  cleanupDuplicateOrgButtonsKeepOriginal();
+  return result;
 };
 
 init();
