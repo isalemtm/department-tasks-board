@@ -12744,6 +12744,63 @@ showApp = function(){
   updateExecutiveIndicatorsButton();
 };
 
+
+/* === PATCH: إصلاح تداخل رقم الدائرة في توزيع حالات المهام === */
+function fixExecutiveDonutCenterText(){
+  if(document.getElementById('executiveDonutCenterFix')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveDonutCenterFix';
+  style.textContent=`
+    .exec-donut-center{
+      position:absolute!important;
+      inset:42px!important;
+      width:auto!important;
+      height:auto!important;
+      display:flex!important;
+      flex-direction:column!important;
+      align-items:center!important;
+      justify-content:center!important;
+      z-index:3!important;
+      text-align:center!important;
+      color:var(--primary2)!important;
+      font-weight:900!important;
+      line-height:1.2!important;
+      pointer-events:none!important;
+      transform:none!important;
+    }
+
+    .exec-donut-center strong,
+    .exec-donut-center{
+      font-size:30px!important;
+    }
+
+    .exec-donut-center small{
+      display:block!important;
+      margin-top:6px!important;
+      color:var(--muted)!important;
+      font-size:12px!important;
+      font-weight:700!important;
+      line-height:1.4!important;
+      white-space:nowrap!important;
+    }
+
+    .exec-donut::after{
+      z-index:1!important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __fixDonutRenderExecutiveIndicatorsPage = renderExecutiveIndicatorsPage;
+renderExecutiveIndicatorsPage = function(){
+  fixExecutiveDonutCenterText();
+  __fixDonutRenderExecutiveIndicatorsPage();
+  fixExecutiveDonutCenterText();
+};
+
+fixExecutiveDonutCenterText();
+
 init();
 </script>
 </body>
