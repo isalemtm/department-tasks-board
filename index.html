@@ -12801,6 +12801,516 @@ renderExecutiveIndicatorsPage = function(){
 
 fixExecutiveDonutCenterText();
 
+
+/* === PATCH: استبدال لوحة الموظفين بلوحة الأداء العام للشفافية بين القطاعات === */
+/* التعديل محصور في صفحة لوحة الموظفين فقط. لا يغير صفحة المهام ولا الصلاحيات. */
+
+let publicPerformanceCache = null;
+let publicPerformanceLoading = false;
+
+function installPublicPerformanceDashboardStyles(){
+  if(document.getElementById('publicPerformanceDashboardStyles')) return;
+
+  const style=document.createElement('style');
+  style.id='publicPerformanceDashboardStyles';
+  style.textContent=`
+    .public-performance-page{
+      display:grid;
+      gap:18px;
+    }
+    .public-performance-title{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    .public-performance-title h2{
+      margin:0 0 6px;
+      color:var(--primary2);
+    }
+    .public-kpi-grid{
+      display:grid;
+      grid-template-columns:repeat(6,minmax(130px,1fr));
+      gap:12px;
+    }
+    .public-kpi-card{
+      border:1px solid var(--line);
+      background:#fffdfa;
+      border-radius:16px;
+      padding:15px;
+      box-shadow:0 12px 28px rgba(97,70,59,.06);
+      min-height:108px;
+    }
+    .public-kpi-card span{
+      display:block;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.6;
+      margin-bottom:6px;
+    }
+    .public-kpi-card strong{
+      display:block;
+      color:var(--primary2);
+      font-size:30px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .public-kpi-card small{
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+    }
+    .public-visual-grid{
+      display:grid;
+      grid-template-columns:1.25fr .75fr;
+      gap:14px;
+    }
+    .public-chart-card{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:18px;
+      box-shadow:0 12px 28px rgba(97,70,59,.05);
+    }
+    .public-chart-card h3{
+      margin:0 0 12px;
+      color:var(--primary2);
+      font-size:18px;
+    }
+    .public-bar-list{
+      display:grid;
+      gap:12px;
+    }
+    .public-bar-row{
+      display:grid;
+      grid-template-columns:190px 1fr 64px;
+      align-items:center;
+      gap:10px;
+      font-size:13px;
+      color:var(--primary2);
+    }
+    .public-bar-track{
+      height:14px;
+      border-radius:999px;
+      background:#f2ebe6;
+      overflow:hidden;
+      border:1px solid #eadbd2;
+    }
+    .public-bar-fill{
+      height:100%;
+      border-radius:999px;
+      background:var(--primary);
+      min-width:2px;
+    }
+    .public-bar-fill.green{
+      background:#2f9f8f;
+    }
+    .public-bar-fill.red{
+      background:#c95656;
+    }
+    .public-bar-value{
+      text-align:left;
+      color:var(--primary2);
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .public-donut-wrap{
+      display:grid;
+      place-items:center;
+      gap:12px;
+      min-height:240px;
+    }
+    .public-donut{
+      width:190px;
+      height:190px;
+      border-radius:50%;
+      position:relative;
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
+    }
+    .public-donut::after{
+      content:'';
+      position:absolute;
+      inset:42px;
+      border-radius:50%;
+      background:#fff;
+      border:1px solid var(--line);
+      z-index:1;
+    }
+    .public-donut-center{
+      position:absolute;
+      inset:42px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      z-index:3;
+      text-align:center;
+      color:var(--primary2);
+      font-weight:900;
+      line-height:1.2;
+      pointer-events:none;
+      font-size:30px;
+    }
+    .public-donut-center small{
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+      line-height:1.4;
+      white-space:nowrap;
+    }
+    .public-legend{
+      display:flex;
+      justify-content:center;
+      flex-wrap:wrap;
+      gap:8px 12px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .public-legend span{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .public-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      display:inline-block;
+      background:var(--primary);
+    }
+    .public-dot.green{background:#2f9f8f;}
+    .public-dot.red{background:#c95656;}
+    .public-ranking-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:14px;
+    }
+    .public-rank-list{
+      display:grid;
+      gap:10px;
+    }
+    .public-rank-item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 14px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fbf8f5;
+      color:var(--primary2);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .public-rank-item strong{
+      font-size:16px;
+      white-space:nowrap;
+    }
+    .public-sector-table{
+      width:100%;
+      border-collapse:collapse;
+      overflow:hidden;
+      border-radius:14px;
+    }
+    .public-sector-table th,
+    .public-sector-table td{
+      border-bottom:1px solid var(--line);
+      padding:12px;
+      text-align:right;
+      font-size:13px;
+      color:var(--primary2);
+    }
+    .public-sector-table th{
+      background:#f1e8e1;
+      font-weight:900;
+    }
+    .public-sector-table tr:last-child td{
+      border-bottom:none;
+    }
+    @media(max-width:1100px){
+      .public-kpi-grid{grid-template-columns:repeat(3,1fr);}
+      .public-visual-grid{grid-template-columns:1fr;}
+      .public-ranking-grid{grid-template-columns:1fr;}
+      .public-bar-row{grid-template-columns:150px 1fr 54px;}
+    }
+    @media(max-width:680px){
+      .public-kpi-grid{grid-template-columns:repeat(2,1fr);}
+      .public-bar-row{grid-template-columns:1fr;gap:6px;}
+      .public-bar-value{text-align:right;}
+    }
+    @media(max-width:420px){
+      .public-kpi-grid{grid-template-columns:1fr;}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function normalizePublicMetricPayload(data){
+  if(!data) return null;
+  if(Array.isArray(data) && data.length) return data[0];
+  return data;
+}
+
+function publicPerformanceFallbackFromLoadedData(){
+  const tasks=visibleTasks();
+  const total=tasks.length;
+  const done=tasks.filter(t=>t.status==='مكتملة').length;
+  const late=tasks.filter(isLate).length;
+  const progress=tasks.filter(t=>(isLate(t)?'متأخرة':t.status)==='قيد التنفيذ').length;
+  const rate=total?Math.round(done/total*100):0;
+
+  const sectors=(state.sectors||[]).map(s=>{
+    const sectorUsers=(state.users||[]).filter(u=>u.is_active!==false && u.sector_id===s.id).map(u=>u.id);
+    const sectorTaskIds=new Set((state.assignees||[]).filter(a=>sectorUsers.includes(a.user_id)).map(a=>a.task_id));
+    const rows=uniqueTasks(tasks.filter(t=>
+      sectorTaskIds.has(t.id) ||
+      t.owner_sector_id===s.id ||
+      t.target_sector_id===s.id ||
+      sectorUsers.includes(t.primary_responsible_id)
+    ));
+    const sDone=rows.filter(t=>t.status==='مكتملة').length;
+    const sLate=rows.filter(isLate).length;
+    const sProgress=rows.filter(t=>(isLate(t)?'متأخرة':t.status)==='قيد التنفيذ').length;
+    return {
+      sector_id:s.id,
+      sector_name:s.name,
+      total:rows.length,
+      completed:sDone,
+      in_progress:sProgress,
+      overdue:sLate,
+      completion_rate:rows.length?Math.round(sDone/rows.length*100):0
+    };
+  });
+
+  const topEmployees=(state.users||[]).filter(u=>u.is_active!==false).map(u=>{
+    const rows=tasksForUser(u.id);
+    const completed=rows.filter(t=>t.status==='مكتملة').length;
+    return {employee_name:u.name, sector_name:nameOfSector(u.sector_id), completed};
+  }).filter(x=>x.completed>0).sort((a,b)=>b.completed-a.completed).slice(0,5);
+
+  return {
+    summary:{
+      total_tasks:total,
+      completed:done,
+      in_progress:progress,
+      overdue:late,
+      completion_rate:rate,
+      pending_approval: typeof getPendingTasks==='function' ? getPendingTasks().length : 0
+    },
+    sectors,
+    top_employees:topEmployees,
+    sectors_need_followup:[...sectors].filter(s=>s.overdue>0).sort((a,b)=>b.overdue-a.overdue).slice(0,5),
+    best_sectors:[...sectors].filter(s=>s.total>0).sort((a,b)=>b.completion_rate-a.completion_rate).slice(0,5)
+  };
+}
+
+async function loadPublicPerformanceMetrics(){
+  if(publicPerformanceCache) return publicPerformanceCache;
+  if(publicPerformanceLoading) return null;
+
+  publicPerformanceLoading=true;
+  try{
+    const {data,error}=await supabaseClient.rpc('get_public_performance_metrics');
+    if(error) throw error;
+    publicPerformanceCache=normalizePublicMetricPayload(data);
+    return publicPerformanceCache;
+  }catch(e){
+    console.warn('Using fallback public performance metrics:', e);
+    publicPerformanceCache=publicPerformanceFallbackFromLoadedData();
+    return publicPerformanceCache;
+  }finally{
+    publicPerformanceLoading=false;
+  }
+}
+
+function publicBarRows(items, key='total', cls=''){
+  const max=Math.max(1,...(items||[]).map(x=>Number(x[key]||0)));
+  return (items||[]).map(x=>{
+    const v=Number(x[key]||0);
+    const pct=Math.max(2,Math.round(v/max*100));
+    return `<div class="public-bar-row">
+      <div>${escapeHtml(x.sector_name || x.name || '—')}</div>
+      <div class="public-bar-track"><div class="public-bar-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="public-bar-value">${v}${key.includes('rate')?'%':''}</div>
+    </div>`;
+  }).join('') || '<div class="empty">لا توجد بيانات كافية للعرض.</div>';
+}
+
+function publicRankItems(items, nameKey, valueKey, suffix=''){
+  return (items||[]).map(x=>`
+    <div class="public-rank-item">
+      <span>${escapeHtml(x[nameKey] || '—')}${x.sector_name?`<br><small class="meta">${escapeHtml(x.sector_name)}</small>`:''}</span>
+      <strong>${Number(x[valueKey]||0)}${suffix}</strong>
+    </div>
+  `).join('') || '<div class="empty">لا توجد بيانات.</div>';
+}
+
+function renderPublicPerformanceDashboardWithData(payload){
+  installPublicPerformanceDashboardStyles();
+
+  const summary=payload?.summary || {};
+  const sectors=payload?.sectors || [];
+  const topEmployees=payload?.top_employees || [];
+  const bestSectors=payload?.best_sectors || [...sectors].filter(s=>s.total>0).sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0)).slice(0,5);
+  const followupSectors=payload?.sectors_need_followup || [...sectors].filter(s=>(s.overdue||0)>0).sort((a,b)=>(b.overdue||0)-(a.overdue||0)).slice(0,5);
+
+  const total=Number(summary.total_tasks||0);
+  const done=Number(summary.completed||0);
+  const progress=Number(summary.in_progress||0);
+  const late=Number(summary.overdue||0);
+  const rate=Number(summary.completion_rate||0);
+  const pending=Number(summary.pending_approval||0);
+
+  const allStatus=done+progress+late;
+  const doneDeg=allStatus?Math.round(done/allStatus*360):0;
+  const progressDeg=allStatus?Math.round(progress/allStatus*360):0;
+  const donutStyle=allStatus
+    ? `background:conic-gradient(#2f9f8f 0deg ${doneDeg}deg, var(--primary) ${doneDeg}deg ${doneDeg+progressDeg}deg, #c95656 ${doneDeg+progressDeg}deg 360deg);`
+    : `background:#f2ebe6;`;
+
+  const sectorTableRows=[...sectors].sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0)).map((s,i)=>`
+    <tr>
+      <td>${i+1}</td>
+      <td>${escapeHtml(s.sector_name||'—')}</td>
+      <td>${Number(s.total||0)}</td>
+      <td>${Number(s.completed||0)}</td>
+      <td>${Number(s.in_progress||0)}</td>
+      <td>${Number(s.overdue||0)}</td>
+      <td><strong>${Number(s.completion_rate||0)}%</strong></td>
+    </tr>
+  `).join('');
+
+  $('dashboardContent').innerHTML=`
+    <section class="panel card">
+      <div class="public-performance-page">
+        <div class="public-performance-title">
+          <div>
+            <h2>لوحة الأداء العام</h2>
+            <p class="meta">مؤشرات شفافة مختصرة على مستوى الشركة لتعزيز التنافس بين القطاعات، دون عرض تفاصيل المهام.</p>
+          </div>
+          <span class="badge">مؤشرات عامة</span>
+        </div>
+
+        <div class="public-kpi-grid">
+          <div class="public-kpi-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div>
+          <div class="public-kpi-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
+          <div class="public-kpi-card"><span>مكتملة</span><strong>${done}</strong><small>مهام منجزة ومعتمدة</small></div>
+          <div class="public-kpi-card"><span>متأخرة</span><strong>${late}</strong><small>تحتاج متابعة</small></div>
+          <div class="public-kpi-card"><span>نسبة الإنجاز العامة</span><strong>${rate}%</strong><small>المكتمل من إجمالي المهام</small></div>
+          <div class="public-kpi-card"><span>بانتظار الاعتماد</span><strong>${pending}</strong><small>مهام جديدة معلقة</small></div>
+        </div>
+
+        <div class="public-visual-grid">
+          <div class="public-chart-card">
+            <h3>ترتيب القطاعات حسب نسبة الإنجاز</h3>
+            <div class="public-bar-list">
+              ${publicBarRows([...sectors].sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0)), 'completion_rate', 'green')}
+            </div>
+          </div>
+
+          <div class="public-chart-card">
+            <h3>توزيع حالات المهام</h3>
+            <div class="public-donut-wrap">
+              <div class="public-donut" style="${donutStyle}">
+                <div class="public-donut-center">${total}<small>مهمة</small></div>
+              </div>
+              <div class="public-legend">
+                <span><i class="public-dot green"></i>مكتملة: ${done}</span>
+                <span><i class="public-dot"></i>قيد التنفيذ: ${progress}</span>
+                <span><i class="public-dot red"></i>متأخرة: ${late}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="public-chart-card">
+          <h3>أداء القطاعات بالأرقام</h3>
+          <div class="table-wrap">
+            <table class="public-sector-table">
+              <thead>
+                <tr>
+                  <th>الترتيب</th>
+                  <th>القطاع</th>
+                  <th>إجمالي المهام</th>
+                  <th>مكتملة</th>
+                  <th>قيد التنفيذ</th>
+                  <th>متأخرة</th>
+                  <th>نسبة الإنجاز</th>
+                </tr>
+              </thead>
+              <tbody>${sectorTableRows || '<tr><td colspan="7">لا توجد بيانات.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="public-ranking-grid">
+          <div class="public-chart-card">
+            <h3>أفضل القطاعات أداءً</h3>
+            <div class="public-rank-list">
+              ${publicRankItems(bestSectors, 'sector_name', 'completion_rate', '%')}
+            </div>
+          </div>
+
+          <div class="public-chart-card">
+            <h3>قطاعات تحتاج متابعة</h3>
+            <div class="public-rank-list">
+              ${publicRankItems(followupSectors, 'sector_name', 'overdue')}
+            </div>
+          </div>
+
+          <div class="public-chart-card">
+            <h3>أعلى الموظفين إنجازًا</h3>
+            <div class="public-rank-list">
+              ${publicRankItems(topEmployees, 'employee_name', 'completed')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderDashboard(){
+  installPublicPerformanceDashboardStyles();
+  $('dashboardContent').innerHTML='<section class="panel card"><div class="empty">جاري تحميل لوحة الأداء العام...</div></section>';
+
+  loadPublicPerformanceMetrics().then(payload=>{
+    renderPublicPerformanceDashboardWithData(payload || publicPerformanceFallbackFromLoadedData());
+  }).catch(e=>{
+    console.error(e);
+    renderPublicPerformanceDashboardWithData(publicPerformanceFallbackFromLoadedData());
+  });
+}
+
+function updateDashboardButtonLabel(){
+  const btn=$('tabDashboard');
+  if(btn) btn.textContent='لوحة الأداء العام';
+}
+
+const __publicPerfShowApp = showApp;
+showApp = function(){
+  __publicPerfShowApp();
+  updateDashboardButtonLabel();
+};
+
+const __publicPerfShowPage = showPage;
+showPage = function(p){
+  __publicPerfShowPage(p);
+  updateDashboardButtonLabel();
+};
+
+/* منع تصدير تفاصيل من لوحة الأداء العام */
+function exportDashboardToExcel(){
+  showToast('لوحة الأداء العام تعرض مؤشرات فقط ولا تحتوي على تصدير تفاصيل.','info');
+}
+
+updateDashboardButtonLabel();
+
 init();
 </script>
 </body>
