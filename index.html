@@ -13311,6 +13311,144 @@ function exportDashboardToExcel(){
 
 updateDashboardButtonLabel();
 
+
+/* === PATCH: قفل صفحة المهام لمدير القسم على قسمه فقط === */
+/* هذا لا يغير لوحة الأداء العام ولا المؤشرات التنفيذية، فقط نطاق عرض تفاصيل المهام في صفحة المهام وتصديرها. */
+function taskPageAllowedTasks(){
+  const rows=visibleTasks();
+
+  if(isAdmin() || isCeo() || isSectorHead()){
+    return rows;
+  }
+
+  if(isDepartmentManager()){
+    const myDeptId=state.profile?.department_id;
+    const myId=state.profile?.id;
+    if(!myDeptId && !myId) return [];
+
+    const deptUserIds=new Set(
+      (state.users||[])
+        .filter(u=>u.is_active!==false && u.department_id===myDeptId)
+        .map(u=>u.id)
+    );
+
+    const deptTaskIds=new Set(
+      (state.assignees||[])
+        .filter(a=>deptUserIds.has(a.user_id))
+        .map(a=>a.task_id)
+    );
+
+    return rows.filter(t=>
+      t.owner_department_id===myDeptId ||
+      t.target_department_id===myDeptId ||
+      t.primary_responsible_id===myId ||
+      deptTaskIds.has(t.id) ||
+      (t.created_by===myId)
+    );
+  }
+
+  if(currentRole()==='employee'){
+    const myId=state.profile?.id;
+    if(!myId) return [];
+
+    return rows.filter(t=>{
+      const assignees=getTaskAssignees(t.id);
+      return (
+        t.primary_responsible_id===myId ||
+        t.created_by===myId ||
+        assignees.some(u=>u.id===myId)
+      );
+    });
+  }
+
+  return [];
+}
+
+function getFilteredTasks(){
+  let rows=typeof taskPageAllowedTasks==='function' ? taskPageAllowedTasks() : visibleTasks();
+
+  const q=$('searchInput')?.value?.trim().toLowerCase() || '';
+  const fs=$('filterSector')?.value || '';
+  const fd=$('filterDepartment')?.value || '';
+  const fa=$('filterAssignee')?.value || '';
+  const st=$('filterStatus')?.value || '';
+
+  rows=rows.filter(t=>{
+    const assignees=getTaskAssignees(t.id);
+    const matchesSearch=!q||`${t.title||''} ${t.description||''} ${assignees.map(u=>u.name).join(' ')} ${nameOfUser(t.primary_responsible_id)}`.toLowerCase().includes(q);
+    const matchesSector=!fs||t.owner_sector_id===fs||t.target_sector_id===fs||assignees.some(u=>u.sector_id===fs);
+    const matchesDept=!fd||t.owner_department_id===fd||t.target_department_id===fd||assignees.some(u=>u.department_id===fd);
+    const matchesAssignee=!fa||t.primary_responsible_id===fa||assignees.some(u=>u.id===fa);
+    const display=typeof taskDisplayStatus==='function'?taskDisplayStatus(t):(isLate(t)?'متأخرة':t.status);
+    const matchesStatus=!st||display===st;
+
+    return matchesSearch && matchesSector && matchesDept && matchesAssignee && matchesStatus;
+  });
+
+  return rows;
+}
+
+function setupEmployeeFilter(){
+  const currentSector = $('filterSector')?.value || '';
+  const currentDept = $('filterDepartment')?.value || '';
+  let users=(state.users||[]).filter(u=>u.is_active!==false);
+
+  if(isDepartmentManager()){
+    users=users.filter(u=>u.department_id===state.profile.department_id);
+  }else if(currentRole()==='employee'){
+    users=users.filter(u=>u.id===state.profile.id);
+  }else{
+    if(currentSector) users=users.filter(u=>u.sector_id===currentSector);
+    if(currentDept) users=users.filter(u=>u.department_id===currentDept);
+  }
+
+  if($('filterAssignee')){
+    $('filterAssignee').innerHTML='<option value="">كل الموظفين</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  }
+}
+
+/* تصدير Excel من صفحة المهام يلتزم بنفس نطاق صفحة المهام */
+function exportTasksToExcel(){
+  try{
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة التصدير. حدّث الصفحة وحاول مرة أخرى.','error');
+
+    const rows=getFilteredTasks().map(t=>({
+      'عنوان المهمة':t.title,
+      'الوصف':t.description||'',
+      'الحالة':isLate(t)?'متأخرة':t.status,
+      'الأولوية':t.priority||'عادية',
+      'القطاع':nameOfSector(t.target_sector_id||t.owner_sector_id),
+      'الإدارة':nameOfDept(t.target_department_id||t.owner_department_id),
+      'المسؤول الرئيسي':nameOfUser(t.primary_responsible_id),
+      'المسند إليهم':getTaskAssignees(t.id).map(u=>u.name).join('، '),
+      'تاريخ الاستحقاق':formatDate(t.due_date),
+      'تاريخ الإنشاء':formatDate(t.created_at)
+    }));
+
+    if(!rows.length) return showToast('لا توجد مهام لتصديرها.','info');
+
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:30},{wch:45},{wch:14},{wch:12},{wch:24},{wch:26},{wch:24},{wch:38},{wch:16},{wch:16}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'المهام');
+    XLSX.writeFile(wb,`المهام_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير ملف Excel بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تصدير ملف Excel.','error');
+  }
+}
+
+const __deptTaskScopeShowPage = showPage;
+showPage = function(p){
+  __deptTaskScopeShowPage(p);
+  if(p==='tasks'){
+    setupEmployeeFilter();
+    renderTasks();
+  }
+};
+
 init();
 </script>
 </body>
