@@ -12272,6 +12272,478 @@ renderAdmin = function(){
   enforceAdminOnlyUserManagement();
 };
 
+
+/* === PATCH: استبدال صفحة متابعة القطاعات بلوحة المؤشرات التنفيذية فقط === */
+/* لا يغير هذا التعديل أي صفحة أخرى ولا يغير الصلاحيات. الصفحة تبقى للرئيس التنفيذي ومدير النظام فقط. */
+
+function installExecutiveIndicatorsStyles(){
+  if(document.getElementById('executiveIndicatorsStyles')) return;
+
+  const style=document.createElement('style');
+  style.id='executiveIndicatorsStyles';
+  style.textContent=`
+    .exec-indicators-page{
+      display:grid;
+      gap:18px;
+    }
+    .exec-indicators-title{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    .exec-indicators-title h2{
+      margin:0 0 6px;
+      color:var(--primary2);
+    }
+    .exec-kpi-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(150px,1fr));
+      gap:12px;
+    }
+    .exec-kpi-card{
+      border:1px solid var(--line);
+      background:#fffdfa;
+      border-radius:16px;
+      padding:16px;
+      box-shadow:0 12px 28px rgba(97,70,59,.06);
+      min-height:112px;
+    }
+    .exec-kpi-card span{
+      display:block;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.6;
+      margin-bottom:6px;
+    }
+    .exec-kpi-card strong{
+      display:block;
+      color:var(--primary2);
+      font-size:30px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .exec-kpi-card small{
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+    }
+    .exec-visual-grid{
+      display:grid;
+      grid-template-columns:1.3fr .7fr;
+      gap:14px;
+    }
+    .exec-chart-card{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:18px;
+      box-shadow:0 12px 28px rgba(97,70,59,.05);
+    }
+    .exec-chart-card h3{
+      margin:0 0 12px;
+      color:var(--primary2);
+      font-size:18px;
+    }
+    .exec-bar-list{
+      display:grid;
+      gap:12px;
+    }
+    .exec-bar-row{
+      display:grid;
+      grid-template-columns:180px 1fr 58px;
+      align-items:center;
+      gap:10px;
+      font-size:13px;
+      color:var(--primary2);
+    }
+    .exec-bar-track{
+      height:14px;
+      border-radius:999px;
+      background:#f2ebe6;
+      overflow:hidden;
+      border:1px solid #eadbd2;
+    }
+    .exec-bar-fill{
+      height:100%;
+      border-radius:999px;
+      background:var(--primary);
+      min-width:2px;
+    }
+    .exec-bar-fill.alt{
+      background:#2f9f8f;
+    }
+    .exec-bar-value{
+      text-align:left;
+      color:var(--primary2);
+      font-weight:900;
+    }
+    .exec-donut-wrap{
+      display:grid;
+      place-items:center;
+      gap:12px;
+      min-height:240px;
+    }
+    .exec-donut{
+      width:190px;
+      height:190px;
+      border-radius:50%;
+      position:relative;
+      background:conic-gradient(var(--primary) 0deg, var(--primary) 120deg, #2f9f8f 120deg, #2f9f8f 240deg, #c95656 240deg, #c95656 360deg);
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
+    }
+    .exec-donut::after{
+      content:'';
+      position:absolute;
+      inset:42px;
+      border-radius:50%;
+      background:#fff;
+      border:1px solid var(--line);
+    }
+    .exec-donut-center{
+      position:absolute;
+      inset:0;
+      display:grid;
+      place-items:center;
+      z-index:2;
+      text-align:center;
+      color:var(--primary2);
+      font-weight:900;
+      pointer-events:none;
+    }
+    .exec-donut-center small{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+      margin-top:4px;
+    }
+    .exec-legend{
+      display:flex;
+      justify-content:center;
+      flex-wrap:wrap;
+      gap:8px 12px;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .exec-legend span{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .exec-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      display:inline-block;
+      background:var(--primary);
+    }
+    .exec-dot.green{background:#2f9f8f;}
+    .exec-dot.red{background:#c95656;}
+    .exec-ranking-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:14px;
+    }
+    .exec-rank-list{
+      display:grid;
+      gap:10px;
+    }
+    .exec-rank-item{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 14px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fbf8f5;
+      color:var(--primary2);
+      font-size:13px;
+      line-height:1.5;
+    }
+    .exec-rank-item strong{
+      font-size:16px;
+      white-space:nowrap;
+    }
+    @media(max-width:1000px){
+      .exec-kpi-grid{grid-template-columns:repeat(2,1fr);}
+      .exec-visual-grid{grid-template-columns:1fr;}
+      .exec-ranking-grid{grid-template-columns:1fr;}
+      .exec-bar-row{grid-template-columns:140px 1fr 52px;}
+    }
+    @media(max-width:640px){
+      .exec-kpi-grid{grid-template-columns:1fr;}
+      .exec-bar-row{grid-template-columns:1fr;gap:6px;}
+      .exec-bar-value{text-align:right;}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function execTaskStatus(t){
+  if(isLate(t)) return 'متأخرة';
+  return t.status || 'قيد التنفيذ';
+}
+
+function execTasksForSector(sectorId){
+  const sectorUsers=(state.users||[]).filter(u=>u.is_active!==false && u.sector_id===sectorId).map(u=>u.id);
+  const sectorTaskIds=new Set((state.assignees||[]).filter(a=>sectorUsers.includes(a.user_id)).map(a=>a.task_id));
+  return uniqueTasks(visibleTasks().filter(t=>
+    sectorTaskIds.has(t.id) ||
+    t.owner_sector_id===sectorId ||
+    t.target_sector_id===sectorId ||
+    sectorUsers.includes(t.primary_responsible_id)
+  ));
+}
+
+function execTasksForDepartment(deptId){
+  const deptUsers=(state.users||[]).filter(u=>u.is_active!==false && u.department_id===deptId).map(u=>u.id);
+  const deptTaskIds=new Set((state.assignees||[]).filter(a=>deptUsers.includes(a.user_id)).map(a=>a.task_id));
+  return uniqueTasks(visibleTasks().filter(t=>
+    deptTaskIds.has(t.id) ||
+    t.owner_department_id===deptId ||
+    t.target_department_id===deptId ||
+    deptUsers.includes(t.primary_responsible_id)
+  ));
+}
+
+function execCompletionPendingCount(){
+  return (state.tasks||[]).filter(t=>t.is_archived!==true && typeof taskIsCompletionPending==='function' && taskIsCompletionPending(t)).length;
+}
+
+function execPendingTasksCount(){
+  if(typeof getPendingTasks === 'function') return getPendingTasks().length;
+  return (state.tasks||[]).filter(t=>t.is_archived!==true && t.approval_status==='pending').length;
+}
+
+function execTransferPendingCount(){
+  return (state.transferRequests||[]).filter(r=>r.status==='pending').length;
+}
+
+function execTopEmployeeCounts(){
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  return users.map(u=>({
+    name:u.name||'—',
+    count:tasksForUser(u.id).length
+  })).filter(x=>x.count>0).sort((a,b)=>b.count-a.count);
+}
+
+function execTopDelayedDepartments(){
+  return (state.departments||[]).map(d=>{
+    const rows=execTasksForDepartment(d.id);
+    return {
+      name:d.name||'—',
+      sector:nameOfSector(d.sector_id),
+      count:rows.filter(isLate).length
+    };
+  }).filter(x=>x.count>0).sort((a,b)=>b.count-a.count).slice(0,5);
+}
+
+function execBarRows(items, valueKey='total', alt=false){
+  const max=Math.max(1,...items.map(x=>Number(x[valueKey]||0)));
+  return items.map(x=>{
+    const v=Number(x[valueKey]||0);
+    const pct=Math.max(2,Math.round(v/max*100));
+    return `<div class="exec-bar-row">
+      <div>${escapeHtml(x.name||'—')}</div>
+      <div class="exec-bar-track"><div class="exec-bar-fill ${alt?'alt':''}" style="width:${pct}%"></div></div>
+      <div class="exec-bar-value">${v}${x.suffix||''}</div>
+    </div>`;
+  }).join('') || '<div class="empty">لا توجد بيانات كافية للعرض.</div>';
+}
+
+function renderExecutiveIndicatorsPage(){
+  installExecutiveIndicatorsStyles();
+
+  const tasks=visibleTasks();
+  const total=tasks.length;
+  const done=tasks.filter(t=>t.status==='مكتملة').length;
+  const progress=tasks.filter(t=>execTaskStatus(t)==='قيد التنفيذ').length;
+  const late=tasks.filter(isLate).length;
+  const completionRate=total ? Math.round(done/total*100) : 0;
+  const pendingNew=execPendingTasksCount();
+  const pendingCompletion=execCompletionPendingCount();
+  const pendingTransfers=execTransferPendingCount();
+
+  const sectorRows=(state.sectors||[]).map(s=>{
+    const rows=execTasksForSector(s.id);
+    return {
+      id:s.id,
+      name:s.name||'—',
+      total:rows.length,
+      done:rows.filter(t=>t.status==='مكتملة').length,
+      progress:rows.filter(t=>execTaskStatus(t)==='قيد التنفيذ').length,
+      late:rows.filter(isLate).length,
+      rate:rows.length ? Math.round(rows.filter(t=>t.status==='مكتملة').length/rows.length*100) : 0
+    };
+  }).sort((a,b)=>b.total-a.total);
+
+  const sectorRateRows=[...sectorRows].sort((a,b)=>b.rate-a.rate).map(x=>({name:x.name,total:x.rate,suffix:'%'}));
+
+  const topEmployees=execTopEmployeeCounts();
+  const mostEmployees=topEmployees.slice(0,5);
+  const leastEmployees=[...topEmployees].sort((a,b)=>a.count-b.count).slice(0,5);
+  const delayedDepartments=execTopDelayedDepartments();
+
+  const allStatus=done+progress+late;
+  const doneDeg=allStatus?Math.round(done/allStatus*360):0;
+  const progressDeg=allStatus?Math.round(progress/allStatus*360):0;
+  const lateDeg=360-doneDeg-progressDeg;
+
+  const donutStyle=allStatus
+    ? `background:conic-gradient(#2f9f8f 0deg ${doneDeg}deg, var(--primary) ${doneDeg}deg ${doneDeg+progressDeg}deg, #c95656 ${doneDeg+progressDeg}deg 360deg);`
+    : `background:#f2ebe6;`;
+
+  $('executiveSection').innerHTML=`
+    <section class="panel card">
+      <div class="exec-indicators-page">
+        <div class="exec-indicators-title">
+          <div>
+            <h2>المؤشرات التنفيذية</h2>
+            <p class="meta">لوحة مختصرة للرئيس التنفيذي ومدير النظام تعرض الأرقام والرسوم دون تفاصيل المهام.</p>
+          </div>
+          <span class="badge">عرض مؤشرات فقط</span>
+        </div>
+
+        <div class="exec-kpi-grid">
+          <div class="exec-kpi-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div>
+          <div class="exec-kpi-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
+          <div class="exec-kpi-card"><span>مكتملة</span><strong>${done}</strong><small>تم إنجازها واعتمادها</small></div>
+          <div class="exec-kpi-card"><span>متأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div>
+          <div class="exec-kpi-card"><span>نسبة الإنجاز العامة</span><strong>${completionRate}%</strong><small>المكتمل من إجمالي المهام</small></div>
+          <div class="exec-kpi-card"><span>مهام بانتظار الاعتماد</span><strong>${pendingNew}</strong><small>مهام جديدة لم تعتمد بعد</small></div>
+          <div class="exec-kpi-card"><span>إكمال بانتظار الاعتماد</span><strong>${pendingCompletion}</strong><small>طلبات اعتماد الإنجاز</small></div>
+          <div class="exec-kpi-card"><span>تحويل بانتظار الاعتماد</span><strong>${pendingTransfers}</strong><small>طلبات تحويل معلقة</small></div>
+        </div>
+
+        <div class="exec-visual-grid">
+          <div class="exec-chart-card">
+            <h3>إجمالي المهام حسب القطاع</h3>
+            <div class="exec-bar-list">
+              ${execBarRows(sectorRows.map(x=>({name:x.name,total:x.total})))}
+            </div>
+          </div>
+
+          <div class="exec-chart-card">
+            <h3>توزيع حالات المهام</h3>
+            <div class="exec-donut-wrap">
+              <div class="exec-donut" style="${donutStyle}">
+                <div class="exec-donut-center">${total}<small>مهمة</small></div>
+              </div>
+              <div class="exec-legend">
+                <span><i class="exec-dot green"></i>مكتملة: ${done}</span>
+                <span><i class="exec-dot"></i>قيد التنفيذ: ${progress}</span>
+                <span><i class="exec-dot red"></i>متأخرة: ${late}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="exec-chart-card">
+          <h3>نسبة الإنجاز حسب القطاع</h3>
+          <div class="exec-bar-list">
+            ${execBarRows(sectorRateRows,'total',true)}
+          </div>
+        </div>
+
+        <div class="exec-ranking-grid">
+          <div class="exec-chart-card">
+            <h3>أكثر 5 موظفين لديهم مهام</h3>
+            <div class="exec-rank-list">
+              ${mostEmployees.map(x=>`<div class="exec-rank-item"><span>${escapeHtml(x.name)}</span><strong>${x.count}</strong></div>`).join('') || '<div class="empty">لا توجد بيانات.</div>'}
+            </div>
+          </div>
+
+          <div class="exec-chart-card">
+            <h3>أقل 5 موظفين لديهم مهام</h3>
+            <div class="exec-rank-list">
+              ${leastEmployees.map(x=>`<div class="exec-rank-item"><span>${escapeHtml(x.name)}</span><strong>${x.count}</strong></div>`).join('') || '<div class="empty">لا توجد بيانات.</div>'}
+            </div>
+          </div>
+
+          <div class="exec-chart-card">
+            <h3>أكثر الأقسام لديها مهام متأخرة</h3>
+            <div class="exec-rank-list">
+              ${delayedDepartments.map(x=>`<div class="exec-rank-item"><span>${escapeHtml(x.name)}<br><small class="meta">${escapeHtml(x.sector||'—')}</small></span><strong>${x.count}</strong></div>`).join('') || '<div class="empty">لا توجد متأخرات حالياً.</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
+function updateExecutiveIndicatorsButton(){
+  const btn=$('tabExecutiveFollow');
+  if(btn){
+    btn.textContent='المؤشرات التنفيذية';
+    btn.setAttribute('onclick',"showPage('executiveFollow')");
+  }
+
+  const innerNav=$('executiveInnerNav');
+  if(innerNav){
+    [...innerNav.querySelectorAll('.btn')].forEach(btn=>{
+      if(btn.textContent.trim()==='متابعة القطاعات'){
+        btn.textContent='المؤشرات التنفيذية';
+      }
+    });
+  }
+}
+
+const __execIndicatorsEnsureButton = ensureExecutiveFollowPageButton;
+ensureExecutiveFollowPageButton = function(){
+  __execIndicatorsEnsureButton();
+  updateExecutiveIndicatorsButton();
+};
+
+showExecutiveFollowPage = function(){
+  if(!(typeof isAdminOrCeo==='function' && isAdminOrCeo())){
+    showToast('عذرًا، هذه الصفحة مخصصة للرئيس التنفيذي أو مدير النظام فقط.','error');
+    return;
+  }
+
+  ensureFullHrFeatureDom();
+  ensureExecutiveFollowPageButton();
+  updateExecutiveIndicatorsButton();
+
+  const pages = ['tasks','dashboard','performance','org','admin'];
+  pages.forEach(x=>{
+    $(x+'Page')?.classList.add('hidden');
+    $('tab'+x[0].toUpperCase()+x.slice(1))?.classList.remove('active');
+  });
+
+  $('executiveSection')?.classList.remove('hidden');
+  $('tabExecutiveFollow')?.classList.add('active');
+
+  renderExecutiveIndicatorsPage();
+
+  updateExecutiveIndicatorsButton();
+};
+
+const __execIndicatorsShowPage = showPage;
+showPage = function(p){
+  if(p==='executiveFollow'){
+    showExecutiveFollowPage();
+    return;
+  }
+
+  $('executiveSection')?.classList.add('hidden');
+  $('tabExecutiveFollow')?.classList.remove('active');
+
+  __execIndicatorsShowPage(p);
+  updateExecutiveIndicatorsButton();
+};
+
+const __execIndicatorsShowApp = showApp;
+showApp = function(){
+  __execIndicatorsShowApp();
+  ensureExecutiveFollowPageButton();
+  updateExecutiveIndicatorsButton();
+};
+
 init();
 </script>
 </body>
