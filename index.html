@@ -13449,6 +13449,198 @@ showPage = function(p){
   }
 };
 
+
+/* === PATCH: إصلاح رابط تعيين/استعادة كلمة المرور ورسالة الخطأ {} === */
+function authErrorMessage(error, fallback='حدث خطأ غير متوقع. حاول مرة أخرى.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error.message) return error.message;
+  if(error.error_description) return error.error_description;
+  if(error.error) return error.error;
+  if(error.status === 429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error.status === 400) return 'الرابط غير صالح أو منتهي الصلاحية. أرسل رابطًا جديدًا لإعادة تعيين كلمة المرور.';
+  return fallback;
+}
+
+const __safeShowNotice = showNotice;
+showNotice = function(msg, type='info'){
+  const safeMsg = (typeof msg === 'object') ? authErrorMessage(msg) : (msg || 'حدث خطأ غير متوقع.');
+  __safeShowNotice(safeMsg, type);
+};
+
+function passwordRecoveryRedirectUrl(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+async function sendPasswordRecovery(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('فضلاً أدخل البريد الإلكتروني.','error');
+
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{
+    redirectTo: passwordRecoveryRedirectUrl()
+  });
+
+  if(error) return showNotice(authErrorMessage(error,'تعذر إرسال رابط الاستعادة. تأكد من البريد وحاول مرة أخرى.'),'error');
+
+  showAuthView('login');
+  showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+}
+
+async function resetPassword(){
+  const email=$('loginEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('اكتب بريدك أولاً.','error');
+
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{
+    redirectTo: passwordRecoveryRedirectUrl()
+  });
+
+  showNotice(error ? authErrorMessage(error,'تعذر إرسال رابط الاستعادة.') : 'تم إرسال رابط استعادة كلمة المرور.','info');
+}
+
+function isRecoveryUrl(){
+  const hashText=location.hash || '';
+  const query=new URLSearchParams(location.search);
+  const hash=new URLSearchParams(hashText.replace(/^#/,''));
+  return (
+    query.get('type')==='recovery' ||
+    hash.get('type')==='recovery' ||
+    hashText.includes('type=recovery') ||
+    location.search.includes('type=recovery') ||
+    query.has('code') ||
+    hash.has('access_token')
+  );
+}
+
+function showRecoveryLinkError(message){
+  ensureFullHrFeatureDom();
+  showAuthOnly();
+  showForgotPasswordView();
+  showNotice(message || 'الرابط غير صالح أو منتهي الصلاحية. أرسل رابطًا جديدًا لإعادة تعيين كلمة المرور.','error');
+}
+
+init = async function(){
+  ensureFullHrFeatureDom();
+
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      state.session=session;
+      state.profile=null;
+      showPasswordSetup();
+      if($('passwordSetupNotice')){
+        $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+        $('passwordSetupNotice').className='notice info show';
+      }
+    }
+  });
+
+  const url=new URL(location.href);
+
+  if(url.searchParams.get('view')==='executive'){
+    if(url.searchParams.get('token')==='7700'){
+      await loadExecutiveDirectDashboard();
+      return;
+    }
+    showAuthOnly();
+    showNotice('رابط المتابعة غير صحيح أو رمز الدخول غير صحيح.','error');
+    return;
+  }
+
+  const code=url.searchParams.get('code');
+
+  if(code){
+    const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code);
+    if(error){
+      showRecoveryLinkError(authErrorMessage(error,'رابط تعيين كلمة المرور غير صالح أو منتهي الصلاحية. أرسل رابطًا جديدًا.'));
+      return;
+    }
+
+    if(data?.session){
+      state.session=data.session;
+      state.profile=null;
+      showPasswordSetup();
+      if($('passwordSetupNotice')){
+        $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+        $('passwordSetupNotice').className='notice info show';
+      }
+      history.replaceState({},document.title,location.pathname);
+      return;
+    }
+  }
+
+  const {data}=await supabaseClient.auth.getSession();
+
+  if(isRecoveryUrl()){
+    if(data?.session){
+      state.session=data.session;
+      state.profile=null;
+      showPasswordSetup();
+      if($('passwordSetupNotice')){
+        $('passwordSetupNotice').textContent='فضلاً أدخل كلمة المرور الجديدة.';
+        $('passwordSetupNotice').className='notice info show';
+      }
+      history.replaceState({},document.title,location.pathname);
+      return;
+    }
+
+    showRecoveryLinkError('لم يتم تفعيل رابط تعيين كلمة المرور. قد يكون الرابط منتهي الصلاحية أو تم استخدامه مسبقًا. أرسل رابطًا جديدًا من صفحة استعادة كلمة المرور.');
+    return;
+  }
+
+  state.session=data.session;
+  if(state.session){
+    const ok=await bootstrap();
+    if(!ok) showAuthOnly();
+  }else{
+    showAuthOnly();
+  }
+};
+
+completePasswordSetup = async function(){
+  const p=$('newPassword').value;
+  const p2=$('newPassword2').value;
+  const notice=$('passwordSetupNotice');
+
+  if(!p||!p2){
+    notice.textContent='فضلاً أدخل كلمة المرور وتأكيدها.';
+    notice.className='notice error show';
+    return;
+  }
+
+  if(p.length<8){
+    notice.textContent='كلمة المرور يجب ألا تقل عن 8 أحرف.';
+    notice.className='notice error show';
+    return;
+  }
+
+  if(p!==p2){
+    notice.textContent='كلمتا المرور غير متطابقتان.';
+    notice.className='notice error show';
+    return;
+  }
+
+  const {error}=await supabaseClient.auth.updateUser({password:p});
+  if(error){
+    notice.textContent=authErrorMessage(error,'تعذر تحديث كلمة المرور. أرسل رابطًا جديدًا وحاول مرة أخرى.');
+    notice.className='notice error show';
+    return;
+  }
+
+  if(state.profile?.id){
+    await supabaseClient.from('users').update({must_set_password:false}).eq('id',state.profile.id);
+    state.profile.must_set_password=false;
+    await loadAll();
+    setupFilters();
+    showApp();
+    showPage('tasks');
+  }else{
+    await supabaseClient.auth.signOut();
+    history.replaceState({},document.title,location.pathname);
+    showAuthOnly();
+    showAuthView('login');
+    showNotice('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','success');
+  }
+};
+
 init();
 </script>
 </body>
