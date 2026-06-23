@@ -14258,6 +14258,165 @@ async function resetPassword(){
   }
 }
 
+
+/* === STABLE PATCH: استرجاع طريقة أمس لإرسال روابط كلمة المرور + رسائل خطأ واضحة === */
+/* تم إلغاء الاعتماد على resetPasswordForEmail من المتصفح لأنه سبب فشل صامت/{} في بعض الحسابات.
+   الإرسال يعود عبر Edge Function admin-import-users كما كان يعمل، مع تحسين عرض الخطأ فقط. */
+
+function stableErrorText(error, fallback='تعذر تنفيذ العملية.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error.message) return error.message;
+  if(error.error_description) return error.error_description;
+  if(error.error) return error.error;
+  if(error.details) return error.details;
+  if(error.hint) return error.hint;
+  if(error.code) return error.code;
+  if(error.context){
+    const c=error.context;
+    if(typeof c === 'string') return c;
+    if(c.message) return c.message;
+    if(c.error_description) return c.error_description;
+    if(c.error) return c.error;
+    if(c.details) return c.details;
+  }
+  if(error.status===429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error.status===400) return 'تعذر إرسال الرابط. تأكد من إعدادات Supabase Auth وروابط التحويل.';
+  try{
+    const s=JSON.stringify(error);
+    if(s && s!=='{}' && s!=='[]') return s;
+  }catch(_){}
+  return fallback;
+}
+
+function stableToast(message,type='info',timeout=5000){
+  const host=$('toastHost') || document.body;
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  el.textContent=(typeof message==='object') ? stableErrorText(message) : (message || 'تعذر تنفيذ العملية.');
+  host.appendChild(el);
+  setTimeout(()=>el.remove(),timeout);
+}
+
+showToast = stableToast;
+
+showNotice = function(msg,type='info'){
+  const el=$('authNotice');
+  if(!el) return;
+  el.textContent=(typeof msg==='object') ? stableErrorText(msg) : (msg || 'تعذر تنفيذ العملية.');
+  el.className=`notice ${type} show`;
+};
+
+function stablePasswordRedirectUrl(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+function stableExtractInviteFailure(data){
+  if(!data) return '';
+  if(data.error) return stableErrorText(data.error);
+  const failed=(data.results||[]).filter(r=>!r.success);
+  if(failed.length) return failed[0].error || failed[0].message || 'فشل إرسال الرابط.';
+  return '';
+}
+
+async function stableSendPasswordResetEmails(emails){
+  const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{
+    body:{
+      action:'send_password_reset',
+      emails:emails.map(e=>String(e).trim().toLowerCase()),
+      redirect_to:stablePasswordRedirectUrl()
+    }
+  });
+
+  if(error) throw new Error(stableErrorText(error,'تعذر الاتصال بدالة إرسال رابط كلمة المرور.'));
+  const failure=stableExtractInviteFailure(data);
+  if(failure) throw new Error(failure);
+  return data;
+}
+
+sendPasswordSetupNotification = async function(email){
+  try{
+    if(!email) return showToast('لا يوجد بريد للمستخدم.','error');
+    const ok=await askConfirm({
+      title:'إرسال إشعار تعيين كلمة المرور',
+      message:`سيتم إرسال بريد للمستخدم:\n${email}\n\nسيحتوي البريد على رابط لتعيين كلمة المرور والدخول للنظام. هل تريد المتابعة؟`,
+      okText:'إرسال الإشعار',
+      danger:false
+    });
+    if(!ok) return;
+
+    await stableSendPasswordResetEmails([email]);
+    showToast('تم إرسال رابط تعيين كلمة المرور بنجاح.','success');
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error('sendPasswordSetupNotification:', e);
+    showToast(stableErrorText(e,'تعذر إرسال رابط تعيين كلمة المرور.'),'error',10000);
+  }
+};
+
+sendPendingUserInvites = async function(){
+  try{
+    const rows=getUsersNeedingPasswordSetup();
+    if(!rows.length) return showToast('لا يوجد مستخدمون بحاجة إلى إشعار تعيين كلمة المرور.','info');
+
+    const ok=await askConfirm({
+      title:'إرسال إشعارات تعيين كلمة المرور',
+      message:`سيتم إرسال إشعار تعيين كلمة المرور إلى ${rows.length} مستخدم.\n\nهل تريد المتابعة؟`,
+      okText:'إرسال الإشعارات',
+      danger:false,
+      requireText:'إرسال',
+      inputLabel:'للتأكيد اكتب كلمة إرسال'
+    });
+    if(!ok) return;
+
+    const emails=rows.map(u=>u.email).filter(Boolean);
+    const data=await stableSendPasswordResetEmails(emails);
+    const summary=data?.summary||{};
+    showToast(`تم إرسال الإشعارات. نجح ${summary.success ?? emails.length}، فشل ${summary.failed ?? 0}.`,'success',8000);
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error('sendPendingUserInvites:', e);
+    showToast(stableErrorText(e,'تعذر إرسال الإشعارات.'),'error',12000);
+  }
+};
+
+/* زر نسيت كلمة المرور: نستعمل نفس دالة السيرفر بدل resetPasswordForEmail من المتصفح */
+sendPasswordRecovery = async function(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('فضلاً أدخل البريد الإلكتروني.','error');
+
+  try{
+    await stableSendPasswordResetEmails([email]);
+    showAuthView('login');
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('sendPasswordRecovery:', e);
+    showNotice(stableErrorText(e,'تعذر إرسال رابط الاستعادة.'),'error');
+  }
+};
+
+resetPassword = async function(){
+  const email=$('loginEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('اكتب بريدك أولاً.','error');
+
+  try{
+    await stableSendPasswordResetEmails([email]);
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('resetPassword:', e);
+    showNotice(stableErrorText(e,'تعذر إرسال رابط الاستعادة.'),'error');
+  }
+};
+
+function stableIsRecoveryUrl(){
+  const hashText=location.hash||'';
+  const query=new URLSearchParams(location.search);
+  const hash=new URLSearchParams(hashText.replace(/^#/,''));
+  return query.get('type')==='recovery' || hash.get('type')==='recovery' || query.has('code') || hash.has('access_token') || hashText.includes('type=recovery');
+}
+
 init();
 </script>
 </body>
