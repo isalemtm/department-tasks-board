@@ -14544,6 +14544,147 @@ resetPassword = async function(){
   }
 };
 
+
+/* === FINAL PASSWORD DEBUG PATCH v20260623-01 === */
+const PASSWORD_FIX_BUILD = 'password-fix-v20260623-01';
+
+function showPasswordFixBuildBadge(){
+  try{
+    if(document.getElementById('passwordFixBuildBadge')) return;
+    const badge=document.createElement('div');
+    badge.id='passwordFixBuildBadge';
+    badge.textContent='إصدار إصلاح كلمة المرور: ' + PASSWORD_FIX_BUILD;
+    badge.style.cssText='position:fixed;left:10px;bottom:10px;z-index:99999;background:#6b4a3d;color:#fff;border-radius:999px;padding:7px 12px;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.12);opacity:.85';
+    document.body.appendChild(badge);
+  }catch(e){}
+}
+
+function passwordFixText(error, fallback='تعذر تنفيذ العملية.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error instanceof Error && error.message) return error.message;
+  const keys = ['message','error_description','error','details','hint','code','statusText','name'];
+  for(const k of keys){
+    if(error && error[k]) return String(error[k]);
+  }
+  if(error && error.context){
+    for(const k of keys){
+      if(error.context[k]) return String(error.context[k]);
+    }
+  }
+  if(error && error.status === 429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error && error.status === 400) return 'تعذر إرسال الرابط. راجع إعدادات Authentication > URL Configuration و Email SMTP في Supabase.';
+  try{
+    const s = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    if(s && s !== '{}' && s !== '[]') return s;
+  }catch(_){}
+  return fallback + ' لم يرجع النظام تفاصيل إضافية. افتح Console أو Logs لمعرفة السبب.';
+}
+
+window.addEventListener('error', function(e){
+  console.error('Global error:', e.error || e.message);
+});
+
+window.addEventListener('unhandledrejection', function(e){
+  console.error('Unhandled rejection:', e.reason);
+  try{
+    if($('authSection') && !$('authSection').classList.contains('hidden')){
+      showNotice(passwordFixText(e.reason,'حدث خطأ غير معالج أثناء إرسال الرابط.'),'error');
+    }else{
+      showToast(passwordFixText(e.reason,'حدث خطأ غير معالج.'),'error',12000);
+    }
+  }catch(_){}
+});
+
+function showNotice(msg,type='info'){
+  const el=$('authNotice');
+  if(!el) return;
+  el.textContent = passwordFixText(msg, typeof msg === 'string' ? msg : 'تعذر تنفيذ العملية.');
+  el.className=`notice ${type} show`;
+}
+
+function showToast(message,type='info',timeout=5000){
+  const host=$('toastHost') || document.body;
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  el.textContent = passwordFixText(message, typeof message === 'string' ? message : 'تعذر تنفيذ العملية.');
+  host.appendChild(el);
+  setTimeout(()=>el.remove(),timeout);
+}
+
+function passwordFixRedirectUrl(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+async function passwordFixSendReset(email){
+  const cleanEmail=String(email||'').trim().toLowerCase();
+  if(!cleanEmail) throw new Error('فضلاً أدخل البريد الإلكتروني.');
+  const result = await supabaseClient.auth.resetPasswordForEmail(cleanEmail,{
+    redirectTo: passwordFixRedirectUrl()
+  });
+  if(result.error) throw result.error;
+  return result;
+}
+
+sendPasswordRecovery = async function(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  try{
+    await passwordFixSendReset(email);
+    showAuthView('login');
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('sendPasswordRecovery error details:', e);
+    showNotice(passwordFixText(e,'تعذر إرسال رابط الاستعادة.'),'error');
+  }
+};
+
+resetPassword = async function(){
+  const email=$('loginEmail')?.value?.trim().toLowerCase();
+  try{
+    await passwordFixSendReset(email);
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('resetPassword error details:', e);
+    showNotice(passwordFixText(e,'تعذر إرسال رابط الاستعادة.'),'error');
+  }
+};
+
+sendPasswordSetupNotification = async function(email){
+  try{
+    if(!email) return showToast('لا يوجد بريد للمستخدم.','error');
+
+    const ok=await askConfirm({
+      title:'إرسال رابط تعيين كلمة المرور',
+      message:`سيتم إرسال رابط تعيين كلمة المرور إلى:\n${email}\n\nهل تريد المتابعة؟`,
+      okText:'إرسال الرابط',
+      danger:false
+    });
+    if(!ok) return;
+
+    await passwordFixSendReset(email);
+    showToast('تم إرسال رابط تعيين كلمة المرور بنجاح.','success');
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error('sendPasswordSetupNotification error details:', e);
+    showToast(passwordFixText(e,'تعذر إرسال رابط تعيين كلمة المرور.'),'error',12000);
+  }
+};
+
+const __passwordFixShowAuthOnly = showAuthOnly;
+showAuthOnly = function(){
+  __passwordFixShowAuthOnly();
+  showPasswordFixBuildBadge();
+};
+
+const __passwordFixShowApp = showApp;
+showApp = function(){
+  __passwordFixShowApp();
+  showPasswordFixBuildBadge();
+};
+
+setTimeout(showPasswordFixBuildBadge, 500);
+
 init();
 </script>
 </body>
