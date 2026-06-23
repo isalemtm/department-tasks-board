@@ -14417,6 +14417,133 @@ function stableIsRecoveryUrl(){
   return query.get('type')==='recovery' || hash.get('type')==='recovery' || query.has('code') || hash.has('access_token') || hashText.includes('type=recovery');
 }
 
+
+/* === PATCH: إلغاء Edge Function في روابط كلمة المرور والاعتماد على Supabase Auth مباشرة === */
+/* سبب التعديل: Edge Function admin-import-users ترجع non-2xx، والمستخدم موجود في auth.users، لذلك الإرسال يجب أن يتم عبر resetPasswordForEmail مباشرة. */
+function passwordDirectError(error, fallback='تعذر إرسال رابط كلمة المرور.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error.message) return error.message;
+  if(error.error_description) return error.error_description;
+  if(error.error) return error.error;
+  if(error.details) return error.details;
+  if(error.hint) return error.hint;
+  if(error.status === 429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error.status === 400) return 'تعذر إرسال الرابط. تأكد من أن البريد موجود في Authentication وأن روابط التحويل في Supabase صحيحة.';
+  try{
+    const s=JSON.stringify(error);
+    if(s && s!=='{}' && s!=='[]') return s;
+  }catch(_){}
+  return fallback;
+}
+
+function passwordDirectRedirect(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+async function passwordDirectSend(email){
+  return await supabaseClient.auth.resetPasswordForEmail(String(email).trim().toLowerCase(),{
+    redirectTo: passwordDirectRedirect()
+  });
+}
+
+sendPasswordSetupNotification = async function(email){
+  try{
+    if(!email) return showToast('لا يوجد بريد للمستخدم.','error');
+
+    const ok=await askConfirm({
+      title:'إرسال رابط تعيين كلمة المرور',
+      message:`سيتم إرسال رابط تعيين كلمة المرور إلى:\n${email}\n\nهل تريد المتابعة؟`,
+      okText:'إرسال الرابط',
+      danger:false
+    });
+    if(!ok) return;
+
+    const {error}=await passwordDirectSend(email);
+    if(error) throw new Error(passwordDirectError(error));
+
+    showToast('تم إرسال رابط تعيين كلمة المرور بنجاح.','success');
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error('sendPasswordSetupNotification direct error:', e);
+    showToast(e.message || 'تعذر إرسال رابط تعيين كلمة المرور.','error',10000);
+  }
+};
+
+sendPendingUserInvites = async function(){
+  try{
+    const rows=getUsersNeedingPasswordSetup();
+    if(!rows.length) return showToast('لا يوجد مستخدمون بحاجة إلى إشعار تعيين كلمة المرور.','info');
+
+    const ok=await askConfirm({
+      title:'إرسال روابط تعيين كلمة المرور',
+      message:`سيتم إرسال روابط تعيين كلمة المرور إلى ${rows.length} مستخدم.\n\nهل تريد المتابعة؟`,
+      okText:'إرسال الروابط',
+      danger:false,
+      requireText:'إرسال',
+      inputLabel:'للتأكيد اكتب كلمة إرسال'
+    });
+    if(!ok) return;
+
+    let success=0, failed=0, firstError='';
+
+    for(const u of rows){
+      if(!u.email) continue;
+      const {error}=await passwordDirectSend(u.email);
+      if(error){
+        failed++;
+        if(!firstError) firstError=`${u.email}: ${passwordDirectError(error)}`;
+        console.error('password direct bulk error:', u.email, error);
+      }else{
+        success++;
+      }
+      await new Promise(resolve=>setTimeout(resolve,350));
+    }
+
+    if(failed){
+      showToast(`تم الإرسال جزئيًا. نجح ${success}، فشل ${failed}. أول خطأ: ${firstError}`,'error',12000);
+    }else{
+      showToast(`تم إرسال الروابط بنجاح. نجح ${success}.`,'success',8000);
+    }
+
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error('sendPendingUserInvites direct error:', e);
+    showToast(e.message || 'تعذر إرسال الروابط.','error',10000);
+  }
+};
+
+sendPasswordRecovery = async function(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('فضلاً أدخل البريد الإلكتروني.','error');
+
+  try{
+    const {error}=await passwordDirectSend(email);
+    if(error) throw new Error(passwordDirectError(error));
+    showAuthView('login');
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('sendPasswordRecovery direct error:', e);
+    showNotice(e.message || 'تعذر إرسال رابط الاستعادة.','error');
+  }
+};
+
+resetPassword = async function(){
+  const email=$('loginEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('اكتب بريدك أولاً.','error');
+
+  try{
+    const {error}=await passwordDirectSend(email);
+    if(error) throw new Error(passwordDirectError(error));
+    showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+  }catch(e){
+    console.error('resetPassword direct error:', e);
+    showNotice(e.message || 'تعذر إرسال رابط الاستعادة.','error');
+  }
+};
+
 init();
 </script>
 </body>
