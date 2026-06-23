@@ -14546,19 +14546,6 @@ resetPassword = async function(){
 
 
 /* === FINAL PASSWORD DEBUG PATCH v20260623-01 === */
-const PASSWORD_FIX_BUILD = 'password-fix-v20260623-01';
-
-function showPasswordFixBuildBadge(){
-  try{
-    if(document.getElementById('passwordFixBuildBadge')) return;
-    const badge=document.createElement('div');
-    badge.id='passwordFixBuildBadge';
-    badge.textContent='إصدار إصلاح كلمة المرور: ' + PASSWORD_FIX_BUILD;
-    badge.style.cssText='position:fixed;left:10px;bottom:10px;z-index:99999;background:#6b4a3d;color:#fff;border-radius:999px;padding:7px 12px;font-size:12px;box-shadow:0 8px 18px rgba(0,0,0,.12);opacity:.85';
-    document.body.appendChild(badge);
-  }catch(e){}
-}
-
 function passwordFixText(error, fallback='تعذر تنفيذ العملية.'){
   if(!error) return fallback;
   if(typeof error === 'string') return error;
@@ -14671,19 +14658,6 @@ sendPasswordSetupNotification = async function(email){
   }
 };
 
-const __passwordFixShowAuthOnly = showAuthOnly;
-showAuthOnly = function(){
-  __passwordFixShowAuthOnly();
-  showPasswordFixBuildBadge();
-};
-
-const __passwordFixShowApp = showApp;
-showApp = function(){
-  __passwordFixShowApp();
-  showPasswordFixBuildBadge();
-};
-
-setTimeout(showPasswordFixBuildBadge, 500);
 
 init();
 </script>
