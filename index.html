@@ -13710,6 +13710,254 @@ function taskActionRequestsForCurrentUser(){
   return {pendingTasks, completionTasks, transferRequests};
 }
 
+
+/* === FINAL PATCH: إصلاح نهائي لرابط تعيين/استعادة كلمة المرور ورسالة {} === */
+function formatAuthError(error, fallback='تعذر تنفيذ العملية. حاول مرة أخرى.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error.message) return error.message;
+  if(error.error_description) return error.error_description;
+  if(error.error) return error.error;
+  if(error.status === 429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error.status === 400) return 'الرابط غير صالح أو منتهي الصلاحية. أرسل رابطًا جديدًا لإعادة تعيين كلمة المرور.';
+  return fallback;
+}
+
+showNotice = function(msg, type='info'){
+  const el=$('authNotice');
+  if(!el) return;
+  const text = (typeof msg === 'object') ? formatAuthError(msg) : (msg || 'تعذر تنفيذ العملية. حاول مرة أخرى.');
+  el.textContent = text;
+  el.className = `notice ${type} show`;
+};
+
+function resetRedirectTo(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+function ensureForgotPasswordUI(){
+  ensureFullHrFeatureDom?.();
+
+  if($('authSection') && !$('forgotPasswordView')){
+    $('loginView')?.insertAdjacentHTML('afterend', `
+      <div id="forgotPasswordView" class="hidden">
+        <h2 class="auth-title">استعادة كلمة المرور</h2>
+        <div class="form-group">
+          <label>البريد الإلكتروني</label>
+          <input id="recoveryEmail" type="email" placeholder="example@rasf.sa">
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" onclick="sendPasswordRecovery()">إرسال رابط الاستعادة</button>
+          <button class="btn" onclick="showAuthView('login')">العودة لتسجيل الدخول</button>
+        </div>
+        <p class="meta">سيتم إرسال رابط إلى بريدك لتعيين كلمة مرور جديدة.</p>
+      </div>
+    `);
+  }
+
+  const forgotBtn=document.querySelector('#loginView .link');
+  if(forgotBtn){
+    forgotBtn.setAttribute('onclick','showForgotPasswordView()');
+  }
+}
+
+showForgotPasswordView = function(){
+  ensureForgotPasswordUI();
+  $('loginView')?.classList.add('hidden');
+  $('requestView')?.classList.add('hidden');
+  $('forgotPasswordView')?.classList.remove('hidden');
+  $('loginTab')?.classList.remove('active');
+  $('requestTab')?.classList.remove('active');
+  if($('recoveryEmail')) $('recoveryEmail').value=$('loginEmail')?.value?.trim()||'';
+};
+
+showAuthView = function(v){
+  ensureForgotPasswordUI();
+  $('loginView')?.classList.toggle('hidden',v!=='login');
+  $('requestView')?.classList.toggle('hidden',v!=='request');
+  $('forgotPasswordView')?.classList.add('hidden');
+  $('loginTab')?.classList.toggle('active',v==='login');
+  $('requestTab')?.classList.toggle('active',v==='request');
+};
+
+sendPasswordRecovery = async function(){
+  const email=$('recoveryEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('فضلاً أدخل البريد الإلكتروني.','error');
+
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{
+    redirectTo: resetRedirectTo()
+  });
+
+  if(error){
+    console.error('Password recovery error:', error);
+    return showNotice(formatAuthError(error,'تعذر إرسال رابط الاستعادة. تأكد من البريد وحاول مرة أخرى.'),'error');
+  }
+
+  showAuthView('login');
+  showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+};
+
+resetPassword = async function(){
+  const email=$('loginEmail')?.value?.trim().toLowerCase();
+  if(!email) return showNotice('اكتب بريدك أولاً.','error');
+
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{
+    redirectTo: resetRedirectTo()
+  });
+
+  if(error){
+    console.error('Reset password error:', error);
+    return showNotice(formatAuthError(error,'تعذر إرسال رابط الاستعادة. تأكد من البريد وحاول مرة أخرى.'),'error');
+  }
+
+  showNotice('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.','success');
+};
+
+function recoveryRequestedInUrl(){
+  const query=new URLSearchParams(location.search);
+  const hashText=location.hash||'';
+  const hash=new URLSearchParams(hashText.replace(/^#/,''));
+  return (
+    query.get('type')==='recovery' ||
+    hash.get('type')==='recovery' ||
+    query.has('code') ||
+    hash.has('access_token') ||
+    hashText.includes('type=recovery')
+  );
+}
+
+function showPasswordSetupWithMessage(msg='فضلاً أدخل كلمة المرور الجديدة.'){
+  showPasswordSetup();
+  if($('passwordSetupNotice')){
+    $('passwordSetupNotice').textContent=msg;
+    $('passwordSetupNotice').className='notice info show';
+  }
+}
+
+completePasswordSetup = async function(){
+  const p=$('newPassword')?.value || '';
+  const p2=$('newPassword2')?.value || '';
+  const notice=$('passwordSetupNotice');
+
+  if(!p||!p2){
+    notice.textContent='فضلاً أدخل كلمة المرور وتأكيدها.';
+    notice.className='notice error show';
+    return;
+  }
+
+  if(p.length<8){
+    notice.textContent='كلمة المرور يجب ألا تقل عن 8 أحرف.';
+    notice.className='notice error show';
+    return;
+  }
+
+  if(p!==p2){
+    notice.textContent='كلمتا المرور غير متطابقتان.';
+    notice.className='notice error show';
+    return;
+  }
+
+  const {error}=await supabaseClient.auth.updateUser({password:p});
+  if(error){
+    console.error('Update password error:', error);
+    notice.textContent=formatAuthError(error,'تعذر تحديث كلمة المرور. أرسل رابطًا جديدًا وحاول مرة أخرى.');
+    notice.className='notice error show';
+    return;
+  }
+
+  try{
+    const {data}=await supabaseClient.auth.getUser();
+    const uid=state.profile?.id || data?.user?.id;
+    if(uid){
+      await supabaseClient.from('users').update({must_set_password:false}).eq('id',uid);
+    }
+  }catch(e){
+    console.warn('Could not update must_set_password flag:', e);
+  }
+
+  await supabaseClient.auth.signOut();
+  history.replaceState({},document.title,location.pathname);
+  showAuthOnly();
+  showAuthView('login');
+  showNotice('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','success');
+};
+
+init = async function(){
+  ensureFullHrFeatureDom?.();
+  ensureForgotPasswordUI();
+
+  supabaseClient.auth.onAuthStateChange((event, session)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      state.session=session;
+      state.profile=null;
+      showPasswordSetupWithMessage('فضلاً أدخل كلمة المرور الجديدة.');
+    }
+  });
+
+  const url=new URL(location.href);
+
+  if(url.searchParams.get('view')==='executive'){
+    if(url.searchParams.get('token')==='7700'){
+      await loadExecutiveDirectDashboard();
+      return;
+    }
+    showAuthOnly();
+    showNotice('رابط المتابعة غير صحيح أو رمز الدخول غير صحيح.','error');
+    return;
+  }
+
+  const code=url.searchParams.get('code');
+
+  if(code){
+    const {data,error}=await supabaseClient.auth.exchangeCodeForSession(code);
+    if(error){
+      console.error('exchangeCodeForSession error:', error);
+      ensureForgotPasswordUI();
+      showAuthOnly();
+      showForgotPasswordView();
+      showNotice(formatAuthError(error,'رابط تعيين كلمة المرور غير صالح أو منتهي الصلاحية. أرسل رابطًا جديدًا.'),'error');
+      return;
+    }
+
+    if(data?.session){
+      state.session=data.session;
+      state.profile=null;
+      history.replaceState({},document.title,location.pathname);
+      showPasswordSetupWithMessage('فضلاً أدخل كلمة المرور الجديدة.');
+      return;
+    }
+  }
+
+  const {data}=await supabaseClient.auth.getSession();
+
+  if(recoveryRequestedInUrl()){
+    if(data?.session){
+      state.session=data.session;
+      state.profile=null;
+      history.replaceState({},document.title,location.pathname);
+      showPasswordSetupWithMessage('فضلاً أدخل كلمة المرور الجديدة.');
+      return;
+    }
+
+    ensureForgotPasswordUI();
+    showAuthOnly();
+    showForgotPasswordView();
+    showNotice('الرابط غير صالح أو منتهي الصلاحية أو تم استخدامه سابقًا. أرسل رابطًا جديدًا لإعادة تعيين كلمة المرور.','error');
+    return;
+  }
+
+  state.session=data.session;
+
+  if(state.session){
+    const ok=await bootstrap();
+    if(!ok) showAuthOnly();
+  }else{
+    showAuthOnly();
+  }
+};
+
+ensureForgotPasswordUI();
+
 init();
 </script>
 </body>
