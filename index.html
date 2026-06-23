@@ -13641,6 +13641,75 @@ completePasswordSetup = async function(){
   }
 };
 
+
+/* === PATCH: اعتماد المهام الجديدة عند رئيس القطاع ومدير القسم إن وجد === */
+/* مدير القسم تظهر له مهام الاعتماد إذا كانت المهمة داخل قسمه من خلال:
+   owner/target department أو منشئ المهمة أو المسؤول الرئيسي أو أحد المسند إليهم. */
+function taskBelongsToDepartment(t, departmentId){
+  if(!t || !departmentId) return false;
+
+  if(t.owner_department_id===departmentId || t.target_department_id===departmentId) return true;
+
+  const creator=(state.users||[]).find(u=>u.id===t.created_by);
+  if(creator?.department_id===departmentId) return true;
+
+  const primary=(state.users||[]).find(u=>u.id===t.primary_responsible_id);
+  if(primary?.department_id===departmentId) return true;
+
+  return getTaskAssignees(t.id).some(u=>u.department_id===departmentId);
+}
+
+function taskBelongsToSector(t, sectorId){
+  if(!t || !sectorId) return false;
+
+  if(t.owner_sector_id===sectorId || t.target_sector_id===sectorId) return true;
+
+  const creator=(state.users||[]).find(u=>u.id===t.created_by);
+  if(creator?.sector_id===sectorId) return true;
+
+  const primary=(state.users||[]).find(u=>u.id===t.primary_responsible_id);
+  if(primary?.sector_id===sectorId) return true;
+
+  return getTaskAssignees(t.id).some(u=>u.sector_id===sectorId);
+}
+
+function canReviewTask(t){
+  if(isAdminOrCeo()) return true;
+  if(isSectorHead()) return taskBelongsToSector(t, state.profile?.sector_id);
+  if(isDepartmentManager()) return taskBelongsToDepartment(t, state.profile?.department_id);
+  return false;
+}
+
+function canEditTask(t){
+  return canReviewTask(t) || t.created_by===state.profile?.id || t.primary_responsible_id===state.profile?.id;
+}
+
+function canDeleteComment(c){
+  const t=state.tasks.find(x=>x.id===c.task_id);
+  return isAdmin() || (t && canReviewTask(t));
+}
+
+function taskActionRequestsForCurrentUser(){
+  const pendingTasks = (typeof getPendingTasks === 'function' ? getPendingTasks() : [])
+    .filter(t=>typeof canReviewTask === 'function' ? canReviewTask(t) : false);
+
+  const completionTasks = (typeof getCompletionRequests === 'function' ? getCompletionRequests() : [])
+    .filter(t=>typeof canApproveCompletion === 'function' ? canApproveCompletion(t) : false);
+
+  const transferRequests = (state.transferRequests||[])
+    .filter(r=>r.status==='pending')
+    .filter(r=>{
+      const t=state.tasks.find(x=>x.id===r.task_id);
+      if(!t) return false;
+      if(isAdmin() || isCeo()) return true;
+      if(isSectorHead()) return taskBelongsToSector(t, state.profile?.sector_id);
+      if(isDepartmentManager()) return taskBelongsToDepartment(t, state.profile?.department_id);
+      return false;
+    });
+
+  return {pendingTasks, completionTasks, transferRequests};
+}
+
 init();
 </script>
 </body>
