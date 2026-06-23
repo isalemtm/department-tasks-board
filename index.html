@@ -13958,6 +13958,108 @@ init = async function(){
 
 ensureForgotPasswordUI();
 
+
+/* === PATCH: إرسال روابط تعيين كلمة المرور مباشرة من Supabase Auth مع إظهار سبب الخطأ === */
+function passwordResetRedirectUrl(){
+  return `${location.origin}${location.pathname}?type=recovery`;
+}
+
+function readableInviteError(error, fallback='تعذر إرسال رابط تعيين كلمة المرور.'){
+  if(!error) return fallback;
+  if(typeof error === 'string') return error;
+  if(error.message) return error.message;
+  if(error.error_description) return error.error_description;
+  if(error.error) return error.error;
+  if(error.status === 429) return 'تم إرسال طلبات كثيرة خلال وقت قصير. انتظر قليلًا ثم حاول مرة أخرى.';
+  if(error.status === 400) return 'تعذر إرسال الرابط. تأكد أن البريد مسجل في Auth وأن رابط التحويل مسموح في Supabase.';
+  try{
+    const txt=JSON.stringify(error);
+    return txt && txt !== '{}' ? txt : fallback;
+  }catch(_){
+    return fallback;
+  }
+}
+
+sendPasswordSetupNotification = async function(email){
+  try{
+    if(!email) return showToast('لا يوجد بريد للمستخدم.','error');
+
+    const ok=await askConfirm({
+      title:'إرسال إشعار تعيين كلمة المرور',
+      message:`سيتم إرسال بريد للمستخدم:\n${email}\n\nسيحتوي البريد على رابط لتعيين كلمة المرور والدخول للنظام. هل تريد المتابعة؟`,
+      okText:'إرسال الإشعار',
+      danger:false
+    });
+    if(!ok) return;
+
+    const {error}=await supabaseClient.auth.resetPasswordForEmail(String(email).trim().toLowerCase(),{
+      redirectTo: passwordResetRedirectUrl()
+    });
+
+    if(error){
+      console.error('sendPasswordSetupNotification error:', error);
+      throw new Error(readableInviteError(error));
+    }
+
+    showToast('تم إرسال رابط تعيين كلمة المرور بنجاح.','success');
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر إرسال رابط تعيين كلمة المرور.','error',9000);
+  }
+};
+
+sendPendingUserInvites = async function(){
+  try{
+    const rows=getUsersNeedingPasswordSetup();
+    if(!rows.length) return showToast('لا يوجد مستخدمون بحاجة إلى إشعار تعيين كلمة المرور.','info');
+
+    const ok=await askConfirm({
+      title:'إرسال إشعارات تعيين كلمة المرور',
+      message:`سيتم إرسال إشعار تعيين كلمة المرور إلى ${rows.length} مستخدم.\n\nاستخدم هذا الزر فقط بعد أن تصبح اللوحة جاهزة للإطلاق. هل تريد المتابعة؟`,
+      okText:'إرسال الإشعارات',
+      danger:false,
+      requireText:'إرسال',
+      inputLabel:'للتأكيد اكتب كلمة إرسال'
+    });
+    if(!ok) return;
+
+    let success=0;
+    let failed=0;
+    let firstError='';
+
+    for(const u of rows){
+      if(!u.email) continue;
+      const {error}=await supabaseClient.auth.resetPasswordForEmail(String(u.email).trim().toLowerCase(),{
+        redirectTo: passwordResetRedirectUrl()
+      });
+
+      if(error){
+        failed++;
+        if(!firstError) firstError=`${u.email}: ${readableInviteError(error)}`;
+        console.error('sendPendingUserInvites error for',u.email,error);
+      }else{
+        success++;
+      }
+
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+
+    if(failed){
+      showToast(`تم الإرسال جزئيًا. نجح ${success}، فشل ${failed}. أول خطأ: ${firstError}`,'error',12000);
+    }else{
+      showToast(`تم إرسال الإشعارات بنجاح. نجح ${success}.`,'success',7000);
+    }
+
+    await loadAll();
+    renderAdmin();
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'تعذر إرسال الإشعارات.','error',9000);
+  }
+};
+
 init();
 </script>
 </body>
