@@ -14659,6 +14659,51 @@ sendPasswordSetupNotification = async function(email){
 };
 
 
+
+/* === PATCH: تقليل إشعارات البريد ===
+   المطلوب: الإشعارات البريدية للمهام تكون فقط عند:
+   1) إسناد/إضافة مهمة جديدة.
+   2) تحويل مهمة أو طلب تحويل مهمة.
+   تم إيقاف إشعارات التعليقات وتنبيهات الاستحقاق/التأخير.
+*/
+
+/* إيقاف فحص تنبيهات الاستحقاق والتأخير بالكامل */
+runDueDateNotificationsScan = async function(){
+  return {ok:true, skipped:true, reason:'disabled_by_notification_policy'};
+};
+
+/* إضافة التعليق بدون إرسال بريد */
+addComment = async function(taskId){
+  try{
+    const text=$('comment-'+taskId).value.trim();
+    const files=await uploadFiles($('commentFiles-'+taskId).files,'comments/'+taskId);
+
+    if(!text && !files.urls.length){
+      showToast('اكتب تعليقًا أو أرفق ملفًا.','error');
+      return;
+    }
+
+    const finalText=text || 'مرفق بدون تعليق';
+
+    const {error}=await supabaseClient.from('task_comments').insert({
+      task_id:taskId,
+      user_id:state.profile.id,
+      comment_text:finalText,
+      attachment_urls:files.urls,
+      attachment_names:files.names
+    });
+
+    if(error) throw error;
+
+    await loadAll();
+    renderTasks();
+    showToast('تمت إضافة التعليق.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر إضافة التعليق.','error');
+  }
+};
+
 init();
 </script>
 </body>
