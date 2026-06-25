@@ -14704,6 +14704,319 @@ addComment = async function(taskId){
   }
 };
 
+
+/* === PATCH: تحسين لوحة الأداء العام للجوال ===
+   ترتيب خاص للشاشات الصغيرة فقط، بدون تغيير نسخة الكمبيوتر أو الصلاحيات.
+*/
+function installMobilePublicPerformanceStyle(){
+  if(document.getElementById('mobilePublicPerformanceStyle')) return;
+
+  const style=document.createElement('style');
+  style.id='mobilePublicPerformanceStyle';
+  style.textContent=`
+    @media(max-width:760px){
+      .public-performance-page,
+      #dashboardContent .public-performance-page{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        overflow-x:hidden!important;
+      }
+
+      .public-performance-title,
+      #dashboardContent .public-performance-title{
+        display:block!important;
+        text-align:right!important;
+        margin-bottom:14px!important;
+      }
+
+      .public-performance-title h2,
+      #dashboardContent .public-performance-title h2{
+        font-size:22px!important;
+        line-height:1.5!important;
+        margin-bottom:4px!important;
+      }
+
+      .public-performance-title .badge,
+      #dashboardContent .public-performance-title .badge{
+        margin-top:8px!important;
+      }
+
+      .public-kpi-grid,
+      #dashboardContent .public-kpi-grid{
+        display:grid!important;
+        grid-template-columns:repeat(2,minmax(0,1fr))!important;
+        gap:10px!important;
+        margin-bottom:14px!important;
+      }
+
+      .public-kpi-card,
+      #dashboardContent .public-kpi-card{
+        min-height:auto!important;
+        padding:12px 10px!important;
+        border-radius:14px!important;
+      }
+
+      .public-kpi-card span,
+      #dashboardContent .public-kpi-card span{
+        font-size:12px!important;
+        line-height:1.5!important;
+        margin-bottom:4px!important;
+      }
+
+      .public-kpi-card strong,
+      #dashboardContent .public-kpi-card strong{
+        font-size:24px!important;
+        line-height:1.15!important;
+      }
+
+      .public-kpi-card small,
+      #dashboardContent .public-kpi-card small{
+        font-size:11px!important;
+        line-height:1.4!important;
+      }
+
+      .public-visual-grid,
+      #dashboardContent .public-visual-grid{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:12px!important;
+        margin-bottom:14px!important;
+      }
+
+      .public-ranking-grid,
+      #dashboardContent .public-ranking-grid{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:12px!important;
+      }
+
+      .public-chart-card,
+      #dashboardContent .public-chart-card{
+        padding:14px!important;
+        border-radius:16px!important;
+        margin-bottom:12px!important;
+        width:100%!important;
+        max-width:100%!important;
+        overflow:hidden!important;
+      }
+
+      .public-chart-card h3,
+      #dashboardContent .public-chart-card h3{
+        font-size:16px!important;
+        line-height:1.6!important;
+        margin-bottom:10px!important;
+      }
+
+      .public-bar-list,
+      #dashboardContent .public-bar-list{
+        gap:10px!important;
+      }
+
+      .public-bar-row,
+      #dashboardContent .public-bar-row{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:6px!important;
+        padding:8px 0!important;
+        border-bottom:1px solid var(--line)!important;
+      }
+
+      .public-bar-row:last-child,
+      #dashboardContent .public-bar-row:last-child{
+        border-bottom:0!important;
+      }
+
+      .public-bar-row > div:first-child,
+      #dashboardContent .public-bar-row > div:first-child{
+        font-size:13px!important;
+        font-weight:800!important;
+        line-height:1.5!important;
+      }
+
+      .public-bar-value,
+      #dashboardContent .public-bar-value{
+        text-align:right!important;
+        font-size:13px!important;
+      }
+
+      .public-bar-track,
+      #dashboardContent .public-bar-track{
+        height:12px!important;
+      }
+
+      .public-donut-wrap,
+      #dashboardContent .public-donut-wrap{
+        min-height:210px!important;
+        gap:10px!important;
+      }
+
+      .public-donut,
+      #dashboardContent .public-donut{
+        width:160px!important;
+        height:160px!important;
+      }
+
+      .public-donut::after,
+      #dashboardContent .public-donut::after{
+        inset:36px!important;
+      }
+
+      .public-donut-center,
+      #dashboardContent .public-donut-center{
+        inset:36px!important;
+        font-size:24px!important;
+      }
+
+      .public-donut-center small,
+      #dashboardContent .public-donut-center small{
+        font-size:11px!important;
+        margin-top:4px!important;
+      }
+
+      .public-legend,
+      #dashboardContent .public-legend{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        justify-items:start!important;
+        width:100%!important;
+        gap:6px!important;
+        font-size:12px!important;
+      }
+
+      .public-rank-list,
+      #dashboardContent .public-rank-list{
+        gap:8px!important;
+      }
+
+      .public-rank-item,
+      #dashboardContent .public-rank-item{
+        padding:10px 12px!important;
+        border-radius:12px!important;
+        align-items:flex-start!important;
+      }
+
+      .public-rank-item strong,
+      #dashboardContent .public-rank-item strong{
+        font-size:15px!important;
+      }
+
+      .public-sector-table,
+      #dashboardContent .public-sector-table,
+      .public-sector-table thead,
+      #dashboardContent .public-sector-table thead,
+      .public-sector-table tbody,
+      #dashboardContent .public-sector-table tbody,
+      .public-sector-table tr,
+      #dashboardContent .public-sector-table tr,
+      .public-sector-table td,
+      #dashboardContent .public-sector-table td{
+        display:block!important;
+        width:100%!important;
+        min-width:0!important;
+      }
+
+      .public-sector-table,
+      #dashboardContent .public-sector-table{
+        border-collapse:separate!important;
+        border-spacing:0 10px!important;
+        min-width:0!important;
+      }
+
+      .public-sector-table thead,
+      #dashboardContent .public-sector-table thead{
+        display:none!important;
+      }
+
+      .public-sector-table tr,
+      #dashboardContent .public-sector-table tr{
+        border:1px solid var(--line)!important;
+        border-radius:14px!important;
+        background:#fffdfa!important;
+        padding:10px!important;
+        margin-bottom:10px!important;
+        overflow:hidden!important;
+      }
+
+      .public-sector-table td,
+      #dashboardContent .public-sector-table td{
+        border:0!important;
+        padding:7px 4px!important;
+        text-align:right!important;
+        font-size:13px!important;
+        line-height:1.5!important;
+        display:flex!important;
+        align-items:flex-start!important;
+        justify-content:space-between!important;
+        gap:10px!important;
+      }
+
+      .public-sector-table td::before,
+      #dashboardContent .public-sector-table td::before{
+        color:var(--muted)!important;
+        font-weight:800!important;
+        min-width:95px!important;
+      }
+
+      .public-sector-table td:nth-child(1)::before{content:'الترتيب'!important;}
+      .public-sector-table td:nth-child(2)::before{content:'القطاع'!important;}
+      .public-sector-table td:nth-child(3)::before{content:'إجمالي المهام'!important;}
+      .public-sector-table td:nth-child(4)::before{content:'مكتملة'!important;}
+      .public-sector-table td:nth-child(5)::before{content:'قيد التنفيذ'!important;}
+      .public-sector-table td:nth-child(6)::before{content:'متأخرة'!important;}
+      .public-sector-table td:nth-child(7)::before{content:'نسبة الإنجاز'!important;}
+
+      #dashboardContent .table-wrap{
+        overflow:visible!important;
+        border:0!important;
+        background:transparent!important;
+      }
+
+      #dashboardContent .panel.card,
+      #dashboardContent section.panel.card{
+        padding:14px!important;
+        border-radius:16px!important;
+      }
+    }
+
+    @media(max-width:420px){
+      .public-kpi-grid,
+      #dashboardContent .public-kpi-grid{
+        grid-template-columns:1fr!important;
+      }
+
+      .public-kpi-card strong,
+      #dashboardContent .public-kpi-card strong{
+        font-size:26px!important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+const __mobilePublicPerfShowApp = showApp;
+showApp = function(){
+  installMobilePublicPerformanceStyle();
+  __mobilePublicPerfShowApp();
+  installMobilePublicPerformanceStyle();
+};
+
+const __mobilePublicPerfShowPage = showPage;
+showPage = function(p){
+  installMobilePublicPerformanceStyle();
+  __mobilePublicPerfShowPage(p);
+  installMobilePublicPerformanceStyle();
+};
+
+const __mobilePublicPerfRenderDashboard = renderDashboard;
+renderDashboard = function(){
+  installMobilePublicPerformanceStyle();
+  __mobilePublicPerfRenderDashboard();
+  installMobilePublicPerformanceStyle();
+};
+
+installMobilePublicPerformanceStyle();
+
 init();
 </script>
 </body>
