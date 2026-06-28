@@ -15542,6 +15542,61 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
 })();
 
 
+/* === PATCH FIX: إظهار كل القطاعات للموظف عند إضافة مهمة بدون تغيير صلاحيات المديرين ===
+   السبب: دالة taskTargetAllowedSectors السابقة كانت ما تزال تحصر الموظف في قطاعه،
+   لذلك كان اختيار القطاع يعرض قطاع الموظف فقط رغم تعديل قائمة المسند إليهم.
+*/
+(function installEmployeeAllSectorsDropdownFix(){
+  taskTargetAllowedSectors = function(){
+    const rows = state.sectors || [];
+
+    // مدير النظام والرئيس التنفيذي يريان كل القطاعات كما هو.
+    if(isAdminOrCeo()) return rows;
+
+    // الموظف فقط: يرى كل القطاعات في نموذج إضافة المهمة، ثم تظهر أسماء القطاع المختار فقط.
+    if(currentRole()==='employee') return rows;
+
+    // رئيس القطاع ومدير القسم يبقيان حسب الصلاحيات الحالية بدون تغيير.
+    const mySectorId = state.profile?.sector_id || '';
+    return mySectorId ? rows.filter(s => s.id === mySectorId) : rows;
+  };
+
+  fillTaskTargetSectorSelect = function(preserveValue=true){
+    const el = $('taskTargetSector');
+    if(!el) return;
+
+    const current = preserveValue ? el.value : '';
+    const sectors = taskTargetAllowedSectors();
+
+    el.innerHTML = '<option value="">اختر القطاع</option>' +
+      sectors.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+    if(current && sectors.some(s => s.id === current)) {
+      el.value = current;
+    } else if(currentRole()==='employee' && state.profile?.sector_id && sectors.some(s => s.id === state.profile.sector_id)) {
+      // يبدأ الموظف بقطاعه كافتراضي فقط، مع بقاء القائمة مفتوحة لاختيار أي قطاع آخر.
+      el.value = state.profile.sector_id;
+    } else if(!isAdminOrCeo() && state.profile?.sector_id && sectors.some(s => s.id === state.profile.sector_id)) {
+      el.value = state.profile.sector_id;
+    } else if(sectors.length === 1) {
+      el.value = sectors[0].id;
+    } else {
+      el.value = '';
+    }
+  };
+
+  const __employeeAllSectorsFixApplyTargetRestrictions = applyTargetRestrictions;
+  applyTargetRestrictions = function(){
+    __employeeAllSectorsFixApplyTargetRestrictions();
+    const sectorEl = $('taskTargetSector');
+    if(currentRole()==='employee' && sectorEl){
+      sectorEl.disabled = false;
+      if(!sectorEl.value && state.profile?.sector_id) sectorEl.value = state.profile.sector_id;
+    }
+  };
+})();
+
+
 installMobilePublicPerformanceStyle();
 
 init();
