@@ -119,9 +119,42 @@
       .sector-dashboard-section .executive-employees-row{grid-column:1 / -1;grid-template-columns:1fr;max-width:none;}
     }
 
+
+    /* === PATCH REQUEST 2026-06-28: إخفاء الهيدر أثناء شاشة جاري تحميل اللوحة فقط === */
+    body.startup-loading-clean .topbar,
+    body.hide-startup-header .topbar{
+      display:none!important;
+    }
+    body.startup-loading-clean main.container,
+    body.hide-startup-header main.container{
+      min-height:100vh!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      padding:24px!important;
+      background:var(--bg)!important;
+    }
+    body.startup-loading-clean #startupLoadingSection,
+    body.hide-startup-header #startupLoadingSection{
+      width:100%!important;
+      min-height:100vh!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      padding:24px!important;
+    }
+    body.startup-loading-clean #startupLoadingSection.hidden,
+    body.hide-startup-header #startupLoadingSection.hidden{
+      display:none!important;
+    }
+    body.startup-loading-clean #startupLoadingSection .auth-card,
+    body.hide-startup-header #startupLoadingSection .auth-card{
+      margin:auto!important;
+    }
+
   </style>
 </head>
-<body>
+<body class="startup-loading-clean">
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
   <header class="topbar">
     <div class="topbar-inner">
@@ -15014,6 +15047,149 @@ renderDashboard = function(){
   __mobilePublicPerfRenderDashboard();
   installMobilePublicPerformanceStyle();
 };
+
+
+/* === PATCH REQUEST 2026-06-28: إخفاء هيدر شاشة التحميل + حذف تبويب المؤشرات التنفيذية ===
+   النطاق: لا يغير الصلاحيات ولا الصفحات الأخرى.
+   - شاشة جاري تحميل اللوحة: يظهر مربع التحميل فقط بدون الهيدر العلوي.
+   - المؤشرات التنفيذية: حذف التبويب من التنقل لأنه مكرر مع لوحة الأداء العام.
+*/
+function installRequestedFinalUiPatchStyle(){
+  if(document.getElementById('requestedFinalUiPatchStyle')) return;
+  const style=document.createElement('style');
+  style.id='requestedFinalUiPatchStyle';
+  style.textContent=`
+    body.startup-loading-clean .topbar,
+    body.hide-startup-header .topbar{display:none!important;}
+    body.startup-loading-clean main.container,
+    body.hide-startup-header main.container{
+      min-height:100vh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;background:var(--bg)!important;
+    }
+    body.startup-loading-clean #startupLoadingSection,
+    body.hide-startup-header #startupLoadingSection{
+      width:100%!important;min-height:100vh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;
+    }
+    body.startup-loading-clean #startupLoadingSection.hidden,
+    body.hide-startup-header #startupLoadingSection.hidden{display:none!important;}
+    #tabExecutiveFollow{display:none!important;}
+  `;
+  document.head.appendChild(style);
+}
+
+function enableStartupHeaderOnlyLoadingMode(){
+  installRequestedFinalUiPatchStyle();
+  document.body.classList.add('startup-loading-clean','hide-startup-header');
+}
+
+function disableStartupHeaderOnlyLoadingMode(){
+  document.body.classList.remove('startup-loading-clean','hide-startup-header');
+}
+
+function removeExecutiveIndicatorsTabOnly(){
+  const tab=$('tabExecutiveFollow');
+  if(tab) tab.remove();
+
+  document.querySelectorAll('#appSection .app-actions button, #executiveInnerNav button').forEach(btn=>{
+    const text=String(btn.textContent||'').trim();
+    if(text==='المؤشرات التنفيذية' || text==='متابعة القطاعات'){
+      btn.remove();
+    }
+  });
+}
+
+installRequestedFinalUiPatchStyle();
+enableStartupHeaderOnlyLoadingMode();
+
+if(typeof showStartupLoading==='function'){
+  const __requestedOriginalShowStartupLoading=showStartupLoading;
+  showStartupLoading=function(){
+    const result=__requestedOriginalShowStartupLoading();
+    enableStartupHeaderOnlyLoadingMode();
+    return result;
+  };
+}
+
+if(typeof hideStartupLoading==='function'){
+  const __requestedOriginalHideStartupLoading=hideStartupLoading;
+  hideStartupLoading=function(){
+    const result=__requestedOriginalHideStartupLoading();
+    disableStartupHeaderOnlyLoadingMode();
+    return result;
+  };
+}
+
+if(typeof showAuthOnly==='function'){
+  const __requestedOriginalShowAuthOnly=showAuthOnly;
+  showAuthOnly=function(){
+    const result=__requestedOriginalShowAuthOnly();
+    disableStartupHeaderOnlyLoadingMode();
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+if(typeof showApp==='function'){
+  const __requestedOriginalShowApp=showApp;
+  showApp=function(){
+    const result=__requestedOriginalShowApp();
+    disableStartupHeaderOnlyLoadingMode();
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+if(typeof showPasswordSetup==='function'){
+  const __requestedOriginalShowPasswordSetup=showPasswordSetup;
+  showPasswordSetup=function(){
+    const result=__requestedOriginalShowPasswordSetup();
+    disableStartupHeaderOnlyLoadingMode();
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+if(typeof ensureExecutiveFollowPageButton==='function'){
+  const __requestedOriginalEnsureExecutiveFollowPageButton=ensureExecutiveFollowPageButton;
+  ensureExecutiveFollowPageButton=function(){
+    const result=__requestedOriginalEnsureExecutiveFollowPageButton();
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+if(typeof updateExecutiveIndicatorsButton==='function'){
+  const __requestedOriginalUpdateExecutiveIndicatorsButton=updateExecutiveIndicatorsButton;
+  updateExecutiveIndicatorsButton=function(){
+    const result=__requestedOriginalUpdateExecutiveIndicatorsButton();
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+if(typeof showExecutiveFollowPage==='function'){
+  showExecutiveFollowPage=function(){
+    removeExecutiveIndicatorsTabOnly();
+    if(typeof showPage==='function') showPage('dashboard');
+  };
+}
+
+if(typeof showPage==='function'){
+  const __requestedOriginalShowPage=showPage;
+  showPage=function(p){
+    if(p==='executiveFollow'){
+      removeExecutiveIndicatorsTabOnly();
+      return __requestedOriginalShowPage('dashboard');
+    }
+    const result=__requestedOriginalShowPage(p);
+    removeExecutiveIndicatorsTabOnly();
+    return result;
+  };
+}
+
+setTimeout(removeExecutiveIndicatorsTabOnly,0);
+setTimeout(removeExecutiveIndicatorsTabOnly,250);
+setTimeout(removeExecutiveIndicatorsTabOnly,1000);
+
 
 installMobilePublicPerformanceStyle();
 
