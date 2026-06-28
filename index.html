@@ -125,6 +125,11 @@
     body.hide-startup-header .topbar{
       display:none!important;
     }
+
+    body.startup-loading-clean main.container > section:not(#startupLoadingSection),
+    body.hide-startup-header main.container > section:not(#startupLoadingSection){
+      display:none!important;
+    }
     body.startup-loading-clean main.container,
     body.hide-startup-header main.container{
       min-height:100vh!important;
@@ -10887,6 +10892,10 @@ function installStartupLoadingCleanStyle(){
       min-height:100vh!important;
     }
 
+
+    body.startup-loading-clean main.container > section:not(#startupLoadingSection){
+      display:none!important;
+    }
     body.startup-loading-clean #startupLoadingSection{
       display:flex!important;
       align-items:center!important;
@@ -15061,6 +15070,8 @@ function installRequestedFinalUiPatchStyle(){
   style.textContent=`
     body.startup-loading-clean .topbar,
     body.hide-startup-header .topbar{display:none!important;}
+    body.startup-loading-clean main.container > section:not(#startupLoadingSection),
+    body.hide-startup-header main.container > section:not(#startupLoadingSection){display:none!important;}
     body.startup-loading-clean main.container,
     body.hide-startup-header main.container{
       min-height:100vh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;background:var(--bg)!important;
