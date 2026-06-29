@@ -16330,3 +16330,319 @@ init();
 </script>
 </body>
 </html>
+
+/* === PATCH FINAL: السماح لرئيس القطاع باختيار موظفين من القطاعات الأخرى عند إسناد مهمة ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+   - رئيس القطاع، مدير القسم، والموظف يستطيعون اختيار القطاع أولًا ثم تظهر أسماء ذلك القطاع فقط.
+   - القائمة تشمل الموظفين ومدراء الأقسام ورؤساء القطاعات، وتستبعد مدير النظام والرئيس التنفيذي.
+   - لا يغيّر اعتماد مهام رئيس القطاع: تبقى مباشرة ومعتمدة كما هي.
+   - مهام الموظف ومدير القسم الجديدة تبقى بانتظار الاعتماد كما هي.
+   - لا تغيير على الصفحات الأخرى أو الصلاحيات العامة.
+*/
+(function installSectorHeadCrossSectorAssignmentPatch(){
+  function canPickAssigneeAcrossSectors(){
+    return currentRole()==='employee' || isDepartmentManager() || isSectorHead();
+  }
+
+  function taskNeedsApprovalFromCreatorRole(){
+    return currentRole()==='employee' || isDepartmentManager();
+  }
+
+  function isAllowedSpecificAssignee(u){
+    return u && u.is_active !== false && ['employee','department_manager','sector_head'].includes(u.role);
+  }
+
+  taskTargetAllowedSectors = function(){
+    const rows = state.sectors || [];
+    if(isAdminOrCeo()) return rows;
+    if(canPickAssigneeAcrossSectors()) return rows;
+    const mySectorId = state.profile?.sector_id || '';
+    return mySectorId ? rows.filter(s => s.id === mySectorId) : rows;
+  };
+
+  fillTaskTargetSectorSelect = function(preserveValue=true){
+    const el = $('taskTargetSector');
+    if(!el) return;
+
+    const current = preserveValue ? el.value : '';
+    const sectors = taskTargetAllowedSectors();
+
+    el.innerHTML = '<option value="">اختر القطاع</option>' +
+      sectors.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+    if(current && sectors.some(s => s.id === current)){
+      el.value = current;
+    }else if(canPickAssigneeAcrossSectors() && state.profile?.sector_id && sectors.some(s => s.id === state.profile.sector_id)){
+      // يبدأ المستخدم بقطاعه افتراضيًا فقط، مع بقاء القائمة مفتوحة لاختيار أي قطاع آخر.
+      el.value = state.profile.sector_id;
+    }else if(sectors.length === 1){
+      el.value = sectors[0].id;
+    }else{
+      el.value = '';
+    }
+  };
+
+  applyTargetRestrictions = function(){
+    const type = $('assignmentType')?.value || 'employees';
+    const sectorEl = $('taskTargetSector');
+    const deptEl = $('taskTargetDepartment');
+    if(!sectorEl || !deptEl) return;
+
+    fillTaskTargetSectorSelect(true);
+
+    sectorEl.disabled = false;
+    deptEl.disabled = false;
+
+    if(!canPickAssigneeAcrossSectors() && !isAdminOrCeo()){
+      sectorEl.value = state.profile?.sector_id || '';
+      sectorEl.disabled = true;
+    }
+
+    fillTaskTargetDepartmentSelect(true);
+
+    if(type === 'sector_heads' || type === 'all_sector'){
+      deptEl.value = '';
+      deptEl.disabled = true;
+    }
+  };
+
+  handleAssignmentTypeChange = function(){
+    applyTargetRestrictions();
+    renderAssigneePicker();
+  };
+
+  handleTargetSectorChange = function(){
+    fillTaskTargetDepartmentSelect(false);
+    applyTargetRestrictions();
+    renderAssigneePicker();
+  };
+
+  permittedAssigneeUsers = function(){
+    const type = $('assignmentType')?.value || 'employees';
+    const sector = $('taskTargetSector')?.value || '';
+    const dept = $('taskTargetDepartment')?.value || '';
+
+    let rows = (state.users || []).filter(u => u.is_active !== false);
+
+    if(type === 'employees'){
+      rows = rows.filter(isAllowedSpecificAssignee);
+    }
+
+    if(type === 'department_managers'){
+      rows = rows.filter(u => u.role === 'department_manager');
+    }
+
+    if(type === 'sector_heads'){
+      rows = rows.filter(u => u.role === 'sector_head');
+    }
+
+    if(type === 'all_department' && dept){
+      rows = rows.filter(u => u.department_id === dept);
+    }
+
+    if(type === 'all_sector' && sector){
+      rows = rows.filter(u => u.sector_id === sector);
+    }
+
+    // عند اختيار قطاع، تظهر أسماء هذا القطاع فقط.
+    if(['employees','department_managers','sector_heads'].includes(type) && sector){
+      rows = rows.filter(u => u.sector_id === sector);
+    }
+
+    // عند اختيار قسم، تُضيق القائمة على القسم، مع إبقاء رئيس القطاع ظاهرًا لأنه غالبًا لا يملك قسمًا.
+    if(['employees','department_managers'].includes(type) && dept){
+      rows = rows.filter(u => u.role === 'sector_head' || u.department_id === dept);
+    }
+
+    if(canPickAssigneeAcrossSectors()){
+      const effectiveSector = sector || state.profile?.sector_id || '';
+      rows = rows.filter(u => isAllowedSpecificAssignee(u) && (!effectiveSector || u.sector_id === effectiveSector));
+    }
+
+    rows = [...new Map(rows.map(u => [u.id,u])).values()].sort((a,b)=>{
+      if(a.id === state.profile?.id) return -1;
+      if(b.id === state.profile?.id) return 1;
+      return String(a.name || '').localeCompare(String(b.name || ''),'ar');
+    });
+
+    return rows;
+  };
+
+  validateAssignment = function(type, selected){
+    const sector = $('taskTargetSector')?.value || '';
+    const dept = $('taskTargetDepartment')?.value || '';
+    const selectedUsers = (selected || []).map(id => state.users.find(u => u.id === id)).filter(Boolean);
+
+    if(isSectorHead()){
+      if(type === 'all_company') return 'رئيس القطاع لا يستطيع إسناد مهمة لكل الشركة.';
+      if(type === 'all_sector' && sector !== state.profile?.sector_id) return 'رئيس القطاع يستطيع إسناد مهمة لكل قطاعه فقط.';
+      if(type === 'all_department' && sector && sector !== state.profile?.sector_id) return 'رئيس القطاع يستطيع إسناد مهمة لكل إدارة داخل قطاعه فقط.';
+    }
+
+    if(canPickAssigneeAcrossSectors()){
+      const invalidRole = selectedUsers.filter(u => !isAllowedSpecificAssignee(u));
+      if(invalidRole.length) return 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات فقط.';
+
+      if(sector){
+        const invalidSector = selectedUsers.filter(u => u.sector_id !== sector);
+        if(invalidSector.length) return 'اختر المسند إليهم من القطاع المحدد فقط.';
+      }
+
+      if(dept){
+        const invalidDept = selectedUsers.filter(u => u.role !== 'sector_head' && u.department_id !== dept);
+        if(invalidDept.length) return 'اختر المسند إليهم من القسم المحدد فقط، أو اترك القسم فارغًا لعرض كامل القطاع.';
+      }
+    }
+
+    return '';
+  };
+
+  saveTask = async function(){
+    try{
+      const title = $('taskTitle').value.trim();
+      if(!title) return showToast('اكتب عنوان المهمة.','error');
+
+      const editId = $('editTaskId').value || '';
+      const existing = editId ? state.tasks.find(t => t.id === editId) : null;
+
+      if(editId && !existing) return showToast('تعذر العثور على المهمة المراد تعديلها.','error');
+      if(existing && !canEditTask(existing)) return showToast('ليست لديك صلاحية تعديل هذه المهمة.','error');
+
+      const type = $('assignmentType').value;
+      let selected = getSelectedAssigneeIdsFinal();
+
+      if(type === 'all_company'){
+        selected = state.users.filter(u => u.is_active !== false).map(u => u.id);
+      }
+      if(type === 'all_sector'){
+        const sectorId = $('taskTargetSector').value || state.profile?.sector_id || '';
+        selected = state.users.filter(u => u.is_active !== false && (!sectorId || u.sector_id === sectorId)).map(u => u.id);
+      }
+      if(type === 'all_department'){
+        const departmentId = $('taskTargetDepartment').value || state.profile?.department_id || '';
+        selected = state.users.filter(u => u.is_active !== false && (!departmentId || u.department_id === departmentId)).map(u => u.id);
+      }
+
+      selected = [...new Set(selected)].filter(Boolean);
+
+      if(type !== 'all_company' && !selected.length){
+        return showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error');
+      }
+
+      const validationMessage = validateAssignment(type, selected);
+      if(validationMessage) return showToast(validationMessage,'error');
+
+      const files = await uploadFiles($('taskFiles').files, 'tasks');
+
+      const primary = (existing && selected.includes(existing.primary_responsible_id))
+        ? existing.primary_responsible_id
+        : (selected[0] || state.profile.id);
+
+      const primaryUser = getUserByIdFinal(primary);
+
+      const inferred = inferTaskScopeFromPrimaryUser(
+        primaryUser,
+        $('taskTargetSector').value || existing?.target_sector_id || existing?.owner_sector_id || state.profile?.sector_id || null,
+        $('taskTargetDepartment').value || existing?.target_department_id || existing?.owner_department_id || null
+      );
+
+      let targetSector = inferred.sectorId;
+      let targetDept = inferred.departmentId;
+
+      if(canPickAssigneeAcrossSectors()){
+        targetSector = primaryUser?.sector_id || $('taskTargetSector').value || targetSector || state.profile?.sector_id || null;
+        targetDept = primaryUser?.department_id || $('taskTargetDepartment').value || null;
+      }
+
+      // إبقاء تكليف كامل القطاع/كامل الإدارة لرئيس القطاع داخل نطاقه فقط.
+      if(isSectorHead() && !isAdmin() && ['all_sector','all_department'].includes(type)){
+        targetSector = state.profile.sector_id || targetSector;
+      }
+
+      const attachment_urls = files.urls.length
+        ? [...(existing?.attachment_urls || []), ...files.urls]
+        : (existing?.attachment_urls || []);
+
+      const attachment_names = files.names.length
+        ? [...(existing?.attachment_names || []), ...files.names]
+        : (existing?.attachment_names || []);
+
+      const payload = {
+        title,
+        description: $('taskDescription').value.trim(),
+        priority: $('taskPriority').value,
+        owner_sector_id: existing?.owner_sector_id || state.profile.sector_id,
+        owner_department_id: existing?.owner_department_id || state.profile.department_id,
+        target_sector_id: targetSector,
+        target_department_id: targetDept,
+        primary_responsible_id: primary,
+        assignment_type: primaryUser?.role === 'sector_head' ? 'sector_heads' : type,
+        task_level: primaryUser?.role === 'sector_head' ? 'executive' : (type === 'all_sector' ? 'sector' : type === 'department_managers' ? 'manager' : type === 'all_department' ? 'department' : 'employee'),
+        due_date: $('taskDue').value || null,
+        attachment_urls,
+        attachment_names
+      };
+
+      let taskId = editId;
+
+      if(editId){
+        const {error} = await supabaseClient.from('tasks').update(payload).eq('id', editId);
+        if(error) throw error;
+        const del = await supabaseClient.from('task_assignees').delete().eq('task_id', editId);
+        if(del.error) throw del.error;
+      }else{
+        Object.assign(payload, {
+          status: 'جديدة',
+          created_by: state.profile.id,
+          approval_status: taskNeedsApprovalFromCreatorRole() ? 'pending' : 'approved'
+        });
+
+        if(payload.approval_status === 'approved'){
+          payload.approved_by = state.profile.id;
+          payload.approved_at = new Date().toISOString();
+        }
+
+        const {data,error} = await supabaseClient.from('tasks').insert(payload).select().single();
+        if(error) throw error;
+        taskId = data.id;
+      }
+
+      const assigneeRows = selected.map(uid => ({
+        task_id: taskId,
+        user_id: uid,
+        assigned_by: state.profile.id,
+        assignment_role: uid === primary ? 'primary' : 'assignee'
+      }));
+
+      if(assigneeRows.length){
+        const inserted = await supabaseClient.from('task_assignees').insert(assigneeRows);
+        if(inserted.error) throw inserted.error;
+      }
+
+      let emailNotifyResult = {ok:true, skipped:true};
+      if(!editId && !taskNeedsApprovalFromCreatorRole()){
+        emailNotifyResult = await notifyAssigneesByEmailAfterTaskCreate({
+          taskId,
+          selectedUserIds:selected,
+          taskPayload:payload
+        });
+      }
+
+      closeTaskModal();
+      await loadAll();
+      setupFilters();
+      renderTasks();
+      if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+      if($('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
+
+      if(!editId && emailNotifyResult && emailNotifyResult.ok===false){
+        showToast('تم حفظ المهمة، لكن تعذر إرسال إشعار البريد لبعض المستخدمين.','error');
+      }else{
+        showToast(editId ? 'تم تحديث المهمة بنجاح.' : (taskNeedsApprovalFromCreatorRole() ? 'تم إرسال المهمة للاعتماد.' : 'تم حفظ المهمة بنجاح وإرسال إشعار البريد.'), 'success');
+      }
+    }catch(e){
+      console.error(e);
+      showToast(e.message || 'تعذر حفظ المهمة.','error');
+    }
+  };
+})();
