@@ -16102,7 +16102,7 @@ function commercialDepartmentOrderValue(name){
 }
 function renderCommercialSectorOrgBlock(sector, departments){
   ensureCommercialSectorOrgStyle();
-  const fallbackNames=['المبيعات','التسويق والعلامة','تجربة العميل','الأملاك والتأجير','الشركات والأبحاث'];
+  const fallbackNames=['المبيعات','التسويق والعلامة','تجربة العميل','الأملاك والتأجير','الشراكات والأبحاث'];
   let rows=(departments||[])
     .filter(dep=>!isDeprecatedCommercialDepartmentName(dep.name))
     .slice()
