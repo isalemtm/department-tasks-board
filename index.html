@@ -16224,6 +16224,106 @@ renderOrgPage = function(){
 };
 
 
+/* === PATCH: إعادة القطاع التجاري لنفس تصميم بقية القطاعات ===
+   يلغي العرض الشاذ للقطاع التجاري ويجعله يستخدم نفس قالب القطاعات الأخرى،
+   مع إخفاء الإدارات القديمة المحذوفة من الهيكل فقط. */
+function renderOrgPageUniformAllSectors(){
+  ensurePerformanceAndOrgPagesDom();
+  ensureUnifiedButtonTheme();
+
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoCards = ceos.length
+    ? ceos.map(u=>orgPersonCard(u,'head','الرئيس التنفيذي')).join('')
+    : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+  const sectorHtml = sectors.map(sector=>{
+    let departments=(state.departments||[])
+      .filter(d=>d.sector_id===sector.id)
+      .filter(d=>!(isCommercialSectorOrg(sector) && isDeprecatedCommercialDepartmentName(d.name)))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    if(isCommercialSectorOrg(sector)){
+      departments = departments.sort((a,b)=>{
+        const ra=commercialDepartmentOrderValue(a.name);
+        const rb=commercialDepartmentOrderValue(b.name);
+        if(ra!==rb) return ra-rb;
+        return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      });
+    }
+
+    const heads=typeof orgSectorHeadsForSector === 'function'
+      ? orgSectorHeadsForSector(users, sector.id)
+      : users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
+
+    const departmentsHtml = departments.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && !['department_manager','sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+      const managerBlock = managers.length
+        ? `<div class="org-person-cards">${managers.map(u=>orgPersonCard(u,'manager','مدير القسم')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+      const employeeBlock = employees.length
+        ? `<div class="org-person-cards">${employees.map(u=>orgPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+      return `
+        <div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
+        </div>`;
+    }).join('');
+
+    const usersWithoutDepartment=users.filter(u=>u.sector_id===sector.id && !u.department_id && !['sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+    const noDeptBlock = usersWithoutDepartment.length ? `
+      <div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>orgPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+    return `
+      <div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${orgMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">
+          ${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}
+          ${noDeptBlock}
+        </div>
+      </div>`;
+  }).join('');
+
+  $('orgContent').innerHTML = `
+    <section class="panel card">
+      <div class="section-head" style="justify-content:flex-start;">
+        <span class="badge">${users.length} مستخدم</span>
+      </div>
+      <div class="org-chart-page">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>`;
+}
+renderOrgPage = renderOrgPageUniformAllSectors;
+
+
 installMobilePublicPerformanceStyle();
 
 init();
