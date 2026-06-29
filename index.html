@@ -15942,6 +15942,288 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
 })();
 
 
+/* === PATCH: تعديل عرض القطاع التجاري فقط في الهيكل التنظيمي ===
+   يحافظ على بقية القطاعات كما هي، ويعرض القطاع التجاري بالشكل المختصر المطلوب:
+   رئيس القطاع التجاري في الأعلى، وتحته إدارات القطاع فقط. */
+function ensureCommercialSectorOrgStyle(){
+  if(document.getElementById('commercialSectorOrgStyle')) return;
+  const style=document.createElement('style');
+  style.id='commercialSectorOrgStyle';
+  style.textContent=`
+    .commercial-org-box{
+      background:transparent!important;
+      border:0!important;
+      box-shadow:none!important;
+      padding:26px 4px 18px!important;
+      overflow-x:auto;
+    }
+    .commercial-org-chart{
+      --commercial-line:#b89677;
+      width:100%;
+      min-width:980px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      direction:rtl;
+      color:var(--primary2);
+    }
+    .commercial-org-head{
+      width:360px;
+      max-width:360px;
+      min-height:82px;
+      background:var(--primary2);
+      color:#fff;
+      border-radius:0;
+      text-align:center;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      box-shadow:none;
+      border-top:3px solid var(--commercial-line);
+      margin:0 auto;
+      padding:12px 16px;
+    }
+    .commercial-org-head .commercial-role{
+      display:block;
+      font-size:12px;
+      color:#d8c7b6;
+      line-height:1.4;
+      margin-bottom:7px;
+    }
+    .commercial-org-head .commercial-title{
+      display:block;
+      font-size:24px;
+      font-weight:900;
+      line-height:1.35;
+      color:#fff;
+    }
+    .commercial-org-down-line{
+      width:2px;
+      height:42px;
+      background:var(--commercial-line);
+      margin:0 auto;
+    }
+    .commercial-org-branches{
+      position:relative;
+      width:100%;
+      max-width:1120px;
+      display:grid;
+      grid-template-columns:repeat(5,minmax(150px,1fr));
+      gap:18px;
+      padding-top:30px;
+    }
+    .commercial-org-branches:before{
+      content:"";
+      position:absolute;
+      top:0;
+      left:9%;
+      right:9%;
+      height:2px;
+      background:var(--commercial-line);
+    }
+    .commercial-org-dept{
+      position:relative;
+      min-height:76px;
+      background:#e9dfd2;
+      border-radius:0;
+      border:0;
+      box-shadow:none;
+      text-align:center;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      padding:12px 10px;
+    }
+    .commercial-org-dept:before{
+      content:"";
+      position:absolute;
+      top:-30px;
+      width:2px;
+      height:30px;
+      background:var(--commercial-line);
+      left:50%;
+      transform:translateX(-50%);
+    }
+    .commercial-org-dept .commercial-dept-role{
+      display:block;
+      font-size:12px;
+      color:#b29479;
+      line-height:1.3;
+      margin-bottom:6px;
+    }
+    .commercial-org-dept .commercial-dept-name{
+      display:block;
+      font-size:18px;
+      color:var(--primary2);
+      font-weight:900;
+      line-height:1.45;
+    }
+    @media(max-width:900px){
+      .commercial-org-box{padding:18px 0!important;}
+      .commercial-org-chart{min-width:860px;}
+      .commercial-org-head{width:320px;max-width:320px;}
+      .commercial-org-head .commercial-title{font-size:21px;}
+      .commercial-org-branches{gap:12px;}
+      .commercial-org-dept .commercial-dept-name{font-size:16px;}
+    }
+  `;
+  document.head.appendChild(style);
+}
+function isCommercialSectorOrg(sector){
+  const name=String(sector?.name||'').trim();
+  return name.includes('التجاري');
+}
+function isDeprecatedCommercialDepartmentName(name){
+  const value=String(name||'').trim();
+  return value==='المبيعات والتحصيل' || value==='خدمات ما بعد البيع';
+}
+function commercialDepartmentOrderValue(name){
+  const value=String(name||'');
+  const order=[
+    ['المبيعات',1],
+    ['التسويق',2],
+    ['العلامة',2],
+    ['تجربة',3],
+    ['العميل',3],
+    ['الأملاك',4],
+    ['الاملاك',4],
+    ['التأجير',4],
+    ['التاجير',4],
+    ['الشركات',5],
+    ['الأبحاث',5],
+    ['الابحاث',5],
+    ['الأرجاح',5],
+    ['الارجاح',5]
+  ];
+  for(const [needle,rank] of order){ if(value.includes(needle)) return rank; }
+  return 50;
+}
+function renderCommercialSectorOrgBlock(sector, departments){
+  ensureCommercialSectorOrgStyle();
+  const fallbackNames=['المبيعات','التسويق والعلامة','تجربة العميل','الأملاك والتأجير','الشركات والأبحاث'];
+  let rows=(departments||[])
+    .filter(dep=>!isDeprecatedCommercialDepartmentName(dep.name))
+    .slice()
+    .sort((a,b)=>{
+      const ra=commercialDepartmentOrderValue(a.name);
+      const rb=commercialDepartmentOrderValue(b.name);
+      if(ra!==rb) return ra-rb;
+      return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    });
+  if(!rows.length){
+    rows=fallbackNames.map((name,index)=>({id:'commercial-fallback-'+index,name}));
+  }
+  const departmentsHtml=rows.map(dep=>`
+    <div class="commercial-org-dept">
+      <span class="commercial-dept-role">إدارة</span>
+      <span class="commercial-dept-name">${escapeHtml(dep.name||'—')}</span>
+    </div>`).join('');
+
+  return `
+    <div class="org-sector-box commercial-org-box">
+      <div class="commercial-org-chart">
+        <div class="commercial-org-head">
+          <span class="commercial-role">القيادة C-LEVEL</span>
+          <span class="commercial-title">رئيس القطاع التجاري</span>
+        </div>
+        <div class="commercial-org-down-line"></div>
+        <div class="commercial-org-branches">${departmentsHtml}</div>
+      </div>
+    </div>`;
+}
+
+const __commercialSectorOriginalRenderOrgPage = renderOrgPage;
+renderOrgPage = function(){
+  ensurePerformanceAndOrgPagesDom();
+  ensureUnifiedButtonTheme();
+  ensureCommercialSectorOrgStyle();
+
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const ceos=users.filter(u=>u.role==='ceo');
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  const ceoCards = ceos.length
+    ? ceos.map(u=>orgPersonCard(u,'head','الرئيس التنفيذي')).join('')
+    : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+  const sectorHtml = sectors.map(sector=>{
+    const departments=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    if(isCommercialSectorOrg(sector)){
+      return renderCommercialSectorOrgBlock(sector, departments);
+    }
+
+    const heads=typeof orgSectorHeadsForSector === 'function'
+      ? orgSectorHeadsForSector(users, sector.id)
+      : users.filter(u=>u.role==='sector_head' && u.sector_id===sector.id);
+
+    const departmentsHtml = departments.map(dep=>{
+      const managers=users.filter(u=>u.department_id===dep.id && u.role==='department_manager');
+      const employees=users.filter(u=>u.department_id===dep.id && !['department_manager','sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+      const managerBlock = managers.length
+        ? `<div class="org-person-cards">${managers.map(u=>orgPersonCard(u,'manager','مدير القسم')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+      const employeeBlock = employees.length
+        ? `<div class="org-person-cards">${employees.map(u=>orgPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>`
+        : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+      return `
+        <div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
+        </div>`;
+    }).join('');
+
+    const usersWithoutDepartment=users.filter(u=>u.sector_id===sector.id && !u.department_id && !['sector_head','ceo'].includes(u.role) && !(typeof isAdminDisplayedAsSectorHead==='function' && isAdminDisplayedAsSectorHead(u)));
+    const noDeptBlock = usersWithoutDepartment.length ? `
+      <div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>orgPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+    return `
+      <div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${orgMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">
+          ${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}
+          ${noDeptBlock}
+        </div>
+      </div>`;
+  }).join('');
+
+  $('orgContent').innerHTML = `
+    <section class="panel card">
+      <div class="section-head" style="justify-content:flex-start;">
+        <span class="badge">${users.length} مستخدم</span>
+      </div>
+      <div class="org-chart-page">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
+    </section>`;
+};
+
+
 installMobilePublicPerformanceStyle();
 
 init();
