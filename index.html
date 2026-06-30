@@ -2292,7 +2292,7 @@ function ensureFullHrFeatureDom(){
   }
   if($('adminPage') && !$('pendingTasksPanel')){
     const transfer=$('transferRequestsPanel') || $('requestsPanel');
-    const html=`<section id="pendingTasksPanel" class="panel card hidden"><h2>مهام بانتظار الاعتماد</h2><p class="meta">المهام التي يضيفها الموظفون لا تظهر في القوائم واللوحة إلا بعد الاعتماد. يمكنك تعديلها قبل الاعتماد.</p><div id="pendingTasksList"></div></section>`;
+    const html=`<section id="pendingTasksPanel" class="panel card hidden"><h2>مهام بانتظار الاعتماد</h2><p class="meta">تم إيقاف اعتماد إنشاء المهام؛ الاعتماد الحالي يخص إكمال المهمة فقط.</p><div id="pendingTasksList"></div></section>`;
     if(transfer) transfer.insertAdjacentHTML('beforebegin', html); else $('adminPage').insertAdjacentHTML('afterbegin', html);
   }
   if($('taskModal') && !$('clearTaskBtn')){
@@ -2395,10 +2395,10 @@ function renderExecutiveDirectStats(rows){
   $('executiveDirectStats').innerHTML=`<div class="executive-stat-card"><span>إجمالي المهام</span><strong>${total}</strong><small>كل المهام المعتمدة</small></div><div class="executive-stat-card"><span>المهام المنجزة حتى الآن</span><strong>${done}</strong><small>إجمالي المكتمل</small></div><div class="executive-stat-card"><span>المهام المنجزة هذا الشهر</span><strong>${doneMonth}</strong><small>خلال الشهر الحالي</small></div><div class="executive-stat-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div><div class="executive-stat-card"><span>المهام الجديدة</span><strong>${fresh}</strong><small>لم تبدأ بعد</small></div><div class="executive-stat-card"><span>المهام المتأخرة</span><strong>${late}</strong><small>تجاوزت تاريخ الاستحقاق</small></div><div class="executive-employees-row"><div class="executive-stat-card"><span>أكثر موظف لديه مهام</span><strong>${escapeHtml(most?.u?.name||'—')}</strong><small>${most?most.count+' مهمة':'لا توجد مهام'}</small></div><div class="executive-stat-card"><span>أقل موظف لديه مهام</span><strong>${escapeHtml(least?.u?.name||'—')}</strong><small>${least?least.count+' مهمة':'لا توجد مهام'}</small></div></div>`;
 }
 
-function isApprovedTask(t){ return !t.approval_status || t.approval_status==='approved'; }
-function isPendingTask(t){ return t.approval_status==='pending'; }
+function isApprovedTask(t){ return t.approval_status !== 'rejected'; }
+function isPendingTask(t){ return false; }
 visibleTasks=function(){ return state.tasks.filter(t=>t.is_archived!==true).filter(isApprovedTask); };
-function getPendingTasks(){ return state.tasks.filter(t=>t.is_archived!==true).filter(isPendingTask); }
+function getPendingTasks(){ return []; }
 function canReviewTask(t){ return isAdminOrCeo() || (isSectorHead()&&(t.owner_sector_id===state.profile.sector_id||t.target_sector_id===state.profile.sector_id)) || (isDepartmentManager()&&(t.owner_department_id===state.profile.department_id||t.target_department_id===state.profile.department_id)); }
 function canEditTask(t){ return canReviewTask(t) || t.created_by===state.profile?.id || t.primary_responsible_id===state.profile?.id; }
 function canDeleteComment(c){ const t=state.tasks.find(x=>x.id===c.task_id); return isAdmin() || (t && canReviewTask(t)); }
@@ -2418,7 +2418,7 @@ renderAdmin=function(){
 function renderPendingTaskApprovals(){
   if(!$('pendingTasksList')) return;
   const rows=getPendingTasks().filter(canReviewTask);
-  if(!rows.length){ $('pendingTasksList').innerHTML='<div class="empty">لا توجد مهام بانتظار الاعتماد حالياً.</div>'; return; }
+  if(!rows.length){ $('pendingTasksList').innerHTML='<div class="empty">تم إيقاف اعتماد إنشاء المهام. الاعتماد المتبقي فقط عند طلب إكمال المهمة.</div>'; return; }
   $('pendingTasksList').innerHTML=rows.map(t=>`<div class="task-card ${isDueSoon(t)?'due-soon':''}"><div class="task-top"><div><div class="task-title">${escapeHtml(t.title||'بدون عنوان')}</div><div class="meta">أنشأها: ${escapeHtml(nameOfUser(t.created_by))}<br>المسؤول الرئيسي: ${escapeHtml(nameOfUser(t.primary_responsible_id))}<br>المسند إليهم: ${escapeHtml(getTaskAssignees(t.id).map(u=>u.name).join('، ')||'—')}<br>القطاع: ${escapeHtml(nameOfSector(t.target_sector_id||t.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(t.target_department_id||t.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(t.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(t.priority)}</div></div><div class="task-desc">${escapeHtml(t.description||'')}</div>${renderAttachments(t.attachment_urls,t.attachment_names)}<div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${t.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${t.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${t.id}')">رفض</button></div></div>`).join('');
 }
 async function approveSubmittedTask(taskId){ const {error}=await supabaseClient.from('tasks').update({approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString()}).eq('id',taskId); if(error) return showToast(error.message,'error'); await loadAll(); renderAdmin(); renderTasks(); renderDashboard(); showToast('تم اعتماد المهمة وإظهارها في اللوحة.','success'); }
@@ -2480,14 +2480,13 @@ saveTask=async function(){
     let taskId=editId;
     if(editId){ const {error}=await supabaseClient.from('tasks').update(payload).eq('id',editId); if(error) throw error; await supabaseClient.from('task_assignees').delete().eq('task_id',editId); }
     else{
-      Object.assign(payload,{status:'جديدة',created_by:state.profile.id,approval_status:currentRole()==='employee'?'pending':'approved'});
-      if(payload.approval_status==='approved'){ payload.approved_by=state.profile.id; payload.approved_at=new Date().toISOString(); }
+      Object.assign(payload,{status:'جديدة',created_by:state.profile.id,approval_status:'approved',approved_by:state.profile.id,approved_at:new Date().toISOString()});
       const {data,error}=await supabaseClient.from('tasks').insert(payload).select().single(); if(error) throw error; taskId=data.id;
     }
     const rows=[...new Set(selected)].map(uid=>({task_id:taskId,user_id:uid,assigned_by:state.profile.id,assignment_role:uid===primary?'primary':'assignee'}));
     if(rows.length){ const r=await supabaseClient.from('task_assignees').insert(rows); if(r.error) throw r.error; }
     closeTaskModal(); await loadAll(); setupFilters(); renderTasks(); if($('adminPage')&&!$('adminPage').classList.contains('hidden')) renderAdmin(); if($('dashboardPage')&&!$('dashboardPage').classList.contains('hidden')) renderDashboard();
-    showToast(editId?'تم تحديث المهمة بنجاح.':(currentRole()==='employee'?'تم إرسال المهمة للاعتماد.':'تم حفظ المهمة بنجاح.'),'success');
+    showToast(editId?'تم تحديث المهمة بنجاح.':'تم حفظ المهمة بنجاح.','success');
   }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ المهمة.','error'); }
 };
 
@@ -16587,7 +16586,7 @@ renderOrgPage = renderOrgPageUniformAllSectors;
         Object.assign(payload, {
           status: 'جديدة',
           created_by: state.profile.id,
-          approval_status: taskNeedsApprovalFromCreatorRole() ? 'pending' : 'approved'
+          approval_status: 'approved'
         });
 
         if(payload.approval_status === 'approved'){
@@ -16613,7 +16612,7 @@ renderOrgPage = renderOrgPageUniformAllSectors;
       }
 
       let emailNotifyResult = {ok:true, skipped:true};
-      if(!editId && !taskNeedsApprovalFromCreatorRole()){
+      if(!editId){
         emailNotifyResult = await notifyAssigneesByEmailAfterTaskCreate({
           taskId,
           selectedUserIds:selected,
@@ -16631,7 +16630,7 @@ renderOrgPage = renderOrgPageUniformAllSectors;
       if(!editId && emailNotifyResult && emailNotifyResult.ok===false){
         showToast('تم حفظ المهمة، لكن تعذر إرسال إشعار البريد لبعض المستخدمين.','error');
       }else{
-        showToast(editId ? 'تم تحديث المهمة بنجاح.' : (taskNeedsApprovalFromCreatorRole() ? 'تم إرسال المهمة للاعتماد.' : 'تم حفظ المهمة بنجاح وإرسال إشعار البريد.'), 'success');
+        showToast(editId ? 'تم تحديث المهمة بنجاح.' : 'تم حفظ المهمة بنجاح وإرسال إشعار البريد.', 'success');
       }
     }catch(e){
       console.error(e);
@@ -16641,6 +16640,19 @@ renderOrgPage = renderOrgPageUniformAllSectors;
 })();
 
 installMobilePublicPerformanceStyle();
+
+
+/* === PATCH: إيقاف اعتماد إنشاء المهمة والإبقاء على اعتماد الإكمال فقط === */
+function isTaskCreationApprovalStopped(){ return true; }
+taskNeedsApprovalFromCreatorRole = function(){ return false; };
+taskNeedsApprovalFromCreatorRole = function(){ return false; };
+isApprovedTask = function(t){ return t?.approval_status !== 'rejected'; };
+isPendingTask = function(){ return false; };
+getPendingTasks = function(){ return []; };
+visibleTasks = function(){ return state.tasks.filter(t=>t.is_archived!==true && t.approval_status !== 'rejected'); };
+renderPendingTaskApprovals = function(){
+  if($('pendingTasksList')) $('pendingTasksList').innerHTML='<div class="empty">تم إيقاف اعتماد إنشاء المهام. الاعتماد الحالي يكون فقط عند طلب إكمال المهمة.</div>';
+};
 
 init();
 </script>
