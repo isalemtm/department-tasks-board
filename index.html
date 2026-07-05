@@ -17015,8 +17015,7 @@ function pptReportLines(lines, max=40){
 function pptReportBullets(lines, max=40, empty=''){
   const rows=pptReportLines(lines,max);
   if(!rows.length && empty) rows.push(empty);
-  return rows.map(x=>`• ${x}`).join('
-');
+  return rows.map(x=>`• ${x}`).join('\\n');
 }
 function pptReportDeptLines(data, names, empty){
   const needles=(Array.isArray(names)?names:[names]).map(x=>String(x||'').trim()).filter(Boolean);
@@ -17083,15 +17082,13 @@ exportSectorMonthlyReportToPowerPoint = async function(){
     slide.addShape('rect',{x:9.62,y:1.55,w:2.85,h:5.55,fill:{color:'F8F5F1'},line:{color:'F8F5F1',width:0}});
 
     pptAddRtlText(slide,data.sectorName,4.55,0.50,4.55,0.40,{fontSize:23,bold:true,color:'000000',align:'center'});
-    pptAddRtlText(slide,'التقرير الشهري
-للأداء',0.83,0.82,1.25,0.43,{fontSize:10,color:'342923',align:'center'});
+    pptAddRtlText(slide,'التقرير الشهري\\nللأداء',0.83,0.82,1.25,0.43,{fontSize:10,color:'342923',align:'center'});
     pptAddRtlText(slide,data.monthLabel,0.83,1.27,1.25,0.20,{fontSize:7.5,color:'C7AA91',align:'center'});
     slide.addShape('line',{x:9.48,y:0.36,w:0,h:1.10,line:{color:'342923',width:1}});
     slide.addImage({data:SECTOR_REPORT_TEMPLATE_LOGO,x:9.88,y:0.40,w:2.20,h:1.02});
 
     slide.addImage({data:SECTOR_REPORT_TEMPLATE_PERF_ICON,x:10.98,y:1.95,w:0.72,h:0.72});
-    pptAddRtlText(slide,'ملخص
-الأداء',10.08,2.05,0.90,0.70,{fontSize:21,bold:true,color:'4C362E',align:'center'});
+    pptAddRtlText(slide,'ملخص\\nالأداء',10.08,2.05,0.90,0.70,{fontSize:21,bold:true,color:'4C362E',align:'center'});
 
     const hrLines=pptReportDeptLines(data,['الموارد البشرية','الموارد'], 'لا توجد مهام لهذا القسم خلال الشهر المختار.');
     const adminLines=pptReportDeptLines(data,['الشؤون الإدارية','الشؤون الادارية','الإدارية'], 'لا توجد مهام لهذا القسم خلال الشهر المختار.');
@@ -17107,10 +17104,8 @@ exportSectorMonthlyReportToPowerPoint = async function(){
 
     slide.addShape('rect',{x:3.39,y:4.55,w:2.78,h:2.38,fill:{color:'F8F5F1'},line:{color:'F8F5F1',width:0}});
     slide.addImage({data:SECTOR_REPORT_TEMPLATE_CHALLENGE_ICON,x:4.73,y:4.78,w:0.80,h:0.80});
-    pptAddRtlText(slide,'التحديات
-والحلول',3.64,4.86,1.00,0.55,{fontSize:18,bold:true,color:'4C362E',align:'center'});
-    const challengeText=pptReportLines(data.challenges,6).join('
-');
+    pptAddRtlText(slide,'التحديات\\nوالحلول',3.64,4.86,1.00,0.55,{fontSize:18,bold:true,color:'4C362E',align:'center'});
+    const challengeText=pptReportLines(data.challenges,6).join('\\n');
     pptAddRtlText(slide,'التحدي :',5.55,5.65,0.55,0.16,{fontSize:7.5,color:'2D7D31',bold:true,align:'right'});
     slide.addShape('line',{x:3.55,y:5.90,w:2.42,h:0,line:{color:'AFA49B',width:0.5,dash:'dash'}});
     pptAddRtlText(slide,challengeText || 'لا توجد تحديات مسجلة لهذا الشهر.',3.55,5.68,2.00,0.25,{fontSize:6.8,color:'342923',align:'right',valign:'top'});
