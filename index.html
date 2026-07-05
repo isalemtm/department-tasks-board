@@ -17305,6 +17305,135 @@ function renderSectorMonthlyReport(){
     </section>`;
 }
 
+
+/* === PATCH: عرض تقرير القطاع الشهري للمدير والرئيس التنفيذي كقطاعات مغلقة ===
+   - رئيس القطاع: يرى تقرير قطاعه مباشرة كما هو.
+   - مدير النظام والرئيس التنفيذي: تظهر كل القطاعات تحت بعض كأقسام مغلقة، وعند فتح القطاع يظهر تقريره.
+   - لا يغير الصلاحيات الأخرى ولا بيانات صفحات النظام. */
+function sectorReportCanViewAllSectors(){
+  return (typeof isAdminOrCeo === 'function' && isAdminOrCeo()) || (typeof isAdmin === 'function' && isAdmin()) || (typeof isCeo === 'function' && isCeo());
+}
+canViewSectorMonthlyReport = function(){
+  return sectorReportCanViewAllSectors() || (typeof isSectorHead === 'function' && isSectorHead());
+};
+function sectorReportViewerSectors(){
+  if(sectorReportCanViewAllSectors()) return (state.sectors || []).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  const mySectorId = state.profile?.sector_id || '';
+  return (state.sectors || []).filter(s=>s.id===mySectorId);
+}
+function sectorReportTasksForSectorId(sectorId, monthValue){
+  const range=getSectorReportRange(monthValue || getSectorReportMonthValue());
+  return visibleTasks().filter(t=>{
+    const taskSector=t.target_sector_id || t.owner_sector_id || '';
+    return taskSector===sectorId && taskBelongsToSectorReportMonth(t,range);
+  });
+}
+sectorReportTasksForCurrentSector = function(){
+  const sectorId = window.__sectorReportCurrentExportSectorId || state.profile?.sector_id || '';
+  return sectorReportTasksForSectorId(sectorId, getSectorReportMonthValue());
+};
+function sectorReportBuildDataForSector(sectorId){
+  const monthValue=getSectorReportMonthValue();
+  const range=getSectorReportRange(monthValue);
+  const sectorName=nameOfSector(sectorId);
+  const tasks=sectorReportTasksForSectorId(sectorId, monthValue);
+  const completedTasks=sectorReportAllCompletedTasksInMonth(tasks,range);
+  const depts=state.departments.filter(d=>d.sector_id===sectorId);
+  const total=tasks.length;
+  const done=completedTasks.length;
+  const inProgress=sectorReportInProgressCount(tasks, range);
+  const late=tasks.filter(isLate).length;
+  const completionRate=total?Math.round(done/total*100):0;
+  const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+  const deptSections=depts.map(d=>{
+    const deptDone=completedTasks.filter(t=>(t.target_department_id||t.owner_department_id||'')===d.id);
+    const lines=sectorReportMergeReportTasks(deptDone,14);
+    return {name:d.name, count:deptDone.length, completedCount:deptDone.length, lines:lines.length?lines:['لا توجد مهام منجزة لهذا القسم خلال الشهر المختار.']};
+  });
+  const data={monthValue, monthLabel, sectorName,total,done,inProgress,late,completionRate,deptSections};
+  data.kpis=sectorReportKpiReportLines(data);
+  data.training=sectorReportCategoryReportLines(tasks,['تدريب','دورة','دورات','ورشة','ورش','برنامج تدريبي','تطوير'], 'لا توجد مهام تدريبية منجزة أو مسجلة لهذا الشهر.', range);
+  data.hiring=sectorReportCategoryReportLines(tasks,['توظيف','شاغر','شواغر','تعيين','استقطاب','مقابلة','مرشح','مرشحين','تسكين'], 'لا توجد مهام توظيف أو تسكين شواغر منجزة أو مسجلة لهذا الشهر.', range);
+  data.challenges=sectorReportChallengeSolutionLines(tasks,range);
+  data.completedHighlights=sectorReportMergeReportTasks(completedTasks,12);
+  return data;
+}
+sectorReportBuildData = function(sectorId){
+  const resolvedSectorId = sectorId || window.__sectorReportCurrentExportSectorId || state.profile?.sector_id || sectorReportViewerSectors()[0]?.id || '';
+  return sectorReportBuildDataForSector(resolvedSectorId);
+};
+function sectorReportDataHtml(data, options={}){
+  const exportSectorId=escapeHtml(options.sectorId || '');
+  const exportButton = `<button class="btn btn-info" onclick="window.__sectorReportCurrentExportSectorId='${exportSectorId}'; exportSectorMonthlyReportToPowerPoint().finally(()=>{window.__sectorReportCurrentExportSectorId='';})">تصدير PowerPoint</button>`;
+  return `<div class="sector-report-page">
+    <div class="sector-report-header">
+      <div class="sector-report-title"><h2>${escapeHtml(data.sectorName)}</h2><p>التقرير الشهري — ${escapeHtml(data.monthLabel)}</p>${options.showOwner?`<p class="sector-report-muted">رئيس القطاع: ${escapeHtml(options.ownerName||'—')}</p>`:''}</div>
+      <div class="sector-report-logo">رصف<br><span style="font-size:22px;letter-spacing:2px;">RASF</span></div>
+    </div>
+    <div class="sector-report-kpis">
+      <div class="sector-report-kpi"><strong>${data.total}</strong><span>إجمالي مهام الشهر</span></div>
+      <div class="sector-report-kpi"><strong>${data.done}</strong><span>منجزة خلال الشهر</span></div>
+      <div class="sector-report-kpi"><strong>${data.inProgress}</strong><span>قيد التنفيذ</span></div>
+      <div class="sector-report-kpi"><strong>${data.late}</strong><span>متأخرة</span></div>
+    </div>
+    <div class="sector-report-grid">
+      <div class="sector-report-box tall"><h3>ملخص الأداء</h3><h4>أقسام القطاع والمهام المنجزة</h4>${sectorReportDeptReportHtml(data.deptSections)}</div>
+      <div class="sector-report-box tall"><h3>مؤشرات الأداء والإنتاجية</h3>${sectorReportList(data.kpis)}<h4>أبرز إنجازات الشهر</h4>${sectorReportList(data.completedHighlights,'لا توجد مهام منجزة خلال الشهر المختار.')}</div>
+      <div class="sector-report-box tall"><h3>المتابعات والتحديات</h3><h4>الدورات التدريبية</h4>${sectorReportList(data.training)}<h4>التوظيف وتسكين الشواغر</h4>${sectorReportList(data.hiring)}<h4>التحديات والحلول</h4>${sectorReportList(data.challenges)}</div>
+    </div>
+    <div class="sector-report-actions">${exportButton}<button class="btn btn-info" onclick="window.print()">طباعة / حفظ PDF</button><span class="sector-report-print-note">التقرير مبني على الشهر الميلادي المختار فقط.</span></div>
+  </div>`;
+}
+function sectorReportAccordionsHtml(){
+  const sectors=sectorReportViewerSectors();
+  if(!sectors.length) return '<div class="empty">لا توجد قطاعات لعرض تقاريرها.</div>';
+  return `<div class="sector-report-accordion-list">${sectors.map((s,index)=>{
+    const data=sectorReportBuildDataForSector(s.id);
+    return `<details class="sector-report-accordion" ${index===0?'open':''}>
+      <summary><span>${escapeHtml(s.name)}</span><small>${data.done} منجزة / ${data.total} إجمالي مهام الشهر</small></summary>
+      <div class="sector-report-accordion-body">${sectorReportDataHtml(data,{sectorId:s.id})}</div>
+    </details>`;
+  }).join('')}</div>`;
+}
+(function installSectorReportAccordionStyle(){
+  if(document.getElementById('sectorReportAccordionStyle')) return;
+  const style=document.createElement('style');
+  style.id='sectorReportAccordionStyle';
+  style.textContent=`
+    .sector-report-accordion-list{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+    .sector-report-accordion{border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--shadow);overflow:hidden}
+    .sector-report-accordion summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#fbf7f2;color:var(--primary2);font-weight:900}
+    .sector-report-accordion summary::-webkit-details-marker{display:none}
+    .sector-report-accordion summary:before{content:'+';width:28px;height:28px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;margin-inline-end:8px;order:-1}
+    .sector-report-accordion[open] summary:before{content:'−'}
+    .sector-report-accordion summary small{color:var(--muted);font-weight:700}
+    .sector-report-accordion-body{padding:14px;background:#fff}
+    .sector-report-accordion-body .sector-report-page{box-shadow:none;margin:0}
+    @media(max-width:768px){.sector-report-accordion summary{align-items:flex-start;flex-direction:column}.sector-report-accordion summary:before{order:0}}
+  `;
+  document.head.appendChild(style);
+})();
+renderSectorMonthlyReport = function(){
+  ensureSectorMonthlyReportDom();
+  const box=$('sectorReportContent');
+  if(!box) return;
+  if(!canViewSectorMonthlyReport()){
+    box.innerHTML='<section class="panel card"><div class="empty">هذه الصفحة مخصصة لرئيس القطاع أو مدير النظام أو الرئيس التنفيذي فقط.</div></section>';
+    return;
+  }
+  const monthValue=getSectorReportMonthValue();
+  const isAll=sectorReportCanViewAllSectors();
+  const heading=isAll?'التقارير الشهرية للقطاعات':'التقرير الشهري للقطاع';
+  const desc=isAll?'اختر الشهر، ثم افتح أي قطاع لعرض تقريره الشهري المبني على مهام ذلك القطاع فقط.':'يتم بناء التقرير من المهام المنجزة داخل الشهر المختار فقط في أقسام القطاع، مع تلخيص المهام المتشابهة بصيغة تقريرية.';
+  box.innerHTML=`<section class="panel card">
+    <div class="sector-report-toolbar">
+      <div><h2 style="margin:0;color:var(--primary2);">${heading}</h2><p class="meta" style="margin:4px 0 0;">${desc}</p></div>
+      <div class="month-box"><label>اختر الشهر</label><input id="sectorReportMonth" type="month" value="${escapeHtml(monthValue)}" onchange="renderSectorMonthlyReport()"></div>
+    </div>
+    ${isAll ? sectorReportAccordionsHtml() : sectorReportDataHtml(sectorReportBuildDataForSector(state.profile?.sector_id||''),{sectorId:state.profile?.sector_id||'',showOwner:true,ownerName:state.profile?.name||'—'})}
+  </section>`;
+};
+
 init();
 </script>
 </body>
