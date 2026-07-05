@@ -17010,7 +17010,8 @@ function pptReportCleanTitle(v){
   return String(v||'').replace(/\s+/g,' ').trim();
 }
 function pptReportLines(lines, max=40){
-  return (lines||[]).map(pptReportCleanTitle).filter(Boolean).slice(0,max);
+  const source = Array.isArray(lines) ? lines : (lines === undefined || lines === null || lines === '' ? [] : [lines]);
+  return source.map(pptReportCleanTitle).filter(Boolean).slice(0,max);
 }
 function pptReportBullets(lines, max=40, empty=''){
   const rows=pptReportLines(lines,max);
