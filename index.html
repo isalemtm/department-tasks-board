@@ -16799,8 +16799,8 @@ function sectorReportCompletionDateInMonth(task,range){
   return task.status==='مكتملة' && dateWithinSectorReportMonth(task.completion_reviewed_at || task.updated_at, range);
 }
 function sectorReportTaskLine(task){
-  const status=sectorReportTaskStatus(task);
-  return `${task.title || 'مهمة بدون عنوان'} — ${status} — المسؤول: ${nameOfUser(task.primary_responsible_id)}${task.due_date?' — الاستحقاق: '+formatDate(task.due_date):''}`;
+  // التقرير الشهري يعرض اسم المهمة فقط بدون حالة أو مسؤول أو تاريخ استحقاق، التزامًا بنموذج التقرير.
+  return `${task.title || 'مهمة بدون عنوان'}`;
 }
 function sectorReportFilterTasksByKeywords(tasks,keywords){
   const words=keywords.map(w=>String(w).toLowerCase());
@@ -16843,10 +16843,7 @@ function renderSectorMonthlyReport(){
   ];
   const trainingTasks=sectorReportFilterTasksByKeywords(tasks,['تدريب','دورة','دورات','ورشة','ورش','برنامج تدريبي','تطوير']);
   const hiringTasks=sectorReportFilterTasksByKeywords(tasks,['توظيف','شاغر','شواغر','تعيين','استقطاب','مقابلة','مرشح','مرشحين','تسكين']);
-  const challenges=tasks.filter(t=>isLate(t) || String(t.priority||'')==='عالية').slice(0,8).map(t=>{
-    const latest=typeof latestCommentText==='function'?latestCommentText(t.id):'';
-    return `${t.title || 'مهمة بدون عنوان'} — ${isLate(t)?'متأخرة':'أولوية عالية'}${latest?' — آخر تحديث: '+latest:''}`;
-  });
+  const challenges=tasks.filter(t=>isLate(t) || String(t.priority||'')==='عالية').slice(0,8).map(t=>`${t.title || 'مهمة بدون عنوان'}`);
   box.innerHTML=`
     <section class="panel card">
       <div class="sector-report-toolbar">
@@ -16900,10 +16897,7 @@ function sectorReportBuildData(){
   });
   const trainingTasks=sectorReportFilterTasksByKeywords(tasks,['تدريب','دورة','دورات','ورشة','ورش','برنامج تدريبي','تطوير']);
   const hiringTasks=sectorReportFilterTasksByKeywords(tasks,['توظيف','شاغر','شواغر','تعيين','استقطاب','مقابلة','مرشح','مرشحين','تسكين']);
-  const challenges=tasks.filter(t=>isLate(t) || String(t.priority||'')==='عالية').slice(0,8).map(t=>{
-    const latest=typeof latestCommentText==='function'?latestCommentText(t.id):'';
-    return `${t.title || 'مهمة بدون عنوان'} — ${isLate(t)?'متأخرة':'أولوية عالية'}${latest?' — آخر تحديث: '+latest:''}`;
-  });
+  const challenges=tasks.filter(t=>isLate(t) || String(t.priority||'')==='عالية').slice(0,8).map(t=>`${t.title || 'مهمة بدون عنوان'}`);
   return {
     monthValue, monthLabel, sectorName,
     total, done, inProgress, late, completionRate,
