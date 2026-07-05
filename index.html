@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+  <script id="pptxgenPrimaryScript" src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <style>
     @font-face{font-family:"Bressay";src:url("./Bressay-Regular.ttf") format("truetype");font-weight:normal;font-style:normal;}
     :root{
@@ -16656,6 +16656,64 @@ renderPendingTaskApprovals = function(){
 };
 
 
+
+/* === PATCH: تثبيت حساب قيد التنفيذ في التقرير الشهري وتحميل أداة PowerPoint عند الحاجة === */
+function sectorReportIsCompletedInMonth(task, range){
+  if(!task) return false;
+  return String(task.status || '') === 'مكتملة' && dateWithinSectorReportMonth(task.completion_reviewed_at || task.completed_at || task.updated_at || task.approved_at, range);
+}
+function sectorReportIsLateInMonth(task){
+  return typeof isLate === 'function' ? isLate(task) : false;
+}
+function sectorReportInProgressCount(tasks, range){
+  const total = (tasks || []).length;
+  const done = (tasks || []).filter(t => sectorReportIsCompletedInMonth(t, range)).length;
+  const late = (tasks || []).filter(sectorReportIsLateInMonth).length;
+  return Math.max(0, total - done - late);
+}
+function getPptxConstructor(){
+  const ctor = window.pptxgen || window.PptxGenJS || window.PptxGenJS?.default || window.pptxgenjs || window.pptxgenjs?.default || null;
+  return (typeof ctor === 'function') ? ctor : null;
+}
+function loadScriptOnce(src, id){
+  return new Promise((resolve, reject)=>{
+    const existing = id ? document.getElementById(id) : null;
+    if(existing){
+      existing.addEventListener('load', ()=>resolve(), {once:true});
+      existing.addEventListener('error', ()=>reject(new Error('تعذر تحميل مكتبة PowerPoint.')), {once:true});
+      if(existing.dataset.loaded === 'true' || existing.readyState === 'complete') resolve();
+      return;
+    }
+    const s=document.createElement('script');
+    if(id) s.id=id;
+    s.src=src;
+    s.async=true;
+    s.onload=()=>{s.dataset.loaded='true'; resolve();};
+    s.onerror=()=>reject(new Error('تعذر تحميل مكتبة PowerPoint.'));
+    document.head.appendChild(s);
+  });
+}
+async function ensurePptxGenLoaded(){
+  let ctor=getPptxConstructor();
+  if(ctor) return ctor;
+  const sources=[
+    ['https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js','pptxgenFallbackJsdelivrBundle'],
+    ['https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.min.js','pptxgenFallbackJsdelivrMin'],
+    ['https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js','pptxgenFallbackUnpkgBundle']
+  ];
+  for(const [src,id] of sources){
+    try{
+      await loadScriptOnce(src,id);
+      ctor=getPptxConstructor();
+      if(ctor) return ctor;
+    }catch(e){
+      console.warn(e);
+    }
+  }
+  return null;
+}
+
+
 /* === PATCH: صفحة التقرير الشهري لرئيس القطاع ===
    تظهر لرئيس القطاع فقط، وتبني التقرير من بيانات المهام داخل الشهر المختار فقط.
    لا تغيّر الصلاحيات ولا صفحات النظام الأخرى. */
@@ -16767,8 +16825,8 @@ function renderSectorMonthlyReport(){
   const tasks=sectorReportTasksForCurrentSector();
   const depts=state.departments.filter(d=>d.sector_id===sectorId);
   const total=tasks.length;
-  const done=tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).length;
-  const inProgress=tasks.filter(t=>sectorReportTaskStatus(t)==='قيد التنفيذ').length;
+  const done=tasks.filter(t=>sectorReportIsCompletedInMonth(t,range)).length;
+  const inProgress=sectorReportInProgressCount(tasks, range);
   const late=tasks.filter(isLate).length;
   const completionRate=total?Math.round(done/total*100):0;
   const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
@@ -16811,7 +16869,7 @@ function renderSectorMonthlyReport(){
         </div>
         <div class="sector-report-grid">
           <div class="sector-report-box tall"><h3>ملخص الأداء</h3><h4>الإدارات والمهام</h4>${departmentHtml}</div>
-          <div class="sector-report-box tall"><h3>مهام وإنتاجية القطاع</h3><h4>المؤشرات</h4>${sectorReportList(kpiLines)}<h4>أبرز المهام المنجزة</h4>${sectorReportList(tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).slice(0,8).map(sectorReportTaskLine),'لا توجد مهام منجزة خلال الشهر المختار.')}</div>
+          <div class="sector-report-box tall"><h3>مهام وإنتاجية القطاع</h3><h4>المؤشرات</h4>${sectorReportList(kpiLines)}<h4>أبرز المهام المنجزة</h4>${sectorReportList(tasks.filter(t=>sectorReportIsCompletedInMonth(t,range)).slice(0,8).map(sectorReportTaskLine),'لا توجد مهام منجزة خلال الشهر المختار.')}</div>
           <div class="sector-report-box tall"><h3>المتابعات والتحديات</h3><h4>الدورات التدريبية</h4>${sectorReportList(trainingTasks.map(sectorReportTaskLine),'لا توجد مهام تدريبية مسجلة لهذا الشهر.')}<h4>التوظيف وتسكين الشواغر</h4>${sectorReportList(hiringTasks.map(sectorReportTaskLine),'لا توجد مهام توظيف أو تسكين شواغر مسجلة لهذا الشهر.')}<h4>التحديات والحلول</h4>${sectorReportList(challenges,'لا توجد تحديات أو مهام عالية/متأخرة مسجلة لهذا الشهر.')}</div>
         </div>
         <div class="sector-report-actions"><button class="btn btn-info" onclick="exportSectorMonthlyReportToPowerPoint()">تصدير PowerPoint</button><button class="btn btn-info" onclick="window.print()">طباعة / حفظ PDF</button><span class="sector-report-print-note">التقرير مبني فقط على بيانات المهام الواقعة داخل الشهر المختار.</span></div>
@@ -16831,8 +16889,8 @@ function sectorReportBuildData(){
   const tasks=sectorReportTasksForCurrentSector();
   const depts=state.departments.filter(d=>d.sector_id===sectorId);
   const total=tasks.length;
-  const done=tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).length;
-  const inProgress=tasks.filter(t=>sectorReportTaskStatus(t)==='قيد التنفيذ').length;
+  const done=tasks.filter(t=>sectorReportIsCompletedInMonth(t,range)).length;
+  const inProgress=sectorReportInProgressCount(tasks, range);
   const late=tasks.filter(isLate).length;
   const completionRate=total?Math.round(done/total*100):0;
   const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
@@ -16878,9 +16936,10 @@ function addReportBox(slide,title,lines,x,y,w,h){
 }
 async function exportSectorMonthlyReportToPowerPoint(){
   try{
-    if(typeof pptxgen === 'undefined') return showToast('تعذر تحميل أداة تصدير PowerPoint. حدّث الصفحة وحاول مرة أخرى.','error');
+    const PptxGen = await ensurePptxGenLoaded();
+    if(!PptxGen) return showToast('تعذر تحميل أداة تصدير PowerPoint. تأكد من الاتصال بالإنترنت ثم حدّث الصفحة وحاول مرة أخرى.','error');
     const data=sectorReportBuildData();
-    const pptx=new pptxgen();
+    const pptx=new PptxGen();
     pptx.layout='LAYOUT_WIDE';
     pptx.author='لوحة متابعة مهام القطاعات';
     pptx.subject='التقرير الشهري للقطاع';
