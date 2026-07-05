@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <style>
     @font-face{font-family:"Bressay";src:url("./Bressay-Regular.ttf") format("truetype");font-weight:normal;font-style:normal;}
     :root{
@@ -16767,7 +16768,7 @@ function renderSectorMonthlyReport(){
   const depts=state.departments.filter(d=>d.sector_id===sectorId);
   const total=tasks.length;
   const done=tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).length;
-  const inProgress=tasks.filter(t=>t.status==='قيد التنفيذ' && !isLate(t)).length;
+  const inProgress=tasks.filter(t=>sectorReportTaskStatus(t)==='قيد التنفيذ').length;
   const late=tasks.filter(isLate).length;
   const completionRate=total?Math.round(done/total*100):0;
   const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
@@ -16813,10 +16814,113 @@ function renderSectorMonthlyReport(){
           <div class="sector-report-box tall"><h3>مهام وإنتاجية القطاع</h3><h4>المؤشرات</h4>${sectorReportList(kpiLines)}<h4>أبرز المهام المنجزة</h4>${sectorReportList(tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).slice(0,8).map(sectorReportTaskLine),'لا توجد مهام منجزة خلال الشهر المختار.')}</div>
           <div class="sector-report-box tall"><h3>المتابعات والتحديات</h3><h4>الدورات التدريبية</h4>${sectorReportList(trainingTasks.map(sectorReportTaskLine),'لا توجد مهام تدريبية مسجلة لهذا الشهر.')}<h4>التوظيف وتسكين الشواغر</h4>${sectorReportList(hiringTasks.map(sectorReportTaskLine),'لا توجد مهام توظيف أو تسكين شواغر مسجلة لهذا الشهر.')}<h4>التحديات والحلول</h4>${sectorReportList(challenges,'لا توجد تحديات أو مهام عالية/متأخرة مسجلة لهذا الشهر.')}</div>
         </div>
-        <div class="sector-report-actions"><button class="btn btn-info" onclick="window.print()">طباعة / حفظ PDF</button><span class="sector-report-print-note">التقرير مبني فقط على بيانات المهام الواقعة داخل الشهر المختار.</span></div>
+        <div class="sector-report-actions"><button class="btn btn-info" onclick="exportSectorMonthlyReportToPowerPoint()">تصدير PowerPoint</button><button class="btn btn-info" onclick="window.print()">طباعة / حفظ PDF</button><span class="sector-report-print-note">التقرير مبني فقط على بيانات المهام الواقعة داخل الشهر المختار.</span></div>
       </div>
     </section>`;
 }
+
+function sectorReportPlainLines(items,empty='لا توجد بيانات مسجلة لهذا الشهر.'){
+  const rows=(items||[]).filter(Boolean).slice(0,8);
+  return rows.length ? rows : [empty];
+}
+function sectorReportBuildData(){
+  const monthValue=getSectorReportMonthValue();
+  const range=getSectorReportRange(monthValue);
+  const sectorId=state.profile?.sector_id || '';
+  const sectorName=nameOfSector(sectorId);
+  const tasks=sectorReportTasksForCurrentSector();
+  const depts=state.departments.filter(d=>d.sector_id===sectorId);
+  const total=tasks.length;
+  const done=tasks.filter(t=>sectorReportCompletionDateInMonth(t,range)).length;
+  const inProgress=tasks.filter(t=>sectorReportTaskStatus(t)==='قيد التنفيذ').length;
+  const late=tasks.filter(isLate).length;
+  const completionRate=total?Math.round(done/total*100):0;
+  const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+  const deptSections=depts.map(d=>{
+    const deptTasks=tasks.filter(t=>(t.target_department_id||t.owner_department_id||'')===d.id);
+    return {name:d.name, count:deptTasks.length, lines:sectorReportPlainLines(deptTasks.map(sectorReportTaskLine),'لا توجد مهام لهذا القسم خلال الشهر المختار.')};
+  });
+  const trainingTasks=sectorReportFilterTasksByKeywords(tasks,['تدريب','دورة','دورات','ورشة','ورش','برنامج تدريبي','تطوير']);
+  const hiringTasks=sectorReportFilterTasksByKeywords(tasks,['توظيف','شاغر','شواغر','تعيين','استقطاب','مقابلة','مرشح','مرشحين','تسكين']);
+  const challenges=tasks.filter(t=>isLate(t) || String(t.priority||'')==='عالية').slice(0,8).map(t=>{
+    const latest=typeof latestCommentText==='function'?latestCommentText(t.id):'';
+    return `${t.title || 'مهمة بدون عنوان'} — ${isLate(t)?'متأخرة':'أولوية عالية'}${latest?' — آخر تحديث: '+latest:''}`;
+  });
+  return {
+    monthValue, monthLabel, sectorName,
+    total, done, inProgress, late, completionRate,
+    deptSections,
+    kpis:[
+      `إجمالي مهام الشهر: ${total}`,
+      `المهام المنجزة خلال الشهر: ${done}`,
+      `المهام قيد التنفيذ خلال الشهر: ${inProgress}`,
+      `المهام المتأخرة ضمن بيانات الشهر: ${late}`,
+      `نسبة الإنجاز خلال الشهر: ${completionRate}%`
+    ],
+    training:sectorReportPlainLines(trainingTasks.map(sectorReportTaskLine),'لا توجد مهام تدريبية مسجلة لهذا الشهر.'),
+    hiring:sectorReportPlainLines(hiringTasks.map(sectorReportTaskLine),'لا توجد مهام توظيف أو تسكين شواغر مسجلة لهذا الشهر.'),
+    challenges:sectorReportPlainLines(challenges,'لا توجد تحديات أو مهام عالية/متأخرة مسجلة لهذا الشهر.')
+  };
+}
+function pptSafeText(v){ return String(v||'').replace(/\s+/g,' ').trim(); }
+function pptBullets(lines, max=8){
+  return (lines||[]).slice(0,max).map(x=>({text:pptSafeText(x), options:{bullet:{type:'ul'}, breakLine:true}}));
+}
+function addRtlText(slide,text,x,y,w,h,opts={}){
+  slide.addText(text,{x,y,w,h,fontFace:'Arial',fontSize:opts.fontSize||12,color:opts.color||'342923',bold:!!opts.bold,align:opts.align||'right',valign:opts.valign||'mid',fit:'shrink',margin:opts.margin||0.04,breakLine:false,rtl:true});
+}
+function addReportBox(slide,title,lines,x,y,w,h){
+  slide.addShape('rect',{x,y,w,h,fill:{color:'FBF7F2'},line:{color:'61463B',width:0.8}});
+  slide.addShape('rect',{x,y,w,h:0.33,fill:{color:'4C362E'},line:{color:'4C362E',width:0}});
+  addRtlText(slide,title,x+0.05,y+0.04,w-0.1,0.22,{fontSize:12,color:'FFFFFF',bold:true,align:'center'});
+  const bulletText=pptBullets(lines,9);
+  slide.addText(bulletText.length?bulletText:[{text:'لا توجد بيانات.',options:{bullet:{type:'ul'}}}],{x:x+0.12,y:y+0.43,w:w-0.24,h:h-0.5,fontFace:'Arial',fontSize:8.5,color:'342923',align:'right',valign:'top',fit:'shrink',rtl:true,breakLine:true,margin:0.04});
+}
+async function exportSectorMonthlyReportToPowerPoint(){
+  try{
+    if(typeof pptxgen === 'undefined') return showToast('تعذر تحميل أداة تصدير PowerPoint. حدّث الصفحة وحاول مرة أخرى.','error');
+    const data=sectorReportBuildData();
+    const pptx=new pptxgen();
+    pptx.layout='LAYOUT_WIDE';
+    pptx.author='لوحة متابعة مهام القطاعات';
+    pptx.subject='التقرير الشهري للقطاع';
+    pptx.title=`${data.sectorName} - ${data.monthLabel}`;
+    pptx.company='RASF';
+    pptx.lang='ar-SA';
+    pptx.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'ar-SA'};
+    const slide=pptx.addSlide();
+    slide.background={color:'FFFFFF'};
+    // خلفية وقوالب مشابهة لنموذج التقرير المرفق بدون إضافة أقسام جديدة خارج المطلوب.
+    slide.addShape('rect',{x:0.25,y:1.55,w:3.05,h:5.5,fill:{color:'F7F3EE'},line:{color:'F7F3EE',width:0}});
+    slide.addShape('rect',{x:3.62,y:1.55,w:2.7,h:5.5,fill:{color:'F7F3EE'},line:{color:'F7F3EE',width:0}});
+    slide.addShape('rect',{x:6.78,y:1.55,w:2.7,h:5.5,fill:{color:'F7F3EE'},line:{color:'F7F3EE',width:0}});
+    slide.addShape('rect',{x:9.9,y:1.55,w:2.8,h:5.5,fill:{color:'F7F3EE'},line:{color:'F7F3EE',width:0}});
+    addRtlText(slide,data.sectorName,4.8,0.45,5.0,0.45,{fontSize:24,bold:true,color:'000000',align:'center'});
+    addRtlText(slide,'التقرير الشهري للأداء',0.7,0.85,1.35,0.28,{fontSize:10,color:'342923',align:'center'});
+    addRtlText(slide,data.monthLabel,0.7,1.18,1.35,0.24,{fontSize:8,color:'C7AA91',align:'center'});
+    slide.addShape('line',{x:9.92,y:0.38,w:0,h:1.12,line:{color:'342923',width:1}});
+    addRtlText(slide,'رصف\nRASF',10.25,0.42,2.15,0.8,{fontSize:24,bold:true,color:'61463B',align:'center'});
+
+    const deptNames=['الموارد البشرية','الشؤون الإدارية','التطوير التنظيمي'];
+    const deptText=(name)=>{
+      const found=data.deptSections.find(d=>pptSafeText(d.name).includes(name) || name.includes(pptSafeText(d.name)));
+      return found?found.lines:[`لا توجد مهام مسجلة في ${name} خلال الشهر المختار.`];
+    };
+    addReportBox(slide,'الموارد البشرية',deptText('الموارد البشرية'),6.78,1.63,2.7,5.25);
+    addReportBox(slide,'الشؤون الإدارية',deptText('الشؤون الإدارية'),9.9,3.16,2.8,3.72);
+    addReportBox(slide,'التطوير التنظيمي',deptText('التطوير التنظيمي'),3.62,1.63,2.7,2.65);
+    addReportBox(slide,'مؤشرات الأداء والإنتاجية',data.kpis,0.48,2.55,2.7,1.25);
+    addReportBox(slide,'الدورات التدريبية',data.training,0.48,4.05,2.7,1.25);
+    addReportBox(slide,'التوظيف وتسكين الشواغر',data.hiring,0.48,5.55,2.7,1.25);
+    addRtlText(slide,'ملخص\nالأداء',10.35,2.1,1.0,0.65,{fontSize:21,bold:true,color:'4C362E',align:'center'});
+    addReportBox(slide,'التحديات والحلول',data.challenges,3.62,4.55,2.7,2.45);
+
+    const fileName=`تقرير_${data.sectorName}_${data.monthValue}.pptx`.replace(/[\\/:*?"<>|]+/g,'-');
+    await pptx.writeFile({fileName});
+    showToast('تم تصدير تقرير PowerPoint بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير PowerPoint.','error',7000); }
+}
+
 (function installSectorMonthlyReportPage(){
   const __sectorReportOriginalShowApp=showApp;
   showApp=function(){
