@@ -17119,6 +17119,30 @@ exportSectorMonthlyReportToPowerPoint = async function(){
   }catch(e){ console.error(e); showToast(e.message||'تعذر تصدير PowerPoint.','error',7000); }
 };
 
+
+/* === FIX: إخفاء صفحة التقرير الشهري عند الانتقال لأي صفحة أخرى ===
+   كانت صفحة التقرير تبقى ظاهرة أسفل صفحة المهام بعد زيارتها مرة واحدة.
+   هذا التصحيح يضمن أن التقرير يظهر فقط عند اختيار تبويب تقرير القطاع الشهري. */
+(function fixSectorReportVisibilityOnly(){
+  const previousShowPage = showPage;
+  showPage = function(p){
+    if(p !== 'sectorReport'){
+      const reportPage = document.getElementById('sectorReportPage');
+      if(reportPage) reportPage.classList.add('hidden');
+      const reportTab = document.getElementById('tabSectorReport');
+      if(reportTab) reportTab.classList.remove('active');
+    }
+    const result = previousShowPage(p);
+    if(p !== 'sectorReport'){
+      const reportPage = document.getElementById('sectorReportPage');
+      if(reportPage) reportPage.classList.add('hidden');
+      const reportTab = document.getElementById('tabSectorReport');
+      if(reportTab) reportTab.classList.remove('active');
+    }
+    return result;
+  };
+})();
+
 init();
 </script>
 </body>
