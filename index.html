@@ -17143,6 +17143,168 @@ exportSectorMonthlyReportToPowerPoint = async function(){
   };
 })();
 
+
+/* === PATCH: إعادة بناء صفحة التقرير الشهري بصيغة تقرير حسب أقسام القطاع ===
+   - أقسام القطاع تعرض المهام المنجزة خلال الشهر المختار فقط.
+   - البنود تُعرض بصياغة تقريرية، مع دمج العناوين المتكررة/المتشابهة قدر الإمكان.
+   - بقية خانات التقرير تُعبأ من مهام الشهر دون تفاصيل زائدة. */
+function sectorReportNormalizeArabicText(value){
+  return String(value||'')
+    .replace(/[إأآا]/g,'ا')
+    .replace(/[ى]/g,'ي')
+    .replace(/[ة]/g,'ه')
+    .replace(/[ؤئ]/g,'ء')
+    .replace(/[ًٌٍَُِّْـ]/g,'')
+    .replace(/[\u200f\u200e]/g,'')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+function sectorReportCleanTaskTitleForReport(title){
+  return String(title||'مهمة بدون عنوان')
+    .replace(/[\u200f\u200e]/g,'')
+    .replace(/\s+/g,' ')
+    .replace(/^[\-–—•\s]+/,'')
+    .replace(/\s*[\-–—|]+\s*(مكتملة|جديدة|قيد التنفيذ|متأخرة).*$/i,'')
+    .trim() || 'مهمة بدون عنوان';
+}
+function sectorReportTaskGroupKey(title){
+  const normalized=sectorReportNormalizeArabicText(sectorReportCleanTaskTitleForReport(title));
+  const stop=new Set(['تم','عمل','اعداد','تنسيق','متابعه','متابعة','اصدار','ارسال','رفع','اعتماد','تحديث','تعميم','اجتماع','بشان','حول','على','عن','في','من','الى','مع','الخاص','الخاصة']);
+  const words=normalized.split(' ').filter(w=>w && !stop.has(w));
+  return words.slice(0,4).join(' ') || normalized;
+}
+function sectorReportHumanReportLine(title){
+  const clean=sectorReportCleanTaskTitleForReport(title);
+  if(/^تم\s/.test(clean)) return clean;
+  if(/^(إعداد|اعداد|تنسيق|إصدار|اصدار|اعتماد|رفع|إرسال|ارسال|متابعة|تحديث|تدقيق|مراجعة|تعميم|عقد|تنفيذ)/.test(clean)) return `تم ${clean}`;
+  return `تم إنجاز ${clean}`;
+}
+function sectorReportMergeReportTasks(tasks, maxLines=14){
+  const rows=(tasks||[]).filter(Boolean);
+  if(!rows.length) return [];
+  const groups=[];
+  const map=new Map();
+  rows.forEach(t=>{
+    const title=sectorReportCleanTaskTitleForReport(t.title||'مهمة بدون عنوان');
+    const key=sectorReportTaskGroupKey(title);
+    if(!map.has(key)){
+      const obj={key, titles:[], sample:title};
+      map.set(key,obj); groups.push(obj);
+    }
+    const g=map.get(key);
+    if(!g.titles.some(x=>sectorReportNormalizeArabicText(x)===sectorReportNormalizeArabicText(title))) g.titles.push(title);
+  });
+  const lines=[];
+  groups.forEach(g=>{
+    if(g.titles.length===1){
+      lines.push(sectorReportHumanReportLine(g.titles[0]));
+    }else{
+      const base=g.sample;
+      lines.push(`تم إنجاز ومتابعة ${base}، وشملت ${g.titles.length} مهام مرتبطة.`);
+    }
+  });
+  return lines.slice(0,maxLines);
+}
+function sectorReportAllCompletedTasksInMonth(tasks, range){
+  return (tasks||[]).filter(t=>sectorReportIsCompletedInMonth(t,range));
+}
+function sectorReportCategoryReportLines(tasks, keywords, empty, range){
+  const monthTasks=(tasks||[]).filter(t=>taskBelongsToSectorReportMonth(t,range));
+  const filtered=sectorReportFilterTasksByKeywords(monthTasks, keywords);
+  const preferred=filtered.filter(t=>sectorReportIsCompletedInMonth(t,range));
+  const lines=sectorReportMergeReportTasks(preferred.length?preferred:filtered, 10);
+  return lines.length?lines:[empty];
+}
+function sectorReportChallengeSolutionLines(tasks, range){
+  const rows=(tasks||[])
+    .filter(t=>taskBelongsToSectorReportMonth(t,range))
+    .filter(t=>isLate(t) || String(t.priority||'')==='عالية')
+    .slice(0,6);
+  if(!rows.length) return ['لا توجد تحديات جوهرية مسجلة ضمن مهام الشهر المختار.'];
+  return rows.map(t=>{
+    const title=sectorReportCleanTaskTitleForReport(t.title||'مهمة بدون عنوان');
+    const cause=isLate(t)?'تأخر في الإغلاق أو المتابعة':'أولوية عالية تتطلب متابعة مباشرة';
+    return `التحدي: ${title}. الحل: متابعة ${cause} ووضع المهمة ضمن أولويات الإغلاق.`;
+  });
+}
+function sectorReportKpiReportLines(data){
+  return [
+    `بلغ إجمالي مهام الشهر ${data.total} مهمة.` ,
+    `تم إنجاز ${data.done} مهمة خلال الشهر بنسبة إنجاز ${data.completionRate}%.`,
+    `بلغ عدد المهام قيد التنفيذ ${data.inProgress} مهمة بنهاية الشهر.`,
+    `بلغ عدد المهام المتأخرة ضمن بيانات الشهر ${data.late} مهمة.`
+  ];
+}
+function sectorReportDeptReportHtml(deptSections){
+  return (deptSections||[]).map(d=>`<div class="sector-report-dept"><b>${escapeHtml(d.name)}</b><div class="sector-report-muted">${d.completedCount} مهمة منجزة خلال الشهر</div>${sectorReportList(d.lines,'لا توجد مهام منجزة لهذا القسم خلال الشهر المختار.')}</div>`).join('') || '<div class="sector-report-muted">لا توجد أقسام مرتبطة بهذا القطاع.</div>';
+}
+function sectorReportBuildData(){
+  const monthValue=getSectorReportMonthValue();
+  const range=getSectorReportRange(monthValue);
+  const sectorId=state.profile?.sector_id || '';
+  const sectorName=nameOfSector(sectorId);
+  const tasks=sectorReportTasksForCurrentSector();
+  const completedTasks=sectorReportAllCompletedTasksInMonth(tasks,range);
+  const depts=state.departments.filter(d=>d.sector_id===sectorId);
+  const total=tasks.length;
+  const done=completedTasks.length;
+  const inProgress=sectorReportInProgressCount(tasks, range);
+  const late=tasks.filter(isLate).length;
+  const completionRate=total?Math.round(done/total*100):0;
+  const monthLabel=range.start.toLocaleDateString('ar-SA',{year:'numeric',month:'long'});
+  const deptSections=depts.map(d=>{
+    const deptDone=completedTasks.filter(t=>(t.target_department_id||t.owner_department_id||'')===d.id);
+    const lines=sectorReportMergeReportTasks(deptDone,14);
+    return {name:d.name, count:deptDone.length, completedCount:deptDone.length, lines:lines.length?lines:['لا توجد مهام منجزة لهذا القسم خلال الشهر المختار.']};
+  });
+  const data={monthValue, monthLabel, sectorName,total,done,inProgress,late,completionRate,deptSections};
+  data.kpis=sectorReportKpiReportLines(data);
+  data.training=sectorReportCategoryReportLines(tasks,['تدريب','دورة','دورات','ورشة','ورش','برنامج تدريبي','تطوير'], 'لا توجد مهام تدريبية منجزة أو مسجلة لهذا الشهر.', range);
+  data.hiring=sectorReportCategoryReportLines(tasks,['توظيف','شاغر','شواغر','تعيين','استقطاب','مقابلة','مرشح','مرشحين','تسكين'], 'لا توجد مهام توظيف أو تسكين شواغر منجزة أو مسجلة لهذا الشهر.', range);
+  data.challenges=sectorReportChallengeSolutionLines(tasks,range);
+  data.completedHighlights=sectorReportMergeReportTasks(completedTasks,12);
+  return data;
+}
+function renderSectorMonthlyReport(){
+  ensureSectorMonthlyReportDom();
+  const box=$('sectorReportContent');
+  if(!box) return;
+  if(!canViewSectorMonthlyReport()){
+    box.innerHTML='<section class="panel card"><div class="empty">هذه الصفحة مخصصة لرئيس القطاع فقط.</div></section>';
+    return;
+  }
+  const data=sectorReportBuildData();
+  box.innerHTML=`
+    <section class="panel card">
+      <div class="sector-report-toolbar">
+        <div>
+          <h2 style="margin:0;color:var(--primary2);">التقرير الشهري للقطاع</h2>
+          <p class="meta" style="margin:4px 0 0;">يتم بناء التقرير من المهام المنجزة داخل الشهر المختار فقط في أقسام القطاع، مع تلخيص المهام المتشابهة بصيغة تقريرية.</p>
+        </div>
+        <div class="month-box"><label>اختر الشهر</label><input id="sectorReportMonth" type="month" value="${escapeHtml(data.monthValue)}" onchange="renderSectorMonthlyReport()"></div>
+      </div>
+      <div class="sector-report-page">
+        <div class="sector-report-header">
+          <div class="sector-report-title"><h2>${escapeHtml(data.sectorName)}</h2><p>التقرير الشهري — ${escapeHtml(data.monthLabel)}</p><p class="sector-report-muted">رئيس القطاع: ${escapeHtml(state.profile?.name||'—')}</p></div>
+          <div class="sector-report-logo">رصف<br><span style="font-size:22px;letter-spacing:2px;">RASF</span></div>
+        </div>
+        <div class="sector-report-kpis">
+          <div class="sector-report-kpi"><strong>${data.total}</strong><span>إجمالي مهام الشهر</span></div>
+          <div class="sector-report-kpi"><strong>${data.done}</strong><span>منجزة خلال الشهر</span></div>
+          <div class="sector-report-kpi"><strong>${data.inProgress}</strong><span>قيد التنفيذ</span></div>
+          <div class="sector-report-kpi"><strong>${data.late}</strong><span>متأخرة</span></div>
+        </div>
+        <div class="sector-report-grid">
+          <div class="sector-report-box tall"><h3>ملخص الأداء</h3><h4>أقسام القطاع والمهام المنجزة</h4>${sectorReportDeptReportHtml(data.deptSections)}</div>
+          <div class="sector-report-box tall"><h3>مؤشرات الأداء والإنتاجية</h3>${sectorReportList(data.kpis)}<h4>أبرز إنجازات الشهر</h4>${sectorReportList(data.completedHighlights,'لا توجد مهام منجزة خلال الشهر المختار.')}</div>
+          <div class="sector-report-box tall"><h3>المتابعات والتحديات</h3><h4>الدورات التدريبية</h4>${sectorReportList(data.training)}<h4>التوظيف وتسكين الشواغر</h4>${sectorReportList(data.hiring)}<h4>التحديات والحلول</h4>${sectorReportList(data.challenges)}</div>
+        </div>
+        <div class="sector-report-actions"><button class="btn btn-info" onclick="exportSectorMonthlyReportToPowerPoint()">تصدير PowerPoint</button><button class="btn btn-info" onclick="window.print()">طباعة / حفظ PDF</button><span class="sector-report-print-note">التقرير مبني على الشهر الميلادي المختار فقط.</span></div>
+      </div>
+    </section>`;
+}
+
 init();
 </script>
 </body>
