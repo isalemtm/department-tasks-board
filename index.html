@@ -17095,13 +17095,13 @@ exportSectorMonthlyReportToPowerPoint = async function(){
     const adminLines=pptReportDeptLines(data,['الشؤون الإدارية','الشؤون الادارية','الإدارية'], 'لا توجد مهام لهذا القسم خلال الشهر المختار.');
     const odLines=pptReportDeptLines(data,['التطوير التنظيمي','التطوير'], 'لا توجد مهام لهذا القسم خلال الشهر المختار.');
 
-    pptAddHeaderBox(slide,'الموارد البشرية',hrLines,6.50,1.67,2.78,5.15,{fontSize:7.6,maxLines:35});
-    pptAddHeaderBox(slide,'الشؤون الإدارية',adminLines,9.62,3.10,2.85,3.72,{fontSize:7.6,maxLines:25});
-    pptAddHeaderBox(slide,'التطوير التنظيمي',odLines,3.39,1.67,2.78,2.58,{fontSize:7.5,maxLines:18});
+    pptAddHeaderBox(slide,'الموارد البشرية',6.50,1.67,2.78,5.15,hrLines,{fontSize:7.6,maxLines:35});
+    pptAddHeaderBox(slide,'الشؤون الإدارية',9.62,3.10,2.85,3.72,adminLines,{fontSize:7.6,maxLines:25});
+    pptAddHeaderBox(slide,'التطوير التنظيمي',3.39,1.67,2.78,2.58,odLines,{fontSize:7.5,maxLines:18});
 
-    pptAddPlainBox(slide,'مؤشرات الأداء والإنتاجية',pptKpiLinesFromData(data),0.50,2.48,2.52,1.27,{fontSize:7.5,maxLines:8});
-    pptAddPlainBox(slide,'الدورات التدريبية',data.training,0.50,4.05,2.52,1.27,{fontSize:7.4,maxLines:12});
-    pptAddPlainBox(slide,'التوظيف وتسكين الشواغر',data.hiring,0.50,5.58,2.52,1.30,{fontSize:7.1,maxLines:18});
+    pptAddPlainBox(slide,'مؤشرات الأداء والإنتاجية',0.50,2.48,2.52,1.27,pptKpiLinesFromData(data),{fontSize:7.5,maxLines:8});
+    pptAddPlainBox(slide,'الدورات التدريبية',0.50,4.05,2.52,1.27,data.training,{fontSize:7.4,maxLines:12});
+    pptAddPlainBox(slide,'التوظيف وتسكين الشواغر',0.50,5.58,2.52,1.30,data.hiring,{fontSize:7.1,maxLines:18});
 
     slide.addShape('rect',{x:3.39,y:4.55,w:2.78,h:2.38,fill:{color:'F8F5F1'},line:{color:'F8F5F1',width:0}});
     slide.addImage({data:SECTOR_REPORT_TEMPLATE_CHALLENGE_ICON,x:4.73,y:4.78,w:0.80,h:0.80});
