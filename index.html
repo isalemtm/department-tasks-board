@@ -17434,6 +17434,183 @@ renderSectorMonthlyReport = function(){
   </section>`;
 };
 
+
+/* === PATCH: ترتيب وتسميات فلاتر صفحة المهام ===
+   المطلوب:
+   - إضافة فلتر المسند منه.
+   - تغيير "كل الموظفين" إلى "المسند إليه".
+   - ترتيب الفلاتر: المسند منه، المسند إليه، كل القطاعات، كل الأقسام، كل الحالات.
+   - لا يغير صلاحيات عرض المهام؛ الفلترة تعمل داخل نطاق المهام المسموح للمستخدم برؤيتها فقط.
+*/
+(function installTaskFiltersAssignmentStyle(){
+  if(document.getElementById('taskFiltersAssignmentStyle')) return;
+  const style=document.createElement('style');
+  style.id='taskFiltersAssignmentStyle';
+  style.textContent=`
+    .filters{grid-template-columns:1fr 170px 170px 170px 170px 170px!important;align-items:center;}
+    @media(max-width:1200px){.filters{grid-template-columns:1fr 1fr 1fr!important;}}
+    @media(max-width:760px){.filters{grid-template-columns:1fr!important;}}
+  `;
+  document.head.appendChild(style);
+})();
+
+function ensureTaskFiltersDom(){
+  const search=$('searchInput');
+  if(!search) return;
+  const wrap=search.closest('.filters');
+  if(!wrap || wrap.dataset.assignmentFilters==='1') return;
+  const q=search.value||'';
+  wrap.dataset.assignmentFilters='1';
+  wrap.innerHTML=`
+    <input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()" value="${escapeHtml(q)}">
+    <select id="filterCreatedBy" onchange="renderTasks()"><option value="">المسند منه</option></select>
+    <select id="filterAssignee" onchange="renderTasks()"><option value="">المسند إليه</option></select>
+    <select id="filterSector" onchange="setupDepartmentFilter(); setupEmployeeFilter(); renderTasks()"><option value="">كل القطاعات</option></select>
+    <select id="filterDepartment" onchange="setupEmployeeFilter(); renderTasks()"><option value="">كل الأقسام</option></select>
+    <select id="filterStatus" onchange="renderTasks()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select>`;
+}
+
+function taskFilterBaseRows(){
+  return typeof taskPageAllowedTasks==='function' ? taskPageAllowedTasks() : visibleTasks();
+}
+
+function setupCreatedByFilter(){
+  const el=$('filterCreatedBy');
+  if(!el) return;
+  const current=el.value;
+  const rows=taskFilterBaseRows();
+  const ids=new Set(rows.map(t=>t.created_by).filter(Boolean));
+  const users=(state.users||[])
+    .filter(u=>u.is_active!==false && ids.has(u.id))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">المسند منه</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  if(current && users.some(u=>u.id===current)) el.value=current;
+  else el.value='';
+}
+
+function setupSectorFilter(){
+  const el=$('filterSector');
+  if(!el) return;
+  const current=el.value;
+  let sectors=(state.sectors||[]).slice();
+  if(isSectorHead() || isDepartmentManager() || currentRole()==='employee'){
+    sectors=sectors.filter(s=>s.id===state.profile?.sector_id);
+  }
+  sectors=sectors.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">كل القطاعات</option>'+sectors.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if(current && sectors.some(s=>s.id===current)) el.value=current;
+  else if((isSectorHead() || isDepartmentManager() || currentRole()==='employee') && state.profile?.sector_id) el.value=state.profile.sector_id;
+  else el.value='';
+}
+
+function setupDepartmentFilter(){
+  const el=$('filterDepartment');
+  if(!el) return;
+  const current=el.value;
+  const sectorId=$('filterSector')?.value||'';
+  let departments=(state.departments||[]).slice();
+  if(isDepartmentManager()) departments=departments.filter(d=>d.id===state.profile?.department_id);
+  else if(isSectorHead() || currentRole()==='employee') departments=departments.filter(d=>d.sector_id===state.profile?.sector_id);
+  if(sectorId) departments=departments.filter(d=>d.sector_id===sectorId);
+  departments=departments.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">كل الأقسام</option>'+departments.map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  if(current && departments.some(d=>d.id===current)) el.value=current;
+  else el.value='';
+}
+
+function setupEmployeeFilter(){
+  const el=$('filterAssignee');
+  if(!el) return;
+  const current=el.value;
+  const sectorId=$('filterSector')?.value||'';
+  const deptId=$('filterDepartment')?.value||'';
+  const rows=taskFilterBaseRows();
+  const ids=new Set();
+  rows.forEach(t=>{
+    if(t.primary_responsible_id) ids.add(t.primary_responsible_id);
+    getTaskAssignees(t.id).forEach(u=>ids.add(u.id));
+  });
+  let users=(state.users||[]).filter(u=>u.is_active!==false && ids.has(u.id));
+  if(sectorId) users=users.filter(u=>u.sector_id===sectorId);
+  if(deptId) users=users.filter(u=>u.department_id===deptId);
+  users=users.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">المسند إليه</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  if(current && users.some(u=>u.id===current)) el.value=current;
+  else el.value='';
+}
+
+function normalizeTaskStatusFilterOptions(){
+  const el=$('filterStatus');
+  if(!el) return;
+  const current=['قيد التنفيذ','مكتملة','متأخرة'].includes(el.value) ? el.value : '';
+  el.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option>';
+  el.value=current;
+}
+
+setupFilters=function(){
+  ensureTaskFiltersDom();
+  setupCreatedByFilter();
+  setupSectorFilter();
+  setupDepartmentFilter();
+  setupEmployeeFilter();
+  normalizeTaskStatusFilterOptions();
+};
+
+function getFilteredTasks(){
+  let rows=taskFilterBaseRows();
+  const q=$('searchInput')?.value?.trim().toLowerCase()||'';
+  const fc=$('filterCreatedBy')?.value||'';
+  const fa=$('filterAssignee')?.value||'';
+  const fs=$('filterSector')?.value||'';
+  const fd=$('filterDepartment')?.value||'';
+  const st=$('filterStatus')?.value||'';
+  rows=rows.filter(t=>{
+    const assignees=getTaskAssignees(t.id);
+    const matchesSearch=!q||`${t.title||''} ${t.description||''} ${assignees.map(u=>u.name).join(' ')} ${nameOfUser(t.created_by)} ${nameOfUser(t.primary_responsible_id)}`.toLowerCase().includes(q);
+    const matchesCreator=!fc||t.created_by===fc;
+    const matchesAssignee=!fa||t.primary_responsible_id===fa||assignees.some(u=>u.id===fa);
+    const matchesSector=!fs||t.owner_sector_id===fs||t.target_sector_id===fs||assignees.some(u=>u.sector_id===fs);
+    const matchesDept=!fd||t.owner_department_id===fd||t.target_department_id===fd||assignees.some(u=>u.department_id===fd);
+    const display=typeof taskDisplayStatus==='function'?taskDisplayStatus(t):(isLate(t)?'متأخرة':t.status);
+    const matchesStatus=!st||display===st;
+    return matchesSearch && matchesCreator && matchesAssignee && matchesSector && matchesDept && matchesStatus;
+  });
+  return rows;
+}
+
+renderTasks=function(){
+  ensureTaskFiltersDom();
+  normalizeTaskStatusFilterOptions();
+  const rows=getFilteredTasks();
+  renderStats(rows);
+  setupCreatedByFilter();
+  setupEmployeeFilter();
+  if(!rows.length){$('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>';return;}
+  $('tasksList').innerHTML=rows.map(t=>taskCard(t)).join('');
+};
+
+openTaskFromSummary=function(taskId){
+  showPage('tasks');
+  setTimeout(()=>{
+    ensureTaskFiltersDom();
+    if($('searchInput')) $('searchInput').value='';
+    if($('filterCreatedBy')) $('filterCreatedBy').value='';
+    if($('filterAssignee')) $('filterAssignee').value='';
+    if($('filterSector')) $('filterSector').value='';
+    if($('filterDepartment')) $('filterDepartment').value='';
+    if($('filterStatus')) $('filterStatus').value='';
+    setupFilters();
+    renderTasks();
+    const card=document.getElementById(`task-card-${taskId}`);
+    if(card){
+      card.scrollIntoView({behavior:'smooth',block:'center'});
+      card.classList.add('task-highlight');
+      setTimeout(()=>card.classList.remove('task-highlight'),2500);
+    }
+  },80);
+};
+window.openTaskFromSummary=openTaskFromSummary;
+
 init();
 </script>
 </body>
