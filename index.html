@@ -17611,6 +17611,271 @@ openTaskFromSummary=function(taskId){
 };
 window.openTaskFromSummary=openTaskFromSummary;
 
+
+/* === PATCH: صفحة تقييم إنتاجية موظفي القطاع الشهري ===
+   تظهر لرئيس القطاع فقط، وتعتمد على جدول employee_monthly_productivity_evaluations.
+   الدرجات الآلية تقترحها اللوحة، ورئيس القطاع يراجع ويعتمد الدرجة النهائية. */
+function canViewProductivityEvaluationPage(){ return isSectorHead(); }
+function ensureProductivityEvaluationStyle(){
+  if(document.getElementById('productivityEvaluationStyle')) return;
+  const style=document.createElement('style');
+  style.id='productivityEvaluationStyle';
+  style.textContent=`
+    .productivity-toolbar{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .productivity-toolbar .month-box{min-width:220px;max-width:300px}
+    .productivity-employee-card{border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+    .productivity-employee-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--line);padding-bottom:12px}
+    .productivity-employee-head h3{margin:0;color:var(--primary2);font-size:20px}.productivity-employee-head .score{font-size:26px;font-weight:900;color:var(--primary2)}
+    .productivity-table{width:100%;min-width:980px;border-collapse:collapse}.productivity-table th,.productivity-table td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}.productivity-table th{background:#f1e9e2;color:var(--primary2)}
+    .productivity-table input[type=number]{max-width:92px;text-align:center}.productivity-table .auto-score{font-weight:900;color:var(--primary2);text-align:center}.productivity-notes{margin-top:12px}.productivity-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+    .productivity-muted{color:var(--muted);font-size:13px}.productivity-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:14px}.productivity-summary-card{border:1px solid var(--line);border-radius:14px;background:#faf6f2;text-align:center;padding:12px}.productivity-summary-card strong{display:block;font-size:24px;color:var(--primary2)}.productivity-summary-card span{color:var(--muted);font-size:12px}
+    @media(max-width:900px){.productivity-summary-grid{grid-template-columns:repeat(2,1fr)}}
+  `;
+  document.head.appendChild(style);
+}
+function ensureProductivityEvaluationDom(){
+  ensureProductivityEvaluationStyle();
+  const actions=document.querySelector('#appSection .app-actions');
+  if(actions && !$('tabProductivityEvaluation')){
+    const btn=document.createElement('button');
+    btn.id='tabProductivityEvaluation';
+    btn.className='btn btn-secondary hidden';
+    btn.textContent='تقييم الإنتاجية';
+    btn.setAttribute('onclick',"showPage('productivityEvaluation')");
+    const sectorReportBtn=$('tabSectorReport');
+    const adminBtn=$('tabAdmin');
+    if(sectorReportBtn) actions.insertBefore(btn, sectorReportBtn.nextSibling);
+    else if(adminBtn) actions.insertBefore(btn, adminBtn);
+    else actions.appendChild(btn);
+  }
+  const app=$('appSection');
+  if(app && !$('productivityEvaluationPage')){
+    const page=document.createElement('section');
+    page.id='productivityEvaluationPage';
+    page.className='hidden';
+    page.innerHTML='<div id="productivityEvaluationContent"></div>';
+    const sectorReportPage=$('sectorReportPage');
+    const adminPage=$('adminPage');
+    if(sectorReportPage) app.insertBefore(page, sectorReportPage.nextSibling);
+    else if(adminPage) app.insertBefore(page, adminPage);
+    else app.appendChild(page);
+  }
+  if($('tabProductivityEvaluation')) $('tabProductivityEvaluation').classList.toggle('hidden',!canViewProductivityEvaluationPage());
+}
+function getProductivityMonthValue(){
+  const input=$('productivityEvaluationMonth');
+  if(input && input.value) return input.value;
+  const now=new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+function getProductivityMonthDate(monthValue){
+  const [y,m]=String(monthValue||getProductivityMonthValue()).split('-').map(Number);
+  const year=y||new Date().getFullYear();
+  const month=String(m||new Date().getMonth()+1).padStart(2,'0');
+  return `${year}-${month}-01`;
+}
+function getProductivityRange(monthValue){
+  const [y,m]=String(monthValue||getProductivityMonthValue()).split('-').map(Number);
+  const year=y||new Date().getFullYear();
+  const month=(m||new Date().getMonth()+1)-1;
+  return {start:new Date(year,month,1,0,0,0,0), end:new Date(year,month+1,1,0,0,0,0)};
+}
+function dateInProductivityMonth(value,range){
+  if(!value) return false;
+  const d=new Date(value);
+  return !isNaN(d) && d>=range.start && d<range.end;
+}
+function taskTouchesProductivityMonth(task,range){
+  return [task.created_at,task.due_date,task.completion_requested_at,task.completion_reviewed_at,task.approved_at,task.updated_at].some(v=>dateInProductivityMonth(v,range));
+}
+function taskCompletedInProductivityMonth(task,range){
+  if(task.status!=='مكتملة') return false;
+  return dateInProductivityMonth(task.completion_reviewed_at||task.updated_at||task.approved_at||task.due_date,range);
+}
+function taskCompletedLateForProductivity(task){
+  if(!task?.due_date || task.status!=='مكتملة') return false;
+  const due=new Date(task.due_date); due.setHours(23,59,59,999);
+  const done=new Date(task.completion_reviewed_at||task.updated_at||task.approved_at||task.due_date);
+  if(isNaN(due)||isNaN(done)) return false;
+  return done>due;
+}
+function clampProductivityScore(value){
+  const n=Number(value);
+  if(!isFinite(n)) return 0;
+  return Math.max(0,Math.min(10,Math.round(n*100)/100));
+}
+function productivityTasksForUser(userId,range){
+  const assignedIds=new Set(state.assignees.filter(a=>a.user_id===userId).map(a=>a.task_id));
+  return state.tasks.filter(t=>t.is_archived!==true && taskTouchesProductivityMonth(t,range) && (assignedIds.has(t.id)||t.primary_responsible_id===userId));
+}
+function productivityCompletedTasksForUser(userId,range){
+  const assignedIds=new Set(state.assignees.filter(a=>a.user_id===userId).map(a=>a.task_id));
+  return state.tasks.filter(t=>t.is_archived!==true && taskCompletedInProductivityMonth(t,range) && (assignedIds.has(t.id)||t.primary_responsible_id===userId));
+}
+function productivityCreatedInitiativesForUser(userId,range){
+  return state.tasks.filter(t=>t.is_archived!==true && t.created_by===userId && dateInProductivityMonth(t.created_at,range));
+}
+function productivityCollaborationCountForUser(userId,range){
+  const assignedByOthers=state.tasks.filter(t=>t.is_archived!==true && taskTouchesProductivityMonth(t,range) && t.created_by!==userId && (getTaskAssignees(t.id).some(u=>u.id===userId)||t.primary_responsible_id===userId)).length;
+  const assignedToOthers=state.tasks.filter(t=>t.is_archived!==true && t.created_by===userId && dateInProductivityMonth(t.created_at,range) && getTaskAssignees(t.id).some(u=>u.id!==userId)).length;
+  const shared=state.tasks.filter(t=>t.is_archived!==true && taskTouchesProductivityMonth(t,range) && getTaskAssignees(t.id).length>1 && getTaskAssignees(t.id).some(u=>u.id===userId)).length;
+  return assignedByOthers + assignedToOthers + shared;
+}
+function productivityEmployeeRows(){
+  const sectorId=state.profile?.sector_id||'';
+  return state.users.filter(u=>u.is_active!==false && u.sector_id===sectorId && ['employee','department_manager'].includes(u.role));
+}
+function buildProductivityAutoScores(users,range){
+  const raw=users.map(u=>{
+    const monthTasks=productivityTasksForUser(u.id,range);
+    const doneTasks=productivityCompletedTasksForUser(u.id,range);
+    const lateTasks=monthTasks.filter(t=>isLate(t)||taskCompletedLateForProductivity(t));
+    const initiativeTasks=productivityCreatedInitiativesForUser(u.id,range);
+    const collaboration=productivityCollaborationCountForUser(u.id,range);
+    return {user:u,monthTasks,doneTasks,lateTasks,initiativeTasks,collaboration};
+  });
+  const maxDone=Math.max(1,...raw.map(r=>r.doneTasks.length));
+  const maxInitiative=Math.max(1,...raw.map(r=>r.initiativeTasks.length));
+  const maxCollab=Math.max(1,...raw.map(r=>r.collaboration));
+  return raw.map(r=>{
+    const achievement=clampProductivityScore((r.doneTasks.length/maxDone)*10);
+    const punctuality=clampProductivityScore(r.monthTasks.length ? ((r.monthTasks.length-r.lateTasks.length)/r.monthTasks.length)*10 : 0);
+    const initiative=clampProductivityScore((r.initiativeTasks.length/maxInitiative)*10);
+    const teamwork=clampProductivityScore((r.collaboration/maxCollab)*10);
+    return {...r,auto:{achievement,punctuality,initiative,teamwork}};
+  });
+}
+async function loadProductivityEvaluations(monthDate,sectorId){
+  const {data,error}=await supabaseClient.from('employee_monthly_productivity_evaluations').select('*').eq('evaluation_month',monthDate).eq('sector_id',sectorId);
+  if(error){ console.error(error); showToast(error.message||'تعذر تحميل التقييمات المحفوظة.','error'); return []; }
+  return data||[];
+}
+function productivityInputId(userId,field){ return `prod_${field}_${String(userId).replace(/[^a-zA-Z0-9_-]/g,'')}`; }
+function updateProductivityCardTotal(userId){
+  const fields=['achievement','quality','punctuality','initiative','teamwork'];
+  const total=fields.reduce((sum,f)=>sum+clampProductivityScore($(productivityInputId(userId,f))?.value||0),0);
+  const box=$(`prod_total_${userId}`);
+  if(box) box.textContent=String(Math.round(total*100)/100);
+}
+function renderProductivityEmployeeCard(row,saved){
+  const u=row.user;
+  const final={
+    achievement:saved?.achievement_final_score ?? row.auto.achievement,
+    quality:saved?.quality_final_score ?? 0,
+    punctuality:saved?.punctuality_final_score ?? row.auto.punctuality,
+    initiative:saved?.initiative_final_score ?? row.auto.initiative,
+    teamwork:saved?.teamwork_final_score ?? row.auto.teamwork
+  };
+  const total=clampProductivityScore(final.achievement)+clampProductivityScore(final.quality)+clampProductivityScore(final.punctuality)+clampProductivityScore(final.initiative)+clampProductivityScore(final.teamwork);
+  const metricRows=[
+    ['achievement','حجم الإنجاز','حجم الإنجاز مقابل المطلوب خلال الشهر',10,row.auto.achievement],
+    ['quality','جودة العمل ودقته','دقة وجودة المخرجات وتقليل إعادة العمل',10,'يدوي'],
+    ['punctuality','الالتزام بالمواعيد وسرعة الاستجابة','الالتزام بالمواعيد وتقليل المهام المتأخرة',10,row.auto.punctuality],
+    ['initiative','المبادرة وتحسين العمل','المبادرة بإنشاء أو إسناد مهام وتحسين العمل',10,row.auto.initiative],
+    ['teamwork','السلوك والتعاون مع الفريق','التعاون من خلال المهام المشتركة والمتبادلة',10,row.auto.teamwork]
+  ];
+  return `<div class="productivity-employee-card" data-user-id="${u.id}">
+    <div class="productivity-employee-head">
+      <div><h3>${escapeHtml(u.name)}</h3><div class="productivity-muted">${escapeHtml(roleLabel(u.role))} — ${escapeHtml(nameOfDept(u.department_id))}</div></div>
+      <div>المجموع <span class="score"><span id="prod_total_${u.id}">${Math.round(total*100)/100}</span> / 50</span></div>
+    </div>
+    <div class="productivity-summary-grid">
+      <div class="productivity-summary-card"><strong>${row.monthTasks.length}</strong><span>مهام الشهر</span></div>
+      <div class="productivity-summary-card"><strong>${row.doneTasks.length}</strong><span>منجزة</span></div>
+      <div class="productivity-summary-card"><strong>${row.lateTasks.length}</strong><span>متأخرة</span></div>
+      <div class="productivity-summary-card"><strong>${row.initiativeTasks.length}</strong><span>مبادرات/إسنادات</span></div>
+      <div class="productivity-summary-card"><strong>${row.collaboration}</strong><span>تعاون</span></div>
+    </div>
+    <div class="table-wrap"><table class="productivity-table"><thead><tr><th>المعيار</th><th>وصف مختصر</th><th>الحد الأعلى</th><th>الدرجة المقترحة</th><th>الدرجة المعتمدة</th></tr></thead><tbody>
+      ${metricRows.map(([field,label,desc,max,auto])=>`<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(desc)}</td><td>${max}</td><td class="auto-score">${escapeHtml(auto)}</td><td><input type="number" min="0" max="10" step="0.5" id="${productivityInputId(u.id,field)}" value="${escapeHtml(final[field])}" oninput="updateProductivityCardTotal('${u.id}')"></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="productivity-notes"><label>ملاحظات رئيس القطاع</label><textarea id="${productivityInputId(u.id,'notes')}" placeholder="ملاحظات مختصرة اختيارية">${escapeHtml(saved?.notes||'')}</textarea></div>
+    <div class="productivity-actions"><button class="btn btn-primary" onclick="saveProductivityEvaluationForEmployee('${u.id}')">حفظ تقييم الموظف</button></div>
+  </div>`;
+}
+async function renderProductivityEvaluationPage(){
+  ensureProductivityEvaluationDom();
+  const box=$('productivityEvaluationContent');
+  if(!box) return;
+  if(!canViewProductivityEvaluationPage()){
+    box.innerHTML='<section class="panel card"><div class="empty">هذه الصفحة مخصصة لرئيس القطاع فقط.</div></section>';
+    return;
+  }
+  const monthValue=getProductivityMonthValue();
+  const monthDate=getProductivityMonthDate(monthValue);
+  const range=getProductivityRange(monthValue);
+  const sectorId=state.profile?.sector_id||'';
+  const users=productivityEmployeeRows();
+  const savedRows=await loadProductivityEvaluations(monthDate,sectorId);
+  window.__productivityAutoRows=buildProductivityAutoScores(users,range);
+  window.__productivitySavedRows=savedRows;
+  const savedMap=new Map(savedRows.map(r=>[r.employee_id,r]));
+  box.innerHTML=`<section class="panel card">
+    <div class="productivity-toolbar"><div><h2>تقييم إنتاجية موظفي القطاع</h2><p class="meta">تظهر لرئيس القطاع فقط. الدرجات الآلية مقترحة من بيانات المهام، ويمكن اعتمادها أو تعديلها قبل الحفظ.</p></div><div class="month-box"><label>اختر الشهر</label><input id="productivityEvaluationMonth" type="month" value="${monthValue}" onchange="renderProductivityEvaluationPage()"></div></div>
+    <div class="notice info show">الدرجات المقترحة لا تغني عن تقدير رئيس القطاع، خصوصًا معيار جودة العمل ودقته.</div>
+    ${window.__productivityAutoRows.length?window.__productivityAutoRows.map(r=>renderProductivityEmployeeCard(r,savedMap.get(r.user.id))).join(''):'<div class="empty">لا يوجد موظفون نشطون في قطاعك.</div>'}
+  </section>`;
+}
+async function saveProductivityEvaluationForEmployee(userId){
+  try{
+    if(!canViewProductivityEvaluationPage()) return showToast('هذه الصفحة مخصصة لرئيس القطاع فقط.','error');
+    const row=(window.__productivityAutoRows||[]).find(r=>r.user.id===userId);
+    if(!row) return showToast('تعذر العثور على بيانات الموظف.','error');
+    const monthValue=getProductivityMonthValue();
+    const monthDate=getProductivityMonthDate(monthValue);
+    const payload={
+      evaluation_month:monthDate,
+      sector_id:state.profile.sector_id,
+      employee_id:userId,
+      achievement_auto_score:clampProductivityScore(row.auto.achievement),
+      quality_score:clampProductivityScore($(productivityInputId(userId,'quality'))?.value||0),
+      punctuality_auto_score:clampProductivityScore(row.auto.punctuality),
+      initiative_auto_score:clampProductivityScore(row.auto.initiative),
+      teamwork_auto_score:clampProductivityScore(row.auto.teamwork),
+      achievement_final_score:clampProductivityScore($(productivityInputId(userId,'achievement'))?.value||0),
+      quality_final_score:clampProductivityScore($(productivityInputId(userId,'quality'))?.value||0),
+      punctuality_final_score:clampProductivityScore($(productivityInputId(userId,'punctuality'))?.value||0),
+      initiative_final_score:clampProductivityScore($(productivityInputId(userId,'initiative'))?.value||0),
+      teamwork_final_score:clampProductivityScore($(productivityInputId(userId,'teamwork'))?.value||0),
+      notes:$(productivityInputId(userId,'notes'))?.value||null,
+      evaluated_by:state.profile.id,
+      updated_at:new Date().toISOString()
+    };
+    const {error}=await supabaseClient.from('employee_monthly_productivity_evaluations').upsert(payload,{onConflict:'evaluation_month,employee_id'});
+    if(error) throw error;
+    showToast('تم حفظ تقييم الموظف بنجاح.','success');
+  }catch(e){ console.error(e); showToast(e.message||'تعذر حفظ التقييم.','error',7000); }
+}
+(function patchProductivityEvaluationNavigation(){
+  const previousShowApp=showApp;
+  showApp=function(){
+    const result=previousShowApp();
+    ensureProductivityEvaluationDom();
+    return result;
+  };
+  const previousShowPage=showPage;
+  showPage=function(p){
+    ensureProductivityEvaluationDom();
+    if(p!=='productivityEvaluation'){
+      $('productivityEvaluationPage')?.classList.add('hidden');
+      $('tabProductivityEvaluation')?.classList.remove('active');
+    }
+    const result=previousShowPage(p);
+    if(p==='productivityEvaluation'){
+      ['tasksPage','dashboardPage','adminPage','sectorReportPage','orgPage','performancePage','executivePage'].forEach(id=>$(id)?.classList.add('hidden'));
+      $('productivityEvaluationPage')?.classList.remove('hidden');
+      document.querySelectorAll('#appSection .app-actions .btn').forEach(b=>b.classList.remove('active'));
+      $('tabProductivityEvaluation')?.classList.add('active');
+      renderProductivityEvaluationPage();
+    }else{
+      $('productivityEvaluationPage')?.classList.add('hidden');
+      $('tabProductivityEvaluation')?.classList.remove('active');
+    }
+    return result;
+  };
+})();
+
+
 init();
 </script>
 </body>
