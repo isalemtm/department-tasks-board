@@ -17918,3 +17918,137 @@ init();
 </script>
 </body>
 </html>
+
+<script>
+/* === PATCH: حذف فلتر القطاع والقسم من صفحة المهام وتثبيت تسمية المسند إليه ===
+   المطلوب:
+   - حذف فلتر كل القطاعات وكل الأقسام من صفحة المهام.
+   - إبقاء فلتر المسند منه.
+   - تغيير فلتر كل الموظفين إلى المسند إليه.
+   - إبقاء فلتر كل الحالات.
+   - لا يغير صلاحيات عرض المهام أو منطق الإسناد. */
+(function installCompactTaskFiltersStyle(){
+  const old=document.getElementById('taskFiltersAssignmentStyle');
+  if(old) old.remove();
+  const style=document.createElement('style');
+  style.id='taskFiltersCompactAssignmentStyle';
+  style.textContent=`
+    #tasksPage .filters{grid-template-columns:1fr 180px 180px 170px!important;align-items:center;}
+    @media(max-width:900px){#tasksPage .filters{grid-template-columns:1fr 1fr!important;}}
+    @media(max-width:640px){#tasksPage .filters{grid-template-columns:1fr!important;}}
+  `;
+  document.head.appendChild(style);
+})();
+
+ensureTaskFiltersDom=function(){
+  const search=$('searchInput');
+  if(!search) return;
+  const wrap=search.closest('.filters');
+  if(!wrap) return;
+  const q=search.value||'';
+  const created=$('filterCreatedBy')?.value||'';
+  const assignee=$('filterAssignee')?.value||'';
+  const status=$('filterStatus')?.value||'';
+  wrap.dataset.assignmentFilters='compact-no-sector-department';
+  wrap.innerHTML=`
+    <input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()" value="${escapeHtml(q)}">
+    <select id="filterCreatedBy" onchange="renderTasks()"><option value="">المسند منه</option></select>
+    <select id="filterAssignee" onchange="renderTasks()"><option value="">المسند إليه</option></select>
+    <select id="filterStatus" onchange="renderTasks()"><option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option></select>`;
+  if(created) $('filterCreatedBy').dataset.pendingValue=created;
+  if(assignee) $('filterAssignee').dataset.pendingValue=assignee;
+  if(status) $('filterStatus').value=status;
+};
+
+setupCreatedByFilter=function(){
+  const el=$('filterCreatedBy');
+  if(!el) return;
+  const current=el.value || el.dataset.pendingValue || '';
+  const rows=typeof taskFilterBaseRows==='function' ? taskFilterBaseRows() : visibleTasks();
+  const ids=new Set(rows.map(t=>t.created_by).filter(Boolean));
+  const users=(state.users||[])
+    .filter(u=>u.is_active!==false && ids.has(u.id))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">المسند منه</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  el.value=(current && users.some(u=>u.id===current)) ? current : '';
+  delete el.dataset.pendingValue;
+};
+
+setupEmployeeFilter=function(){
+  const el=$('filterAssignee');
+  if(!el) return;
+  const current=el.value || el.dataset.pendingValue || '';
+  const rows=typeof taskFilterBaseRows==='function' ? taskFilterBaseRows() : visibleTasks();
+  const ids=new Set();
+  rows.forEach(t=>{
+    if(t.primary_responsible_id) ids.add(t.primary_responsible_id);
+    getTaskAssignees(t.id).forEach(u=>ids.add(u.id));
+  });
+  const users=(state.users||[])
+    .filter(u=>u.is_active!==false && ids.has(u.id))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  el.innerHTML='<option value="">المسند إليه</option>'+users.map(u=>`<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  el.value=(current && users.some(u=>u.id===current)) ? current : '';
+  delete el.dataset.pendingValue;
+};
+
+setupFilters=function(){
+  ensureTaskFiltersDom();
+  setupCreatedByFilter();
+  setupEmployeeFilter();
+  normalizeTaskStatusFilterOptions();
+};
+
+getFilteredTasks=function(){
+  let rows=typeof taskFilterBaseRows==='function' ? taskFilterBaseRows() : visibleTasks();
+  const q=$('searchInput')?.value?.trim().toLowerCase()||'';
+  const fc=$('filterCreatedBy')?.value||'';
+  const fa=$('filterAssignee')?.value||'';
+  const st=$('filterStatus')?.value||'';
+  rows=rows.filter(t=>{
+    const assignees=getTaskAssignees(t.id);
+    const matchesSearch=!q||`${t.title||''} ${t.description||''} ${assignees.map(u=>u.name).join(' ')} ${nameOfUser(t.created_by)} ${nameOfUser(t.primary_responsible_id)}`.toLowerCase().includes(q);
+    const matchesCreator=!fc||t.created_by===fc;
+    const matchesAssignee=!fa||t.primary_responsible_id===fa||assignees.some(u=>u.id===fa);
+    const display=typeof taskDisplayStatus==='function'?taskDisplayStatus(t):(isLate(t)?'متأخرة':t.status);
+    const matchesStatus=!st||display===st;
+    return matchesSearch && matchesCreator && matchesAssignee && matchesStatus;
+  });
+  return rows;
+};
+
+renderTasks=function(){
+  ensureTaskFiltersDom();
+  normalizeTaskStatusFilterOptions();
+  const rows=getFilteredTasks();
+  renderStats(rows);
+  setupCreatedByFilter();
+  setupEmployeeFilter();
+  if(!rows.length){$('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>';return;}
+  if(typeof taskStatusSectionsHtml==='function'){
+    $('tasksList').innerHTML=taskStatusSectionsHtml(rows);
+  }else{
+    $('tasksList').innerHTML=rows.map(t=>taskCard(t)).join('');
+  }
+};
+
+openTaskFromSummary=function(taskId){
+  showPage('tasks');
+  setTimeout(()=>{
+    ensureTaskFiltersDom();
+    if($('searchInput')) $('searchInput').value='';
+    if($('filterCreatedBy')) $('filterCreatedBy').value='';
+    if($('filterAssignee')) $('filterAssignee').value='';
+    if($('filterStatus')) $('filterStatus').value='';
+    setupFilters();
+    renderTasks();
+    const card=document.getElementById(`task-card-${taskId}`);
+    if(card){
+      card.scrollIntoView({behavior:'smooth',block:'center'});
+      card.classList.add('task-highlight');
+      setTimeout(()=>card.classList.remove('task-highlight'),2500);
+    }
+  },80);
+};
+window.openTaskFromSummary=openTaskFromSummary;
+</script>
