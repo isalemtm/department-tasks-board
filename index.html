@@ -17876,6 +17876,44 @@ async function saveProductivityEvaluationForEmployee(userId){
 })();
 
 
+
+/* === PATCH: استعادة عرض قائمة المهام كمجموعات مغلقة حسب الحالة ===
+   المطلوب: قيد التنفيذ + متأخرة + مكتملة تظهر مغلقة، ويتم فتحها بالضغط.
+   لا يغيّر الصلاحيات ولا منطق الحالات أو الاعتماد.
+*/
+function renderCollapsedTaskGroupFinal(title, rows, emptyText){
+  const safeTitle = escapeHtml(title);
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const body = safeRows.length ? safeRows.map(taskCard).join('') : `<div class="empty">${escapeHtml(emptyText||'لا توجد مهام.')}</div>`;
+  return `<details class="task-group-details" style="margin-bottom:16px;">
+    <summary class="card" style="padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span>${safeTitle}</span>
+      <span class="badge">${safeRows.length} مهمة</span>
+    </summary>
+    <div style="margin-top:12px;">${body}</div>
+  </details>`;
+}
+
+renderTasks = function(){
+  const rows = getFilteredTasks();
+  renderStats(rows);
+  if(!rows.length){
+    $('tasksList').innerHTML='<div class="empty">لا توجد مهام.</div>';
+  }else{
+    const groups = groupedTaskRows(rows);
+    $('tasksList').innerHTML =
+      renderCollapsedTaskGroupFinal('قيد التنفيذ', groups.progress, 'لا توجد مهام قيد التنفيذ.') +
+      renderCollapsedTaskGroupFinal('متأخرة', groups.late, 'لا توجد مهام متأخرة.') +
+      renderCollapsedTaskGroupFinal('مكتملة', groups.completed, 'لا توجد مهام مكتملة.');
+  }
+
+  if(typeof enhanceAllFileInputsForDropzone === 'function') setTimeout(enhanceAllFileInputsForDropzone, 0);
+  if(typeof ensureFinalVisualAdjustments === 'function') ensureFinalVisualAdjustments();
+  if(typeof ensureTaskActionRequestsPanel === 'function') ensureTaskActionRequestsPanel();
+  if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
+};
+
+
 init();
 </script>
 </body>
