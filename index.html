@@ -18355,4 +18355,77 @@ window.openTaskFromSummary=openTaskFromSummary;
   };
 })();
 
+
+
+/* === PATCH: نقل زر تصدير الهيكل التنظيمي من صفحة الهيكل إلى قسم في إدارة المستخدمين ===
+   - الزر يظهر في صفحة إدارة المستخدمين لمدير النظام فقط.
+   - إخفاء أي زر تصدير للهيكل داخل صفحة الهيكل التنظيمي.
+   - لا تغيير على بيانات الهيكل أو صلاحيات الصفحات الأخرى.
+*/
+(function(){
+  function installOrgExportAdminSectionStyle(){
+    let style=document.getElementById('adminOrgExportPanelStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='adminOrgExportPanelStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      #orgPage button[onclick="exportOrgChartToExcel()"],
+      #orgContent button[onclick="exportOrgChartToExcel()"]{display:none!important;}
+      #adminOrgExportPanel .admin-export-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    `;
+  }
+
+  function ensureAdminOrgExportPanel(){
+    installOrgExportAdminSectionStyle();
+    const adminPage=document.getElementById('adminPage');
+    if(!adminPage) return;
+
+    const old=document.getElementById('adminOrgExportPanel');
+    if(typeof isAdmin==='function' && !isAdmin()){
+      if(old) old.remove();
+      return;
+    }
+    if(!(typeof isAdmin==='function' && isAdmin())) return;
+    if(old) return;
+
+    const html=`
+      <section id="adminOrgExportPanel" class="panel card">
+        <div class="section-head">
+          <div>
+            <h2>تصدير الهيكل التنظيمي</h2>
+            <p class="meta">تصدير جميع بيانات الهيكل التنظيمي إلى ملف Excel: الإدارة التنفيذية، القطاعات، رؤساء القطاعات، الأقسام، مدراء الأقسام، والموظفين.</p>
+          </div>
+        </div>
+        <div class="admin-export-actions">
+          <button type="button" class="btn btn-info" onclick="exportOrgChartToExcel()">تصدير الهيكل التنظيمي Excel</button>
+        </div>
+      </section>`;
+
+    const usersSection=document.getElementById('usersTable')?.closest('section.panel.card');
+    if(usersSection) usersSection.insertAdjacentHTML('beforebegin', html);
+    else adminPage.insertAdjacentHTML('beforeend', html);
+  }
+
+  const previousRenderAdmin=window.renderAdmin;
+  window.renderAdmin=function(){
+    if(typeof previousRenderAdmin==='function') previousRenderAdmin.apply(this, arguments);
+    ensureAdminOrgExportPanel();
+  };
+
+  const previousShowPage=window.showPage;
+  window.showPage=function(page){
+    if(typeof previousShowPage==='function') previousShowPage.apply(this, arguments);
+    if(page==='admin') setTimeout(ensureAdminOrgExportPanel, 0);
+  };
+
+  const previousRenderOrgPage=window.renderOrgPage;
+  if(typeof previousRenderOrgPage==='function'){
+    window.renderOrgPage=function(){
+      previousRenderOrgPage.apply(this, arguments);
+      installOrgExportAdminSectionStyle();
+    };
+  }
+})();
 </script>
