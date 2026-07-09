@@ -5071,6 +5071,149 @@ function orgMiniHeadCards(usersList, roleLabelText='رئيس القطاع'){
   return usersList.map(u=>`<div class="org-mini-card"><span class="org-role-label">${escapeHtml(roleLabelText)}</span><span class="org-name">${escapeHtml(u.name||'—')}</span><span class="org-job">${escapeHtml(u.job_title || roleLabel(u.role) || roleLabelText)}</span></div>`).join('');
 }
 
+
+
+function orgRoleSortOrder(role){
+  const order={ceo:1,sector_head:2,department_manager:3,employee:4};
+  return order[role]||9;
+}
+
+function orgExportRows(){
+  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  const rows=[];
+
+  users.filter(u=>u.role==='ceo')
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'))
+    .forEach(u=>rows.push({
+      'المستوى':'الإدارة التنفيذية',
+      'القطاع':'الإدارة التنفيذية',
+      'القسم':'—',
+      'الدور في الهيكل':'الرئيس التنفيذي',
+      'اسم الموظف':u.name||'',
+      'المسمى الوظيفي':u.job_title||roleLabel(u.role)||'',
+      'البريد الإلكتروني':u.email||'',
+      'الصلاحية':roleLabel(u.role)||'',
+      'الحالة':'نشط'
+    }));
+
+  sectors.forEach(sector=>{
+    const sectorUsers=users.filter(u=>u.sector_id===sector.id);
+    const heads=sectorUsers.filter(u=>u.role==='sector_head').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    if(heads.length){
+      heads.forEach(u=>rows.push({
+        'المستوى':'رئيس قطاع',
+        'القطاع':sector.name||'—',
+        'القسم':'—',
+        'الدور في الهيكل':'رئيس القطاع',
+        'اسم الموظف':u.name||'',
+        'المسمى الوظيفي':u.job_title||roleLabel(u.role)||'',
+        'البريد الإلكتروني':u.email||'',
+        'الصلاحية':roleLabel(u.role)||'',
+        'الحالة':'نشط'
+      }));
+    }else{
+      rows.push({
+        'المستوى':'رئيس قطاع',
+        'القطاع':sector.name||'—',
+        'القسم':'—',
+        'الدور في الهيكل':'رئيس القطاع',
+        'اسم الموظف':'غير محدد',
+        'المسمى الوظيفي':'—',
+        'البريد الإلكتروني':'—',
+        'الصلاحية':'—',
+        'الحالة':'—'
+      });
+    }
+
+    const departments=(state.departments||[])
+      .filter(d=>d.sector_id===sector.id)
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+    if(!departments.length){
+      rows.push({
+        'المستوى':'قسم',
+        'القطاع':sector.name||'—',
+        'القسم':'لا توجد أقسام مسجلة',
+        'الدور في الهيكل':'—',
+        'اسم الموظف':'—',
+        'المسمى الوظيفي':'—',
+        'البريد الإلكتروني':'—',
+        'الصلاحية':'—',
+        'الحالة':'—'
+      });
+    }
+
+    departments.forEach(dep=>{
+      const depUsers=users
+        .filter(u=>u.department_id===dep.id)
+        .sort((a,b)=>orgRoleSortOrder(a.role)-orgRoleSortOrder(b.role) || String(a.name||'').localeCompare(String(b.name||''),'ar'));
+      if(!depUsers.length){
+        rows.push({
+          'المستوى':'قسم',
+          'القطاع':sector.name||'—',
+          'القسم':dep.name||'—',
+          'الدور في الهيكل':'لا يوجد موظفون',
+          'اسم الموظف':'—',
+          'المسمى الوظيفي':'—',
+          'البريد الإلكتروني':'—',
+          'الصلاحية':'—',
+          'الحالة':'—'
+        });
+      }else{
+        depUsers.forEach(u=>rows.push({
+          'المستوى':u.role==='department_manager'?'مدير قسم':'موظف',
+          'القطاع':sector.name||'—',
+          'القسم':dep.name||'—',
+          'الدور في الهيكل':u.role==='department_manager'?'مدير القسم':(roleLabel(u.role)||'موظف'),
+          'اسم الموظف':u.name||'',
+          'المسمى الوظيفي':u.job_title||roleLabel(u.role)||'',
+          'البريد الإلكتروني':u.email||'',
+          'الصلاحية':roleLabel(u.role)||'',
+          'الحالة':'نشط'
+        }));
+      }
+    });
+
+    const usersWithoutDepartment=sectorUsers
+      .filter(u=>!u.department_id && !['sector_head','ceo'].includes(u.role))
+      .sort((a,b)=>orgRoleSortOrder(a.role)-orgRoleSortOrder(b.role) || String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    usersWithoutDepartment.forEach(u=>rows.push({
+      'المستوى':'تابع مباشرة للقطاع',
+      'القطاع':sector.name||'—',
+      'القسم':'بدون قسم',
+      'الدور في الهيكل':roleLabel(u.role)||'موظف',
+      'اسم الموظف':u.name||'',
+      'المسمى الوظيفي':u.job_title||roleLabel(u.role)||'',
+      'البريد الإلكتروني':u.email||'',
+      'الصلاحية':roleLabel(u.role)||'',
+      'الحالة':'نشط'
+    }));
+  });
+
+  return rows;
+}
+
+function exportOrgChartToExcel(){
+  try{
+    if(!isAdmin()) return showToast('تصدير الهيكل التنظيمي متاح لمدير النظام فقط.','error');
+    if(typeof XLSX==='undefined') return showToast('تعذر تحميل أداة تصدير Excel. حدّث الصفحة وحاول مرة أخرى.','error');
+    const rows=orgExportRows();
+    if(!rows.length) return showToast('لا توجد بيانات في الهيكل التنظيمي لتصديرها.','info');
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[
+      {wch:22},{wch:28},{wch:28},{wch:22},{wch:28},{wch:32},{wch:34},{wch:18},{wch:12}
+    ];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'الهيكل التنظيمي');
+    XLSX.writeFile(wb,`الهيكل_التنظيمي_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('تم تصدير الهيكل التنظيمي إلى Excel بنجاح.','success');
+  }catch(e){
+    console.error(e);
+    showToast(e.message||'تعذر تصدير الهيكل التنظيمي.','error');
+  }
+}
+
 renderOrgPage = function(){
   ensurePerformanceAndOrgPagesDom();
   ensureUnifiedButtonTheme();
@@ -5141,7 +5284,10 @@ renderOrgPage = function(){
           <h2>الهيكل التنظيمي للشركة</h2>
           <p class="meta">عرض بطاقي ديناميكي يتوسع تلقائياً حسب المستخدمين والقطاعات والأقسام المضافة في لوحة متابعة مهام القطاعات.</p>
         </div>
-        <span class="badge">${users.length} مستخدم</span>
+        <div class="actions">
+          ${isAdmin()?'<button class="btn btn-info btn-sm" onclick="exportOrgChartToExcel()">تصدير Excel</button>':''}
+          <span class="badge">${users.length} مستخدم</span>
+        </div>
       </div>
       <div class="org-chart-page">
         <div class="org-sector-box org-ceo-card">
