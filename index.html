@@ -18429,3 +18429,223 @@ window.openTaskFromSummary=openTaskFromSummary;
   }
 })();
 </script>
+
+<script>
+/* === PATCH: رؤساء تنفيذ الشركات الشقيقة + إشعارات التعليقات ===
+   1) تصنيف رئيس تنفيذي شركة شقيقة لا يظهر في الهيكل التنظيمي.
+   2) لا يسند له إلا الرئيس التنفيذي، ويستطيع هو إسناد مهمة لنفسه فقط.
+   3) أي تعليق جديد يرسل إشعارًا للمسند منه والمسند إليه/إليهم باستثناء كاتب التعليق.
+*/
+(function(){
+  const SISTER_COMPANY_CEO_ROLE = 'sister_company_ceo';
+  const SISTER_COMPANY_CEO_LABEL = 'رئيس تنفيذي شركة شقيقة';
+
+  window.isSisterCompanyCeoUser = function(user){
+    return !!user && String(user.role || '').trim() === SISTER_COMPANY_CEO_ROLE;
+  };
+
+  window.isMainCeoForSisterCompanyAssignment = function(user){
+    return !!user && String(user.role || '').trim() === 'ceo';
+  };
+
+  const previousRoleLabel = window.roleLabel;
+  window.roleLabel = roleLabel = function(role){
+    if(String(role || '').trim() === SISTER_COMPANY_CEO_ROLE) return SISTER_COMPANY_CEO_LABEL;
+    return typeof previousRoleLabel === 'function' ? previousRoleLabel(role) : (role || '—');
+  };
+
+  function ensureSisterCompanyRoleOptions(){
+    const selects = [
+      document.getElementById('adminInviteRole'),
+      document.getElementById('boardUsersImportRole'),
+      document.getElementById('editUserRole')
+    ].filter(Boolean);
+    selects.forEach(select => {
+      if([...select.options].some(opt => opt.value === SISTER_COMPANY_CEO_ROLE)) return;
+      const opt = document.createElement('option');
+      opt.value = SISTER_COMPANY_CEO_ROLE;
+      opt.textContent = SISTER_COMPANY_CEO_LABEL;
+      select.appendChild(opt);
+    });
+  }
+
+  const previousShowPage = window.showPage;
+  window.showPage = showPage = function(page){
+    if(typeof previousShowPage === 'function') previousShowPage.apply(this, arguments);
+    setTimeout(ensureSisterCompanyRoleOptions, 0);
+  };
+
+  const previousRenderAdmin = window.renderAdmin;
+  window.renderAdmin = renderAdmin = function(){
+    if(typeof previousRenderAdmin === 'function') previousRenderAdmin.apply(this, arguments);
+    ensureSisterCompanyRoleOptions();
+  };
+
+  if(typeof window.mapBoardUserImportRole === 'function'){
+    const previousMapBoardUserImportRole = window.mapBoardUserImportRole;
+    window.mapBoardUserImportRole = mapBoardUserImportRole = function(value){
+      const v = String(value || '').trim().toLowerCase();
+      if(['رئيس تنفيذي شركة شقيقة','رئيس تنفيذي شركه شقيقه','sister_company_ceo','sister company ceo'].includes(v)) return SISTER_COMPANY_CEO_ROLE;
+      return previousMapBoardUserImportRole(value);
+    };
+  }
+
+  if(typeof window.mapImportRole === 'function'){
+    const previousMapImportRole = window.mapImportRole;
+    window.mapImportRole = mapImportRole = function(value){
+      const v = String(value || '').trim().toLowerCase();
+      if(['رئيس تنفيذي شركة شقيقة','رئيس تنفيذي شركه شقيقه','sister_company_ceo','sister company ceo'].includes(v)) return SISTER_COMPANY_CEO_ROLE;
+      return previousMapImportRole(value);
+    };
+  }
+
+  function runWithOrgUsersWithoutSisterCeo(callback){
+    const originalUsers = state.users || [];
+    state.users = originalUsers.filter(user => !isSisterCompanyCeoUser(user));
+    try{
+      return callback();
+    }finally{
+      state.users = originalUsers;
+    }
+  }
+
+  if(typeof window.renderOrgPage === 'function'){
+    const previousRenderOrgPage = window.renderOrgPage;
+    window.renderOrgPage = renderOrgPage = function(){
+      return runWithOrgUsersWithoutSisterCeo(() => previousRenderOrgPage.apply(this, arguments));
+    };
+  }
+
+  if(typeof window.exportOrgChartToExcel === 'function'){
+    const previousExportOrgChartToExcel = window.exportOrgChartToExcel;
+    window.exportOrgChartToExcel = exportOrgChartToExcel = function(){
+      return runWithOrgUsersWithoutSisterCeo(() => previousExportOrgChartToExcel.apply(this, arguments));
+    };
+  }
+
+  const previousAllowedAssignmentTypes = window.allowedAssignmentTypes;
+  window.allowedAssignmentTypes = allowedAssignmentTypes = function(){
+    if(String(state.profile?.role || '') === SISTER_COMPANY_CEO_ROLE){
+      return [['employees','موظفون محددون']];
+    }
+    return typeof previousAllowedAssignmentTypes === 'function' ? previousAllowedAssignmentTypes() : [['employees','موظفون محددون']];
+  };
+
+  const previousPermittedAssigneeUsers = window.permittedAssigneeUsers;
+  window.permittedAssigneeUsers = permittedAssigneeUsers = function(){
+    if(String(state.profile?.role || '') === SISTER_COMPANY_CEO_ROLE){
+      return (state.users || []).filter(user => user.id === state.profile.id && user.is_active !== false);
+    }
+
+    let rows = typeof previousPermittedAssigneeUsers === 'function' ? (previousPermittedAssigneeUsers.apply(this, arguments) || []) : [];
+
+    // لا يظهر رئيس تنفيذي شركة شقيقة في قوائم الإسناد إلا للرئيس التنفيذي أو لنفسه.
+    rows = rows.filter(user => {
+      if(!isSisterCompanyCeoUser(user)) return true;
+      return isMainCeoForSisterCompanyAssignment(state.profile) || user.id === state.profile?.id;
+    });
+
+    // إضافته للرئيس التنفيذي حتى لو لم يكن مرتبطًا بقطاع أو قسم.
+    if(isMainCeoForSisterCompanyAssignment(state.profile)){
+      const type = document.getElementById('assignmentType')?.value || 'employees';
+      if(type === 'employees'){
+        const existingIds = new Set(rows.map(user => user.id));
+        (state.users || [])
+          .filter(user => isSisterCompanyCeoUser(user) && user.is_active !== false)
+          .forEach(user => { if(!existingIds.has(user.id)) rows.push(user); });
+      }
+    }
+
+    return rows;
+  };
+
+  const previousValidateAssignment = window.validateAssignment;
+  window.validateAssignment = validateAssignment = function(type, selected){
+    const selectedUsers = (selected || []).map(id => (state.users || []).find(user => user.id === id)).filter(Boolean);
+
+    if(String(state.profile?.role || '') === SISTER_COMPANY_CEO_ROLE){
+      const invalid = selectedUsers.filter(user => user.id !== state.profile.id);
+      if(invalid.length) return 'رئيس تنفيذي شركة شقيقة يستطيع إسناد مهمة لنفسه فقط.';
+    }
+
+    const hasSisterCompanyCeo = selectedUsers.some(isSisterCompanyCeoUser);
+    if(hasSisterCompanyCeo && !isMainCeoForSisterCompanyAssignment(state.profile) && String(state.profile?.role || '') !== SISTER_COMPANY_CEO_ROLE){
+      return 'لا يمكن إسناد مهمة إلى رئيس تنفيذي شركة شقيقة إلا من الرئيس التنفيذي.';
+    }
+
+    return typeof previousValidateAssignment === 'function' ? previousValidateAssignment(type, selected) : '';
+  };
+
+  const previousRenderAssigneePicker = window.renderAssigneePicker;
+  window.renderAssigneePicker = renderAssigneePicker = function(){
+    if(typeof previousRenderAssigneePicker === 'function') previousRenderAssigneePicker.apply(this, arguments);
+    if(String(state.profile?.role || '') === SISTER_COMPANY_CEO_ROLE){
+      const picker = document.getElementById('assigneePicker');
+      if(picker){
+        picker.querySelectorAll('input[type="checkbox"]').forEach(input => {
+          input.checked = input.value === state.profile.id;
+          input.disabled = input.value !== state.profile.id;
+        });
+      }
+    }
+  };
+
+  function commentNotificationRecipientIds(task){
+    if(!task) return [];
+    const ids=[];
+    if(task.created_by) ids.push(task.created_by);
+    if(task.primary_responsible_id) ids.push(task.primary_responsible_id);
+    (state.assignees || [])
+      .filter(row => row.task_id === task.id)
+      .forEach(row => ids.push(row.user_id));
+    return [...new Set(ids.filter(Boolean))];
+  }
+
+  window.addComment = addComment = async function(taskId){
+    try{
+      const task = (state.tasks || []).find(t => t.id === taskId);
+      const textEl = document.getElementById('comment-' + taskId);
+      const fileEl = document.getElementById('commentFiles-' + taskId);
+      const text = String(textEl?.value || '').trim();
+      const files = await uploadFiles(fileEl?.files, 'comments/' + taskId);
+
+      if(!text && !files.urls.length){
+        showToast('اكتب تعليقًا أو أرفق ملفًا.','error');
+        return;
+      }
+
+      const finalText = text || 'مرفق بدون تعليق';
+      const {error} = await supabaseClient.from('task_comments').insert({
+        task_id: taskId,
+        user_id: state.profile.id,
+        comment_text: finalText,
+        attachment_urls: files.urls,
+        attachment_names: files.names
+      });
+      if(error) throw error;
+
+      if(typeof notifyTaskEventByEmail === 'function'){
+        await notifyTaskEventByEmail({
+          task,
+          userIds: commentNotificationRecipientIds(task),
+          subject: `تعليق جديد على المهمة - ${task?.title || 'مهمة'}`,
+          heading: 'تعليق جديد على مهمة',
+          intro: 'تمت إضافة تعليق جديد على مهمة مرتبطة بك في لوحة متابعة مهام القطاعات.',
+          details: finalText,
+          actorName: state.profile?.name || 'النظام',
+          excludeCurrent: true
+        });
+      }
+
+      await loadAll();
+      renderTasks();
+      showToast('تمت إضافة التعليق وإرسال الإشعار للأطراف المعنية.','success');
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر إضافة التعليق أو إرسال الإشعار.','error');
+    }
+  };
+
+  ensureSisterCompanyRoleOptions();
+})();
+</script>
