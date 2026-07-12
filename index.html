@@ -158,6 +158,15 @@
       margin:auto!important;
     }
 
+
+    /* PATCH: إخفاء الأقسام غير المستخدمة من إدارة المستخدمين */
+    #directInvitePanel,
+    #pendingUserInvitesPanel,
+    #boardUsersImportPanel,
+    #boardTasksImportPanel{
+      display:none!important;
+    }
+
   </style>
 </head>
 <body class="startup-loading-clean">
@@ -250,7 +259,7 @@
           <div class="form-grid">
             <div class="form-group"><label>الاسم الكامل</label><input id="adminInviteName" placeholder="مثال: محمد أحمد"></div>
             <div class="form-group"><label>البريد الإلكتروني</label><input id="adminInviteEmail" type="email" placeholder="example@rasf.sa"></div>
-            <div class="form-group"><label>الدور</label><select id="adminInviteRole"><option value="employee">موظف</option><option value="department_manager">مدير قسم</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option><option value="admin">مدير النظام</option></select></div>
+            <div class="form-group"><label>الدور</label><select id="adminInviteRole"><option value="employee">موظف</option><option value="department_manager">مدير قسم</option><option value="sector_head">رئيس قطاع</option><option value="ceo">الرئيس التنفيذي</option><option value="admin">مدير النظام</option><option value="sister_company_ceo">رئيس تنفيذي شركة شقيقة</option></select></div>
             <div class="form-group"><label>المسمى الوظيفي</label><input id="adminInviteJobTitle" placeholder="اختياري"></div>
             <div class="form-group"><label>القطاع</label><select id="adminInviteSector" onchange="fillDepartmentSelect('adminInviteDepartment', this.value, true)"></select></div>
             <div class="form-group"><label>القسم</label><select id="adminInviteDepartment"></select></div>
@@ -321,6 +330,7 @@
                 <option value="sector_head">رئيس قطاع</option>
                 <option value="ceo">الرئيس التنفيذي</option>
                 <option value="admin">مدير النظام</option>
+                <option value="sister_company_ceo">رئيس تنفيذي شركة شقيقة</option>
               </select>
             </div>
           </div>
@@ -1064,13 +1074,13 @@ function exportDashboardToExcel(){
 function canManageUserImports(){ return isAdmin() || isSectorHead() || isDepartmentManager(); }
 function renderAdmin(){
   if(!canManageUserImports()){ $('adminPage').innerHTML='<section class="panel card"><div class="empty">ليست لديك صلاحية الوصول لهذه الصفحة.</div></section>'; return; }
-  $('directInvitePanel')?.classList.toggle('hidden',!isAdmin());
+  $('directInvitePanel')?.classList.add('hidden');
+  $('pendingUserInvitesPanel')?.classList.add('hidden');
+  $('boardUsersImportPanel')?.classList.add('hidden');
+  $('boardTasksImportPanel')?.classList.add('hidden');
   $('requestsPanel')?.classList.toggle('hidden',!isAdmin());
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
-  $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
-  $('boardUsersImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
-  $('boardTasksImportPanel')?.classList.remove('hidden');
   if(isAdmin()){
     fillSectorSelect('adminInviteSector', true);
     fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true);
@@ -1118,7 +1128,7 @@ function mapBoardUserImportRole(value){
     'مدير قسم':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
     'رئيس قطاع':'sector_head','sector_head':'sector_head','sector head':'sector_head',
     'الرئيس التنفيذي':'ceo','رئيس تنفيذي':'ceo','ceo':'ceo',
-    'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin'
+    'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin','رئيس تنفيذي شركة شقيقة':'sister_company_ceo','رئيس تنفيذي شركه شقيقه':'sister_company_ceo','sister_company_ceo':'sister_company_ceo','sister company ceo':'sister_company_ceo'
   };
   return map[v] || '';
 }
@@ -1146,8 +1156,8 @@ function setupBoardUsersImportControls(){
   if($('boardUsersImportRole')){
     $('boardUsersImportRole').value=currentRole;
     if(isSectorHead()||isDepartmentManager()){
-      [...$('boardUsersImportRole').options].forEach(opt=>{ opt.disabled=['admin','ceo','sector_head'].includes(opt.value); });
-      if(['admin','ceo','sector_head'].includes($('boardUsersImportRole').value)) $('boardUsersImportRole').value='employee';
+      [...$('boardUsersImportRole').options].forEach(opt=>{ opt.disabled=['admin','ceo','sector_head','sister_company_ceo'].includes(opt.value); });
+      if(['admin','ceo','sector_head','sister_company_ceo'].includes($('boardUsersImportRole').value)) $('boardUsersImportRole').value='employee';
     }
   }
 }
@@ -1173,16 +1183,16 @@ function resolveBoardUserImportRow(raw,index){
   if(!role) errors.push('الدور غير صحيح');
   const sector=state.sectors.find(sector=>sector.id===defaultSectorId) || null;
   const department=state.departments.find(dept=>dept.id===defaultDeptId) || null;
-  if(!sector && !['admin','ceo'].includes(role)) errors.push('اختر القطاع الافتراضي');
+  if(!sector && !['admin','ceo','sister_company_ceo'].includes(role)) errors.push('اختر القطاع الافتراضي');
   if(defaultDeptId && !department) errors.push('القسم الافتراضي غير صحيحة');
   if(department && sector && department.sector_id!==sector.id) errors.push('القسم المختار لا تتبع القطاع المختار');
   if(isSectorHead()){
     if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع استيراد مستخدمين خارج قطاعه');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
+    if(['admin','ceo','sector_head','sister_company_ceo'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   if(isDepartmentManager()){
     if(!department || department.id!==state.profile.department_id) errors.push('مدير القسم يستطيع استيراد مستخدمين داخل قسمه فقط');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('مدير القسم يستطيع استيراد موظفين أو مدراء أقسام فقط');
+    if(['admin','ceo','sector_head','sister_company_ceo'].includes(role)) errors.push('مدير القسم يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   const duplicateUser=state.users.some(u=>String(u.email||'').toLowerCase()===email);
   const duplicatePending=state.pendingUserImports.some(u=>u.status==='pending' && String(u.email||'').toLowerCase()===email);
@@ -1320,7 +1330,7 @@ function mapImportRole(value){
     'مدير قسم':'department_manager','مدير ادارة':'department_manager','department_manager':'department_manager','department manager':'department_manager',
     'رئيس قطاع':'sector_head','sector_head':'sector_head','sector head':'sector_head',
     'الرئيس التنفيذي':'ceo','رئيس تنفيذي':'ceo','ceo':'ceo',
-    'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin'
+    'مدير النظام':'admin','مشرف النظام':'admin','admin':'admin','رئيس تنفيذي شركة شقيقة':'sister_company_ceo','رئيس تنفيذي شركه شقيقه':'sister_company_ceo','sister_company_ceo':'sister_company_ceo','sister company ceo':'sister_company_ceo'
   };
   return map[v] || '';
 }
@@ -1353,14 +1363,14 @@ function validateImportedUser(row, index){
   if(!role) errors.push('الدور غير صحيح');
   let sector=null, department=null;
   if(sectorName) sector=sectorByName(sectorName);
-  if(!sector && !['admin','ceo'].includes(role)) errors.push('القطاع غير صحيح أو غير موجود');
+  if(!sector && !['admin','ceo','sister_company_ceo'].includes(role)) errors.push('القطاع غير صحيح أو غير موجود');
   if(sector && deptName){
     department=deptByName(deptName, sector.id);
     if(!department) errors.push('القسم غير موجود داخل القطاع المحدد');
   }
   if(isSectorHead()){
     if(!sector || sector.id!==state.profile.sector_id) errors.push('رئيس القطاع لا يستطيع إضافة مستخدم خارج قطاعه');
-    if(['admin','ceo','sector_head'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
+    if(['admin','ceo','sector_head','sister_company_ceo'].includes(role)) errors.push('رئيس القطاع يستطيع استيراد موظفين أو مدراء أقسام فقط');
   }
   return { row_number:index+2, name, email, job_title, role, role_label:roleLabel(role), sector_id:sector?.id||null, sector_name:sector?.name||sectorName, department_id:department?.id||null, department_name:department?.name||deptName, valid:errors.length===0, errors };
 }
@@ -1437,7 +1447,7 @@ async function downloadUsersImportTemplate(){
 
     const rolesForCurrentUser = isSectorHead()
       ? ['موظف','مدير قسم']
-      : ['موظف','مدير قسم','رئيس قطاع','الرئيس التنفيذي','مدير النظام'];
+      : ['موظف','مدير قسم','رئيس قطاع','الرئيس التنفيذي','مدير النظام','رئيس تنفيذي شركة شقيقة'];
 
     const sectorsForCurrentUser = isSectorHead()
       ? state.sectors.filter(s=>s.id===state.profile?.sector_id)
@@ -2407,12 +2417,15 @@ function canDeleteComment(c){ const t=state.tasks.find(x=>x.id===c.task_id); ret
 renderAdmin=function(){
   if(!canManageUserImports()){ $('adminPage').innerHTML='<section class="panel card"><div class="empty">ليست لديك صلاحية الوصول لهذه الصفحة.</div></section>'; return; }
   ensureFullHrFeatureDom();
-  $('directInvitePanel')?.classList.toggle('hidden',!isAdmin());
+  // الأقسام التالية أُخفيت من واجهة إدارة المستخدمين لأنها لم تعد مستخدمة يوميًا.
+  $('directInvitePanel')?.classList.add('hidden');
+  $('pendingUserInvitesPanel')?.classList.add('hidden');
+  $('boardUsersImportPanel')?.classList.add('hidden');
+  $('boardTasksImportPanel')?.classList.add('hidden');
   $('requestsPanel')?.classList.toggle('hidden',!isAdmin());
   $('pendingTasksPanel')?.classList.toggle('hidden',!(isAdminOrCeo()||isSectorHead()||isDepartmentManager()));
   $('transferRequestsPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()||isDepartmentManager()));
   $('bulkImportPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
-  $('pendingUserInvitesPanel')?.classList.toggle('hidden',!(isAdmin()||isSectorHead()));
   if(isAdmin()){ fillSectorSelect('adminInviteSector', true); fillDepartmentSelect('adminInviteDepartment', $('adminInviteSector')?.value || '', true); renderRequests(); }
   renderPendingTaskApprovals(); renderTransferRequests(); renderUsers(); renderUsersImportPreview();
 };
