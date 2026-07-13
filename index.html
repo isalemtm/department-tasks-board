@@ -4370,7 +4370,7 @@ saveTask = async function(){
       Object.assign(payload, {
         status: 'جديدة',
         created_by: state.profile.id,
-        approval_status: currentRole() === 'employee' ? 'pending' : 'approved'
+        approval_status: 'approved'
       });
 
       if(payload.approval_status === 'approved'){
@@ -15647,7 +15647,7 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
         Object.assign(payload, {
           status: 'جديدة',
           created_by: state.profile.id,
-          approval_status: currentRole() === 'employee' ? 'pending' : 'approved'
+          approval_status: 'approved'
         });
 
         if(payload.approval_status === 'approved'){
@@ -16031,7 +16031,7 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
         Object.assign(payload, {
           status: 'جديدة',
           created_by: state.profile.id,
-          approval_status: isCrossSectorAssigner() ? 'pending' : 'approved'
+          approval_status: 'approved'
         });
 
         if(payload.approval_status === 'approved'){
@@ -16488,7 +16488,7 @@ renderOrgPage = renderOrgPageUniformAllSectors;
    - رئيس القطاع، مدير القسم، والموظف يستطيعون اختيار القطاع أولًا ثم تظهر أسماء ذلك القطاع فقط.
    - القائمة تشمل الموظفين ومدراء الأقسام ورؤساء القطاعات، وتستبعد مدير النظام والرئيس التنفيذي.
    - لا يغيّر اعتماد مهام رئيس القطاع: تبقى مباشرة ومعتمدة كما هي.
-   - مهام الموظف ومدير القسم الجديدة تبقى بانتظار الاعتماد كما هي.
+   - إضافة المهام الجديدة تتم مباشرة بدون اعتماد؛ الاعتماد فقط عند الإكمال.
    - لا تغيير على الصفحات الأخرى أو الصلاحيات العامة.
 */
 (function installSectorHeadCrossSectorAssignmentPatch(){
