@@ -4370,7 +4370,7 @@ saveTask = async function(){
       Object.assign(payload, {
         status: 'جديدة',
         created_by: state.profile.id,
-        approval_status: 'approved'
+        approval_status: currentRole() === 'employee' ? 'pending' : 'approved'
       });
 
       if(payload.approval_status === 'approved'){
@@ -15647,7 +15647,7 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
         Object.assign(payload, {
           status: 'جديدة',
           created_by: state.profile.id,
-          approval_status: 'approved'
+          approval_status: currentRole() === 'employee' ? 'pending' : 'approved'
         });
 
         if(payload.approval_status === 'approved'){
@@ -16031,7 +16031,7 @@ setTimeout(removeExecutiveIndicatorsTabOnly,1000);
         Object.assign(payload, {
           status: 'جديدة',
           created_by: state.profile.id,
-          approval_status: 'approved'
+          approval_status: isCrossSectorAssigner() ? 'pending' : 'approved'
         });
 
         if(payload.approval_status === 'approved'){
@@ -16488,7 +16488,7 @@ renderOrgPage = renderOrgPageUniformAllSectors;
    - رئيس القطاع، مدير القسم، والموظف يستطيعون اختيار القطاع أولًا ثم تظهر أسماء ذلك القطاع فقط.
    - القائمة تشمل الموظفين ومدراء الأقسام ورؤساء القطاعات، وتستبعد مدير النظام والرئيس التنفيذي.
    - لا يغيّر اعتماد مهام رئيس القطاع: تبقى مباشرة ومعتمدة كما هي.
-   - إضافة المهام الجديدة تتم مباشرة بدون اعتماد؛ الاعتماد فقط عند الإكمال.
+   - مهام الموظف ومدير القسم الجديدة تبقى بانتظار الاعتماد كما هي.
    - لا تغيير على الصفحات الأخرى أو الصلاحيات العامة.
 */
 (function installSectorHeadCrossSectorAssignmentPatch(){
@@ -18662,3 +18662,217 @@ window.openTaskFromSummary=openTaskFromSummary;
   ensureSisterCompanyRoleOptions();
 })();
 </script>
+
+<script>
+/* === PATCH: تحويل الموظف لأي موظف في أي قطاع + تفاصيل كاملة عند اعتماد الإكمال ===
+   خاص بلوحة متابعة مهام القطاعات فقط.
+   - الموظف يستطيع طلب تحويل مهمة مرتبطة به إلى أي مستخدم نشط داخل الشركة باستثناء أدوار الإدارة العليا/النظام.
+   - طلب التحويل يبقى بانتظار اعتماد مدير القسم أو رئيس القطاع ضمن نطاق المهمة.
+   - طلبات اعتماد الإكمال تعرض تفاصيل المهمة كاملة: الوصف، المرفقات، التعليقات، المسند منه، المسند إليهم، والمسؤول.
+*/
+(function(){
+  const EXCLUDED_TRANSFER_TARGET_ROLES = new Set(['admin','ceo','sister_company_ceo']);
+
+  function isEligibleTransferTargetUser(user){
+    return !!user
+      && user.is_active !== false
+      && !EXCLUDED_TRANSFER_TARGET_ROLES.has(String(user.role || '').trim());
+  }
+
+  function taskCurrentAssigneeIds(task){
+    return new Set((getTaskAssignees(task?.id) || []).map(user => user.id).filter(Boolean));
+  }
+
+  function sortUsersArabic(users){
+    return [...(users || [])].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+  }
+
+  const previousTransferCandidates = window.transferCandidates;
+  window.transferCandidates = transferCandidates = function(task){
+    const currentIds = taskCurrentAssigneeIds(task);
+    const baseRows = sortUsersArabic((state.users || []).filter(user =>
+      isEligibleTransferTargetUser(user)
+      && user.id !== state.profile?.id
+      && !currentIds.has(user.id)
+    ));
+
+    const isDirect = typeof canDirectTransferTask === 'function' && canDirectTransferTask(task);
+
+    // أصحاب الصلاحية الذين يحولون مباشرة يبقون على نطاقهم الحالي حتى لا تتوسع صلاحيات التحويل المباشر.
+    if(isDirect && typeof previousTransferCandidates === 'function'){
+      const scopedRows = previousTransferCandidates(task) || [];
+      return sortUsersArabic(scopedRows.filter(user =>
+        isEligibleTransferTargetUser(user)
+        && user.id !== state.profile?.id
+        && !currentIds.has(user.id)
+      ));
+    }
+
+    // الموظف/الطرف غير المخول بالتحويل المباشر: يستطيع اختيار أي موظف نشط في أي قطاع، ثم يمر الطلب للاعتماد.
+    return baseRows;
+  };
+
+  window.renderTransferChooser = renderTransferChooser = function(task){
+    if(typeof canRequestTransferTask !== 'function' || !canRequestTransferTask(task)) return '';
+
+    const options = transferCandidates(task);
+    const direct = typeof canDirectTransferTask === 'function' && canDirectTransferTask(task);
+    if(!options.length){
+      return `<div id="transferChooser-${task.id}" class="transfer-inline hidden"><span class="meta">لا يوجد مستخدمون نشطون متاحون للتحويل.</span></div>`;
+    }
+
+    return `<div id="transferChooser-${task.id}" class="transfer-inline hidden">
+      <select id="transferSelect-${task.id}">
+        <option value="">اختر الموظف الجديد</option>
+        ${options.map(user=>`<option value="${user.id}">${escapeHtml(user.name)} - ${escapeHtml(roleLabel(user.role))} - ${escapeHtml(nameOfSector(user.sector_id))}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="confirmTaskTransfer('${task.id}')">${direct ? 'تحويل مباشر' : 'إرسال طلب التحويل للاعتماد'}</button>
+      <button class="btn btn-sm" onclick="cancelTransferChooser('${task.id}')">إلغاء</button>
+      ${direct ? '' : `<textarea id="transferReason-${task.id}" placeholder="سبب طلب التحويل، اختياري"></textarea>`}
+    </div>`;
+  };
+
+  window.requestTaskTransfer = requestTaskTransfer = async function(taskId,toUserId,reason=''){
+    try{
+      const task = (state.tasks || []).find(t=>t.id===taskId);
+      if(!task || typeof isTaskRelatedToCurrentUser !== 'function' || !isTaskRelatedToCurrentUser(task)){
+        showToast('لا تملك صلاحية طلب تحويل هذه المهمة.','error');
+        return;
+      }
+
+      if(typeof canDirectTransferTask === 'function' && canDirectTransferTask(task)){
+        return directTransferTask(taskId,toUserId);
+      }
+
+      const allowed = transferCandidates(task).some(user => user.id === toUserId);
+      if(!allowed){
+        showToast('الموظف المختار غير متاح للتحويل. حدّث الصفحة وحاول مرة أخرى.','error');
+        return;
+      }
+
+      const {error}=await supabaseClient.from('task_transfer_requests').insert({
+        task_id:taskId,
+        requested_by:state.profile.id,
+        from_user_id:state.profile.id,
+        to_user_id:toUserId,
+        reason:reason || 'طلب تحويل من الموظف',
+        status:'pending'
+      });
+      if(error) throw error;
+
+      cancelTransferChooser(taskId);
+      showToast('تم إرسال طلب تحويل المهمة، وسيبقى بانتظار اعتماد مدير القسم أو رئيس القطاع.','success',7000);
+      await loadAll();
+      if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+      if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر إرسال طلب التحويل.','error',7000);
+    }
+  };
+
+  function taskReadOnlyCommentsHtml(taskId){
+    const rows = (typeof getTaskComments === 'function' ? getTaskComments(taskId) : []) || [];
+    if(!rows.length) return '<div class="empty" style="padding:10px">لا توجد تعليقات.</div>';
+    return rows.map(comment => `
+      <div class="comment">
+        <div class="comment-head"><span>${escapeHtml(nameOfUser(comment.user_id))}</span><span>${formatDate(comment.created_at)}</span></div>
+        <div>${escapeHtml(comment.comment_text || '')}</div>
+        ${renderAttachments(comment.attachment_urls, comment.attachment_names)}
+      </div>
+    `).join('');
+  }
+
+  function completionFullTaskDetailsHtml(task){
+    const assignees = (getTaskAssignees(task.id) || []).map(user=>user.name).join('، ') || '—';
+    return `<div class="comment-box" style="margin-top:12px;">
+      <b>تفاصيل المهمة كاملة</b>
+      <div class="meta" style="margin-top:8px;line-height:1.9;">
+        المسند منه: ${escapeHtml(nameOfUser(task.created_by))}<br>
+        المسند إليه / إليهم: ${escapeHtml(assignees)}<br>
+        المسؤول عن المهمة: ${escapeHtml(nameOfUser(task.primary_responsible_id))}<br>
+        القطاع: ${escapeHtml(nameOfSector(task.target_sector_id || task.owner_sector_id))}<br>
+        القسم: ${escapeHtml(nameOfDept(task.target_department_id || task.owner_department_id))}<br>
+        تاريخ الاستحقاق: ${formatDate(task.due_date)}<br>
+        طالب الإكمال: ${escapeHtml(nameOfUser(task.completion_requested_by) || '—')}<br>
+        تاريخ طلب الإكمال: ${formatDate(task.completion_requested_at)}
+      </div>
+      <div class="task-desc" style="margin-top:10px;">${escapeHtml(task.description || 'لا يوجد وصف للمهمة.')}</div>
+      ${renderAttachments(task.attachment_urls, task.attachment_names)}
+      <div style="margin-top:12px;"><b>التعليقات</b>${taskReadOnlyCommentsHtml(task.id)}</div>
+    </div>`;
+  }
+
+  window.renderCompletionApprovalCard = function(task){
+    return `<div class="task-card" id="completion-request-${task.id}">
+      <div class="task-top">
+        <div>
+          <div class="task-title">${escapeHtml(task.title || 'بدون عنوان')}</div>
+          <div class="meta">طلب اعتماد إكمال مهمة</div>
+        </div>
+        <div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(task.priority)}</div>
+      </div>
+      ${completionFullTaskDetailsHtml(task)}
+      <div class="actions" style="margin-top:12px;">
+        <button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${task.id}')">اعتماد الإكمال</button>
+        <button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${task.id}')">رفض الإكمال</button>
+      </div>
+    </div>`;
+  };
+
+  window.renderCompletionRequests = renderCompletionRequests = function(){
+    ensureCompletionApprovalDom();
+    const box = $('completionRequestsList');
+    if(!box) return;
+    const rows = typeof getCompletionRequests === 'function' ? getCompletionRequests() : [];
+    if(!rows.length){
+      box.innerHTML='<div class="empty">لا توجد مهام مكتملة بانتظار الاعتماد حاليًا.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(renderCompletionApprovalCard).join('');
+  };
+
+  window.renderTaskActionRequests = renderTaskActionRequests = function(){
+    const host = $('taskActionRequestsPanel');
+    if(!host) return;
+
+    const data = typeof taskActionRequestsForCurrentUser === 'function'
+      ? taskActionRequestsForCurrentUser()
+      : {pendingTasks:[], completionTasks:[], transferRequests:[]};
+
+    const pendingTasks = data.pendingTasks || [];
+    const completionTasks = data.completionTasks || [];
+    const transferRequests = data.transferRequests || [];
+    const total = pendingTasks.length + completionTasks.length + transferRequests.length;
+
+    if(!total){
+      host.classList.add('hidden');
+      host.innerHTML='';
+      return;
+    }
+
+    const pendingHtml = pendingTasks.map(task => `
+      <div class="task-card">
+        <div class="task-top"><div><div class="task-title">${escapeHtml(task.title||'بدون عنوان')}</div><div class="meta">نوع الطلب: اعتماد مهمة جديدة<br>أنشأها: ${escapeHtml(nameOfUser(task.created_by))}<br>تاريخ الاستحقاق: ${formatDate(task.due_date)}</div></div><div class="actions"><span class="chip">بانتظار الاعتماد</span>${priorityChip(task.priority)}</div></div>
+        <div class="task-desc">${escapeHtml(task.description||'')}</div>
+        <div class="actions"><button class="btn btn-info btn-sm" onclick="editTask('${task.id}')">تعديل قبل الاعتماد</button><button class="btn btn-success btn-sm" onclick="approveSubmittedTask('${task.id}')">اعتماد</button><button class="btn btn-danger btn-sm" onclick="rejectSubmittedTask('${task.id}')">رفض</button></div>
+      </div>
+    `).join('');
+
+    const completionHtml = completionTasks.map(renderCompletionApprovalCard).join('');
+
+    const transferHtml = transferRequests.map(request => {
+      const task = (state.tasks || []).find(item => item.id === request.task_id);
+      return `<div class="task-card">
+        <div class="task-top"><div><div class="task-title">${escapeHtml(task?.title||'مهمة غير موجودة')}</div><div class="meta">نوع الطلب: تحويل مهمة<br>طالب التحويل: ${escapeHtml(nameOfUser(request.requested_by))}<br>من: ${escapeHtml(nameOfUser(request.from_user_id))}<br>إلى: ${escapeHtml(nameOfUser(request.to_user_id))}<br>السبب: ${escapeHtml(request.reason||'—')}</div></div><div class="actions"><span class="chip progress">بانتظار الاعتماد</span></div></div>
+        ${task ? `<div class="task-desc">${escapeHtml(task.description||'')}</div>${renderAttachments(task.attachment_urls, task.attachment_names)}` : ''}
+        <div class="actions"><button class="btn btn-success btn-sm" onclick="approveTransferRequest('${request.id}')">اعتماد التحويل</button><button class="btn btn-danger btn-sm" onclick="rejectTransferRequest('${request.id}')">رفض</button></div>
+      </div>`;
+    }).join('');
+
+    host.classList.remove('hidden');
+    host.innerHTML = `<section class="panel card"><details open><summary style="cursor:pointer;font-weight:900;color:var(--primary2);font-size:20px;">طلبات بانتظار الإجراء <span class="badge">${total}</span></summary><div style="margin-top:14px;">${pendingTasks.length ? `<h3 style="color:var(--primary2);">مهام بانتظار الاعتماد</h3>${pendingHtml}` : ''}${completionTasks.length ? `<h3 style="color:var(--primary2);margin-top:18px;">مهام مكتملة بانتظار الاعتماد</h3>${completionHtml}` : ''}${transferRequests.length ? `<h3 style="color:var(--primary2);margin-top:18px;">طلبات تحويل المهام</h3>${transferHtml}` : ''}</div></details></section>`;
+  };
+})();
+</script>
+
