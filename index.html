@@ -19286,7 +19286,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   function baseTaskRowsForTaskPage(){
     if(typeof window.taskPageAllowedTasks === 'function') return window.taskPageAllowedTasks() || [];
     if(typeof window.visibleTasks === 'function') return window.visibleTasks() || [];
-    return (window.state?.tasks || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
+    return ((typeof state !== 'undefined' ? state.tasks : []) || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
   }
 
   function preserveValue(id){ return document.getElementById(id)?.value || ''; }
@@ -19462,7 +19462,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   }
 
   function getUserById(id){
-    return (window.state?.users || []).find(user => String(user.id) === String(id)) || null;
+    return ((typeof state !== 'undefined' ? state.users : []) || []).find(user => String(user.id) === String(id)) || null;
   }
 
   function userMatchesSelected(userId, selected){
@@ -19477,7 +19477,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   function taskRowsBase(){
     if(typeof window.taskPageAllowedTasks === 'function') return window.taskPageAllowedTasks() || [];
     if(typeof window.visibleTasks === 'function') return window.visibleTasks() || [];
-    return (window.state?.tasks || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
+    return ((typeof state !== 'undefined' ? state.tasks : []) || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
   }
 
   function taskAssigneesSafe(taskId){
@@ -19558,7 +19558,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   window.setupCreatedByFilter = function(){
     const ids=new Set();
     taskRowsBase().forEach(task=>{ if(task?.created_by) ids.add(String(task.created_by)); });
-    const users=(window.state?.users || []).filter(user=>ids.has(String(user.id)));
+    const users=((typeof state !== 'undefined' ? state.users : []) || []).filter(user=>ids.has(String(user.id))); 
     setUserOptions('filterCreatedBy','المسند منه',users);
   };
 
@@ -19568,7 +19568,7 @@ window.openTaskFromSummary=openTaskFromSummary;
       if(task?.primary_responsible_id) ids.add(String(task.primary_responsible_id));
       taskAssigneesSafe(task.id).forEach(user=>{ if(user?.id) ids.add(String(user.id)); });
     });
-    const users=(window.state?.users || []).filter(user=>ids.has(String(user.id)));
+    const users=((typeof state !== 'undefined' ? state.users : []) || []).filter(user=>ids.has(String(user.id))); 
     setUserOptions('filterAssignee','المسند إليه',users);
   };
 
