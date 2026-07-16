@@ -18413,6 +18413,29 @@ init();
 
   ensurePostponedStyle();
 })();
+
+/* === FINAL COLOR OVERRIDE: مؤجلة بنفس لون بقية الحالات === */
+(function(){
+  function applyPostponedNeutralStyle(){
+    let style=document.getElementById('postponedNeutralFinalOverride');
+    if(!style){
+      style=document.createElement('style');
+      style.id='postponedNeutralFinalOverride';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      #tasksList .task-group-summary.postponed{
+        background:#fbf8f5!important;
+        border-color:var(--line)!important;
+        color:var(--primary2)!important;
+      }
+      #tasksList .task-group-summary.postponed:hover{background:#f4eee8!important;}
+      .chip.postponed{background:#f4f0ec!important;color:#61463b!important;}
+    `;
+  }
+  applyPostponedNeutralStyle();
+  setTimeout(applyPostponedNeutralStyle,0);
+})();
 </script>
 
 </body>
@@ -19234,13 +19257,14 @@ window.openTaskFromSummary=openTaskFromSummary;
       document.head.appendChild(style);
     }
     style.textContent=`
-      .chip.postponed{background:#f1eef6!important;color:#5e4b7b!important;}
+      .chip.postponed{background:#f4f0ec!important;color:#61463b!important;}
       #tasksList .task-group-details{margin-bottom:16px;}
       #tasksList .task-group-details>summary{list-style:none;}
       #tasksList .task-group-details>summary::-webkit-details-marker{display:none;}
       #tasksList .task-group-summary{padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;display:flex;align-items:center;justify-content:space-between;gap:12px;}
       #tasksList .task-group-summary:hover{background:#f4eee8;}
-      #tasksList .task-group-summary.postponed{background:#f7f4fb!important;border-color:#ded5ef!important;color:#4c3d67!important;}
+      #tasksList .task-group-summary.postponed{background:#fbf8f5!important;border-color:var(--line)!important;color:var(--primary2)!important;}
+      #tasksList .task-group-summary.postponed:hover{background:#f4eee8!important;}
     `;
   }
 
@@ -19285,9 +19309,9 @@ window.openTaskFromSummary=openTaskFromSummary;
       <select id="filterStatus" onchange="renderTasks()">
         <option value="">كل الحالات</option>
         <option value="قيد التنفيذ">قيد التنفيذ</option>
-        <option value="مؤجلة">مؤجلة</option>
         <option value="متأخرة">متأخرة</option>
         <option value="مكتملة">مكتملة</option>
+        <option value="مؤجلة">مؤجلة</option>
       </select>`;
     if(created) document.getElementById('filterCreatedBy').dataset.pendingValue=created;
     if(assignee) document.getElementById('filterAssignee').dataset.pendingValue=assignee;
@@ -19298,7 +19322,7 @@ window.openTaskFromSummary=openTaskFromSummary;
     const el=document.getElementById('filterStatus');
     if(!el) return;
     const current=el.value || '';
-    el.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مؤجلة">مؤجلة</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option>';
+    el.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option><option value="مؤجلة">مؤجلة</option>';
     el.value=['قيد التنفيذ',POSTPONED_STATUS,'متأخرة','مكتملة'].includes(current) ? current : '';
   };
 
