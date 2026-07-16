@@ -18177,8 +18177,8 @@ init();
       document.head.appendChild(style);
     }
     style.textContent=`
-      .chip.postponed{background:#f1eef6;color:#5e4b7b;}
-      #tasksList .task-group-summary.postponed{background:#f7f4fb;border-color:#ded5ef;color:#4c3d67;}
+      .chip.postponed{background:#f4f0ec;color:#61463b;}
+      #tasksList .task-group-summary.postponed{background:inherit;border-color:inherit;color:inherit;}
     `;
   }
 
@@ -18283,7 +18283,7 @@ init();
     const filter=document.getElementById('filterStatus');
     if(!filter) return;
     const current=filter.value || '';
-    filter.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مؤجلة">مؤجلة</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option>';
+    filter.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option><option value="مؤجلة">مؤجلة</option>';
     filter.value=['قيد التنفيذ',POSTPONED_STATUS,'مكتملة','متأخرة'].includes(current) ? current : '';
   }
 
@@ -18334,9 +18334,9 @@ init();
       return `<details class="task-group-details"><summary class="task-group-summary ${extraClass}"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
     };
     return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
-      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed')+
       renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
-      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.');
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed');
   };
 
   window.renderTasks = renderTasks = function(){
@@ -19387,9 +19387,9 @@ window.openTaskFromSummary=openTaskFromSummary;
       return `<details class="task-group-details"><summary class="task-group-summary ${extraClass}"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
     };
     return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
-      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed')+
       renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
-      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.');
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed');
   };
 
   window.renderTasks = function(){
