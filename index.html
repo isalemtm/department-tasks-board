@@ -19216,3 +19216,204 @@ window.openTaskFromSummary=openTaskFromSummary;
 })();
 </script>
 
+<script>
+/* === FINAL FIX: إظهار حالة مؤجلة في فلتر البحث وقائمة المهام ===
+   هذا التصحيح يأتي بعد كل ترقيعات الفلاتر السابقة حتى لا تُحذف مؤجلة من القائمة.
+   - يضيف مؤجلة إلى فلتر كل الحالات.
+   - يعرض مؤجلة كمجموعة رابعة مغلقة في قائمة المهام.
+   - يبقي المؤجلة خارج الإحصاءات ولوحات الأداء لأن renderStats/visibleTasks تستبعدها.
+*/
+(function(){
+  const POSTPONED_STATUS = 'مؤجلة';
+
+  function installPostponedFinalStyle(){
+    let style=document.getElementById('postponedFinalStatusStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='postponedFinalStatusStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      .chip.postponed{background:#f1eef6!important;color:#5e4b7b!important;}
+      #tasksList .task-group-details{margin-bottom:16px;}
+      #tasksList .task-group-details>summary{list-style:none;}
+      #tasksList .task-group-details>summary::-webkit-details-marker{display:none;}
+      #tasksList .task-group-summary{padding:13px 16px;cursor:pointer;font-weight:900;color:var(--primary2);border:1px solid var(--line);border-radius:14px;background:#fbf8f5;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+      #tasksList .task-group-summary:hover{background:#f4eee8;}
+      #tasksList .task-group-summary.postponed{background:#f7f4fb!important;border-color:#ded5ef!important;color:#4c3d67!important;}
+    `;
+  }
+
+  function isPostponedLocal(task){
+    if(typeof window.isPostponedTask === 'function') return window.isPostponedTask(task);
+    return String(task?.status || '').trim() === POSTPONED_STATUS;
+  }
+
+  function taskDisplayStatusLocal(task){
+    if(isPostponedLocal(task)) return POSTPONED_STATUS;
+    if(typeof window.taskDisplayStatus === 'function'){
+      const status=window.taskDisplayStatus(task);
+      return status === 'بانتظار اعتماد الإنجاز' ? 'قيد التنفيذ' : status;
+    }
+    if(typeof window.isLate === 'function' && window.isLate(task)) return 'متأخرة';
+    return task?.status === 'مكتملة' ? 'مكتملة' : 'قيد التنفيذ';
+  }
+
+  function baseTaskRowsForTaskPage(){
+    if(typeof window.taskPageAllowedTasks === 'function') return window.taskPageAllowedTasks() || [];
+    if(typeof window.visibleTasks === 'function') return window.visibleTasks() || [];
+    return (window.state?.tasks || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
+  }
+
+  function preserveValue(id){ return document.getElementById(id)?.value || ''; }
+
+  window.ensureTaskFiltersDom = function(){
+    installPostponedFinalStyle();
+    const search=document.getElementById('searchInput');
+    if(!search) return;
+    const wrap=search.closest('.filters');
+    if(!wrap) return;
+    const q=search.value || '';
+    const created=preserveValue('filterCreatedBy');
+    const assignee=preserveValue('filterAssignee');
+    const status=preserveValue('filterStatus');
+    wrap.dataset.finalTaskFilters='postponed-v2';
+    wrap.innerHTML=`
+      <input id="searchInput" placeholder="ابحث بعنوان المهمة أو الوصف" oninput="renderTasks()" value="${escapeHtml(q)}">
+      <select id="filterCreatedBy" onchange="renderTasks()"><option value="">المسند منه</option></select>
+      <select id="filterAssignee" onchange="renderTasks()"><option value="">المسند إليه</option></select>
+      <select id="filterStatus" onchange="renderTasks()">
+        <option value="">كل الحالات</option>
+        <option value="قيد التنفيذ">قيد التنفيذ</option>
+        <option value="مؤجلة">مؤجلة</option>
+        <option value="متأخرة">متأخرة</option>
+        <option value="مكتملة">مكتملة</option>
+      </select>`;
+    if(created) document.getElementById('filterCreatedBy').dataset.pendingValue=created;
+    if(assignee) document.getElementById('filterAssignee').dataset.pendingValue=assignee;
+    if(['قيد التنفيذ',POSTPONED_STATUS,'متأخرة','مكتملة'].includes(status)) document.getElementById('filterStatus').value=status;
+  };
+
+  window.normalizeTaskStatusFilterOptions = function(){
+    const el=document.getElementById('filterStatus');
+    if(!el) return;
+    const current=el.value || '';
+    el.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مؤجلة">مؤجلة</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option>';
+    el.value=['قيد التنفيذ',POSTPONED_STATUS,'متأخرة','مكتملة'].includes(current) ? current : '';
+  };
+
+  window.setupCreatedByFilter = function(){
+    const el=document.getElementById('filterCreatedBy');
+    if(!el) return;
+    const current=el.value || el.dataset.pendingValue || '';
+    const ids=new Set(baseTaskRowsForTaskPage().map(task=>task.created_by).filter(Boolean));
+    const users=(state.users||[])
+      .filter(user=>user.is_active!==false && ids.has(user.id))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    el.innerHTML='<option value="">المسند منه</option>'+users.map(user=>`<option value="${user.id}">${escapeHtml(user.name)}</option>`).join('');
+    if(current && users.some(user=>user.id===current)) el.value=current;
+    delete el.dataset.pendingValue;
+  };
+
+  window.setupEmployeeFilter = function(){
+    const el=document.getElementById('filterAssignee');
+    if(!el) return;
+    const current=el.value || el.dataset.pendingValue || '';
+    const ids=new Set();
+    baseTaskRowsForTaskPage().forEach(task=>{
+      if(task.primary_responsible_id) ids.add(task.primary_responsible_id);
+      if(typeof getTaskAssignees === 'function') getTaskAssignees(task.id).forEach(user=>ids.add(user.id));
+    });
+    const users=(state.users||[])
+      .filter(user=>user.is_active!==false && ids.has(user.id))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    el.innerHTML='<option value="">المسند إليه</option>'+users.map(user=>`<option value="${user.id}">${escapeHtml(user.name)}</option>`).join('');
+    if(current && users.some(user=>user.id===current)) el.value=current;
+    delete el.dataset.pendingValue;
+  };
+
+  window.setupFilters = function(){
+    ensureTaskFiltersDom();
+    setupCreatedByFilter();
+    setupEmployeeFilter();
+    normalizeTaskStatusFilterOptions();
+  };
+
+  window.getFilteredTasks = function(){
+    const rows=baseTaskRowsForTaskPage();
+    const q=document.getElementById('searchInput')?.value?.trim().toLowerCase() || '';
+    const fc=document.getElementById('filterCreatedBy')?.value || '';
+    const fa=document.getElementById('filterAssignee')?.value || '';
+    const st=document.getElementById('filterStatus')?.value || '';
+    return rows.filter(task=>{
+      const assignees=typeof getTaskAssignees==='function' ? getTaskAssignees(task.id) : [];
+      const text=`${task.title||''} ${task.description||''} ${nameOfUser(task.created_by)} ${nameOfUser(task.primary_responsible_id)} ${assignees.map(user=>user.name).join(' ')}`.toLowerCase();
+      const matchesSearch=!q || text.includes(q);
+      const matchesCreator=!fc || task.created_by===fc;
+      const matchesAssignee=!fa || task.primary_responsible_id===fa || assignees.some(user=>user.id===fa);
+      const display=taskDisplayStatusLocal(task);
+      const matchesStatus=!st || display===st;
+      return matchesSearch && matchesCreator && matchesAssignee && matchesStatus;
+    });
+  };
+
+  function bucket(task){
+    if(isPostponedLocal(task)) return 'postponed';
+    if(task?.status === 'مكتملة') return 'completed';
+    if(typeof isLate === 'function' && isLate(task)) return 'late';
+    return 'progress';
+  }
+
+  function sortRows(rows){
+    return [...(rows||[])].sort((a,b)=>{
+      const ad=a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime();
+    });
+  }
+
+  window.taskStatusSectionsHtml = function(rows){
+    installPostponedFinalStyle();
+    const source=rows || [];
+    const groups={
+      progress:sortRows(source.filter(task=>bucket(task)==='progress')),
+      postponed:sortRows(source.filter(task=>bucket(task)==='postponed')),
+      late:sortRows(source.filter(task=>bucket(task)==='late')),
+      completed:sortRows(source.filter(task=>bucket(task)==='completed'))
+    };
+    const renderGroup=(title,list,emptyText,extraClass='')=>{
+      const body=list.length ? list.map(task=>taskCard(task)).join('') : `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary ${extraClass}"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    };
+    return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed')+
+      renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.');
+  };
+
+  window.renderTasks = function(){
+    ensureTaskFiltersDom();
+    normalizeTaskStatusFilterOptions();
+    const rows=getFilteredTasks();
+    if(typeof renderStats === 'function') renderStats(rows);
+    setupCreatedByFilter();
+    setupEmployeeFilter();
+    normalizeTaskStatusFilterOptions();
+    const list=document.getElementById('tasksList');
+    if(!list) return;
+    if(!rows.length){ list.innerHTML='<div class="empty">لا توجد مهام.</div>'; return; }
+    list.innerHTML=taskStatusSectionsHtml(rows);
+  };
+
+  setTimeout(()=>{
+    try{
+      installPostponedFinalStyle();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden')){
+        renderTasks();
+      }
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
