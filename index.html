@@ -18075,6 +18075,346 @@ renderTasks = function(){
 
 init();
 </script>
+
+
+<script>
+/* === PATCH: إضافة حالة مؤجلة بدون أثر على الاعتمادات أو مؤشرات الأداء ===
+   - الحالة مؤجلة تظهر فقط في صفحة المهام كمجموعة رابعة.
+   - لا تدخل في التأخير أو الاعتمادات أو لوحة الأداء العام أو تقييم الإنتاجية أو تقرير القطاع.
+   - يمكن تحويلها لاحقًا إلى قيد التنفيذ من قائمة الحالة داخل بطاقة المهمة.
+*/
+(function(){
+  const POSTPONED_STATUS = 'مؤجلة';
+
+  window.isPostponedTask = function(task){
+    return String(task?.status || '').trim() === POSTPONED_STATUS;
+  };
+
+  function baseApprovedTask(task){
+    return task && task.is_archived !== true && task.approval_status !== 'rejected';
+  }
+
+  // المهام التشغيلية المستخدمة في اللوحات والمؤشرات: تستبعد المؤجلة بالكامل.
+  window.visibleTasks = visibleTasks = function(){
+    return (state.tasks || []).filter(task => baseApprovedTask(task) && !isPostponedTask(task));
+  };
+
+  // صفحة المهام فقط تحتاج أن تُظهر المؤجلة حتى يتذكرها الموظف ويعيدها لاحقًا لقيد التنفيذ.
+  window.taskPageAllowedTasks = taskPageAllowedTasks = function(){
+    const rows=(state.tasks || []).filter(baseApprovedTask);
+
+    if(typeof isAdmin==='function' && (isAdmin() || isCeo() || isSectorHead())) return rows;
+
+    if(typeof isDepartmentManager==='function' && isDepartmentManager()){
+      const myDeptId=state.profile?.department_id;
+      const myId=state.profile?.id;
+      if(!myDeptId && !myId) return [];
+
+      const deptUserIds=new Set((state.users||[])
+        .filter(user => user.is_active!==false && user.department_id===myDeptId)
+        .map(user => user.id));
+      const deptTaskIds=new Set((state.assignees||[])
+        .filter(row => deptUserIds.has(row.user_id))
+        .map(row => row.task_id));
+
+      return rows.filter(task =>
+        task.owner_department_id===myDeptId ||
+        task.target_department_id===myDeptId ||
+        task.primary_responsible_id===myId ||
+        deptTaskIds.has(task.id) ||
+        task.created_by===myId
+      );
+    }
+
+    if(typeof currentRole==='function' && currentRole()==='employee'){
+      const myId=state.profile?.id;
+      if(!myId) return [];
+      return rows.filter(task => {
+        const assignees=typeof getTaskAssignees==='function' ? getTaskAssignees(task.id) : [];
+        return task.primary_responsible_id===myId || task.created_by===myId || assignees.some(user => user.id===myId);
+      });
+    }
+
+    return [];
+  };
+
+  const previousIsLate = window.isLate;
+  window.isLate = isLate = function(task){
+    if(isPostponedTask(task)) return false;
+    return typeof previousIsLate === 'function' ? previousIsLate(task) : false;
+  };
+
+  const previousIsDueSoon = window.isDueSoon;
+  window.isDueSoon = isDueSoon = function(task){
+    if(isPostponedTask(task)) return false;
+    return typeof previousIsDueSoon === 'function' ? previousIsDueSoon(task) : false;
+  };
+
+  window.taskDisplayStatus = taskDisplayStatus = function(task){
+    if(isPostponedTask(task)) return POSTPONED_STATUS;
+    if(task?.status === 'مكتملة') return 'مكتملة';
+    if(typeof taskIsCompletionPending === 'function' && taskIsCompletionPending(task)) return 'بانتظار اعتماد الإنجاز';
+    if(typeof isLate === 'function' && isLate(task)) return 'متأخرة';
+    return 'قيد التنفيذ';
+  };
+
+  window.workflowDisplayStatus = workflowDisplayStatus = function(task){
+    return taskDisplayStatus(task);
+  };
+
+  window.workflowStatusChip = workflowStatusChip = function(task){
+    const status=taskDisplayStatus(task);
+    const cls=status==='مكتملة'?'done':status==='متأخرة'?'late':status===POSTPONED_STATUS?'postponed':'progress';
+    return `<span class="chip ${cls}">${escapeHtml(status)}</span>`;
+  };
+  window.statusChip = statusChip = function(task){ return workflowStatusChip(task); };
+
+  function ensurePostponedStyle(){
+    let style=document.getElementById('postponedStatusStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='postponedStatusStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      .chip.postponed{background:#f1eef6;color:#5e4b7b;}
+      #tasksList .task-group-summary.postponed{background:#f7f4fb;border-color:#ded5ef;color:#4c3d67;}
+    `;
+  }
+
+  function statusSelectHtml(task){
+    const current=taskDisplayStatus(task);
+    return `<select onchange="changeStatus('${task.id}',this.value)">
+      <option value="قيد التنفيذ" ${current==='قيد التنفيذ'||current==='بانتظار اعتماد الإنجاز'?'selected':''}>قيد التنفيذ</option>
+      <option value="مؤجلة" ${current===POSTPONED_STATUS?'selected':''}>مؤجلة</option>
+      <option value="مكتملة" ${current==='مكتملة'?'selected':''}>مكتملة</option>
+    </select>`;
+  }
+
+  window.taskCard = taskCard = function(task){
+    const assignees=(typeof getTaskAssignees==='function' ? getTaskAssignees(task.id) : []).map(user=>user.name).join('، ') || '—';
+    const comments=typeof getTaskComments==='function' ? getTaskComments(task.id) : [];
+    const editBtn=(typeof canEditTask==='function' && canEditTask(task)) ? `<button class="btn btn-info btn-sm" onclick="editTask('${task.id}')">تعديل</button>` : '';
+    const completionNote=(typeof taskIsCompletionPending==='function' && taskIsCompletionPending(task)) ? '<div class="notice info show" style="margin-top:10px;">هذه المهمة بانتظار اعتماد الإكمال من المسؤول المختص.</div>' : '';
+    const commentHtml=comments.length ? comments.map(comment => {
+      if(typeof renderCommentItem === 'function') return renderCommentItem(comment);
+      return `<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(comment.user_id))}</span><span>${formatDate(comment.created_at)}</span></div><div>${escapeHtml(comment.comment_text||'')}</div>${renderAttachments(comment.attachment_urls,comment.attachment_names)}</div>`;
+    }).join('') : '<div class="empty" style="padding:10px">لا توجد تعليقات</div>';
+
+    return `<div class="task-card ${isDueSoon(task)?'due-soon':''}" id="task-card-${task.id}">
+      <div class="task-top">
+        <div>
+          <div class="task-title">${escapeHtml(task.title || 'بدون عنوان')}</div>
+          <div class="meta">المسند منه: ${escapeHtml(nameOfUser(task.created_by))}<br>المسند إليه / إليهم: ${escapeHtml(assignees)}<br>المسؤول عن المهمة: ${escapeHtml(nameOfUser(task.primary_responsible_id))}<br>تاريخ الاستحقاق: ${formatDate(task.due_date)} ${isDueSoon(task)?`<span class="due-soon-label">${getDueSoonLabel(task)}</span>`:''}</div>
+        </div>
+        <div class="actions">${workflowStatusChip(task)} ${priorityChip(task.priority)}</div>
+      </div>
+      <div class="task-desc">${escapeHtml(task.description || '')}</div>
+      ${completionNote}
+      ${renderAttachments(task.attachment_urls,task.attachment_names)}
+      <div class="comment-box"><b>التعليقات</b>${commentHtml}
+        <div class="form-grid" style="margin-top:10px"><textarea id="comment-${task.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${task.id}" type="file" multiple></div>
+        <div class="actions" style="margin-top:8px">
+          <button class="btn btn-primary btn-sm" onclick="addComment('${task.id}')">إضافة تعليق</button>
+          ${statusSelectHtml(task)}
+          ${typeof canRequestTransferTask==='function' && canRequestTransferTask(task)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${task.id}')">${typeof canDirectTransferTask==='function' && canDirectTransferTask(task)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}
+          ${editBtn}
+          ${typeof canDeleteTask==='function' && canDeleteTask(task)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${task.id}')">حذف</button>`:''}
+        </div>
+        ${typeof renderTransferChooser==='function' ? renderTransferChooser(task) : ''}
+      </div>
+    </div>`;
+  };
+
+  const previousChangeStatus = window.changeStatus;
+  window.changeStatus = changeStatus = async function(taskId,status){
+    try{
+      const task=(state.tasks||[]).find(item=>item.id===taskId);
+      if(!task) return showToast('تعذر العثور على المهمة.','error');
+
+      if(status===POSTPONED_STATUS){
+        const {error}=await supabaseClient.from('tasks').update({
+          status:POSTPONED_STATUS,
+          completion_status:'none'
+        }).eq('id',taskId);
+        if(error) throw error;
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        if(typeof renderDashboard==='function' && $('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
+        showToast('تم تأجيل المهمة، ولن تدخل في مؤشرات الأداء أو الاعتمادات.','success');
+        return;
+      }
+
+      if(status==='قيد التنفيذ' && isPostponedTask(task)){
+        const {error}=await supabaseClient.from('tasks').update({
+          status:'قيد التنفيذ',
+          completion_status:'none'
+        }).eq('id',taskId);
+        if(error) throw error;
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        if(typeof renderDashboard==='function' && $('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
+        showToast('تمت إعادة المهمة إلى قيد التنفيذ.','success');
+        return;
+      }
+
+      if(typeof previousChangeStatus === 'function') return previousChangeStatus(taskId,status);
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر تحديث حالة المهمة.','error');
+    }
+  };
+
+  function operationalRows(rows){ return (rows || []).filter(task => !isPostponedTask(task)); }
+
+  window.renderStats = renderStats = function(rows=visibleTasks()){
+    const source=operationalRows(rows);
+    const setText=(id,value)=>{ const el=document.getElementById(id); if(el) el.textContent=value; };
+    setText('statTotal',source.length);
+    setText('statNew',source.filter(task => taskDisplayStatus(task)==='قيد التنفيذ').length);
+    setText('statProgress',source.filter(task => taskDisplayStatus(task)==='قيد التنفيذ').length);
+    setText('statDone',source.filter(task => task.status==='مكتملة').length);
+    setText('statLate',source.filter(task => taskDisplayStatus(task)==='متأخرة').length);
+  };
+
+  function ensureStatusFilterIncludesPostponed(){
+    const filter=document.getElementById('filterStatus');
+    if(!filter) return;
+    const current=filter.value || '';
+    filter.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مؤجلة">مؤجلة</option><option value="متأخرة">متأخرة</option><option value="مكتملة">مكتملة</option>';
+    filter.value=['قيد التنفيذ',POSTPONED_STATUS,'مكتملة','متأخرة'].includes(current) ? current : '';
+  }
+
+  const previousSetupFilters = window.setupFilters;
+  window.setupFilters = setupFilters = function(){
+    if(typeof previousSetupFilters === 'function') previousSetupFilters.apply(this, arguments);
+    ensureStatusFilterIncludesPostponed();
+  };
+
+  window.getFilteredTasks = getFilteredTasks = function(){
+    const rows=typeof taskPageAllowedTasks==='function' ? taskPageAllowedTasks() : (state.tasks||[]).filter(baseApprovedTask);
+    const query=document.getElementById('searchInput')?.value?.trim().toLowerCase() || '';
+    const createdBy=document.getElementById('filterCreatedBy')?.value || '';
+    const assigneeId=document.getElementById('filterAssignee')?.value || '';
+    const status=document.getElementById('filterStatus')?.value || '';
+
+    return rows.filter(task => {
+      const assignees=typeof getTaskAssignees==='function' ? getTaskAssignees(task.id) : [];
+      const text=`${task.title||''} ${task.description||''} ${nameOfUser(task.created_by)} ${nameOfUser(task.primary_responsible_id)} ${assignees.map(user=>user.name).join(' ')}`.toLowerCase();
+      const display=taskDisplayStatus(task)==='بانتظار اعتماد الإنجاز' ? 'قيد التنفيذ' : taskDisplayStatus(task);
+      return (!query || text.includes(query)) &&
+        (!createdBy || task.created_by===createdBy) &&
+        (!assigneeId || task.primary_responsible_id===assigneeId || assignees.some(user=>user.id===assigneeId)) &&
+        (!status || display===status);
+    });
+  };
+
+  function sortTasksForGroups(rows){
+    return [...(rows||[])].sort((a,b)=>{
+      const ad=a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b.created_at||0).getTime()-new Date(a.created_at||0).getTime();
+    });
+  }
+
+  window.taskStatusSectionsHtml = taskStatusSectionsHtml = function(rows){
+    ensurePostponedStyle();
+    const source=rows || [];
+    const groups={
+      progress:sortTasksForGroups(source.filter(task => !isPostponedTask(task) && task.status!=='مكتملة' && !isLate(task))),
+      postponed:sortTasksForGroups(source.filter(isPostponedTask)),
+      late:sortTasksForGroups(source.filter(task => !isPostponedTask(task) && isLate(task))),
+      completed:sortTasksForGroups(source.filter(task => task.status==='مكتملة'))
+    };
+    const renderGroup=(title,list,emptyText,extraClass='')=>{
+      const body=list.length ? list.map(task=>taskCard(task)).join('') : `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary ${extraClass}"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    };
+    return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed')+
+      renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.');
+  };
+
+  window.renderTasks = renderTasks = function(){
+    ensurePostponedStyle();
+    if(typeof ensureTaskFiltersDom==='function') ensureTaskFiltersDom();
+    ensureStatusFilterIncludesPostponed();
+    const rows=getFilteredTasks();
+    renderStats(rows);
+    if(typeof setupCreatedByFilter==='function') setupCreatedByFilter();
+    if(typeof setupEmployeeFilter==='function') setupEmployeeFilter();
+    ensureStatusFilterIncludesPostponed();
+    const list=document.getElementById('tasksList');
+    if(!list) return;
+    if(!rows.length){ list.innerHTML='<div class="empty">لا توجد مهام.</div>'; return; }
+    list.innerHTML=taskStatusSectionsHtml(rows);
+  };
+
+  // ضمان أن المؤجلة لا تدخل في أي مقياس أو لوحة أداء تعتمد على هذه الدوال.
+  window.tasksForUser = tasksForUser = function(userId){
+    const assignedIds=new Set((state.assignees||[]).filter(row=>row.user_id===userId).map(row=>row.task_id));
+    return visibleTasks().filter(task => assignedIds.has(task.id) || task.primary_responsible_id===userId);
+  };
+
+  window.taskMetrics = taskMetrics = function(rows){
+    const source=operationalRows(rows);
+    const total=source.length;
+    const done=source.filter(task=>task.status==='مكتملة').length;
+    const late=source.filter(task=>taskDisplayStatus(task)==='متأخرة').length;
+    const progress=source.filter(task=>taskDisplayStatus(task)==='قيد التنفيذ' || taskDisplayStatus(task)==='بانتظار اعتماد الإنجاز').length;
+    const fresh=progress;
+    const rate=total?Math.round(done/total*100):0;
+    return {total,done,progress,fresh,late,rate};
+  };
+
+  if(typeof productivityTasksForUser === 'function'){
+    const previousProductivityTasksForUser=productivityTasksForUser;
+    window.productivityTasksForUser = productivityTasksForUser = function(userId,range){
+      return (previousProductivityTasksForUser(userId,range) || []).filter(task=>!isPostponedTask(task));
+    };
+  }
+  if(typeof productivityCompletedTasksForUser === 'function'){
+    const previousProductivityCompletedTasksForUser=productivityCompletedTasksForUser;
+    window.productivityCompletedTasksForUser = productivityCompletedTasksForUser = function(userId,range){
+      return (previousProductivityCompletedTasksForUser(userId,range) || []).filter(task=>!isPostponedTask(task));
+    };
+  }
+  if(typeof productivityCreatedInitiativesForUser === 'function'){
+    const previousProductivityCreatedInitiativesForUser=productivityCreatedInitiativesForUser;
+    window.productivityCreatedInitiativesForUser = productivityCreatedInitiativesForUser = function(userId,range){
+      return (previousProductivityCreatedInitiativesForUser(userId,range) || []).filter(task=>!isPostponedTask(task));
+    };
+  }
+  if(typeof productivityCollaborationCountForUser === 'function'){
+    window.productivityCollaborationCountForUser = productivityCollaborationCountForUser = function(userId,range){
+      const assignedByOthers=(state.tasks||[]).filter(task => !isPostponedTask(task) && task.is_archived!==true && taskTouchesProductivityMonth(task,range) && task.created_by!==userId && (getTaskAssignees(task.id).some(user=>user.id===userId)||task.primary_responsible_id===userId)).length;
+      const assignedToOthers=(state.tasks||[]).filter(task => !isPostponedTask(task) && task.is_archived!==true && task.created_by===userId && dateInProductivityMonth(task.created_at,range) && getTaskAssignees(task.id).some(user=>user.id!==userId)).length;
+      const shared=(state.tasks||[]).filter(task => !isPostponedTask(task) && task.is_archived!==true && taskTouchesProductivityMonth(task,range) && getTaskAssignees(task.id).length>1 && getTaskAssignees(task.id).some(user=>user.id===userId)).length;
+      return assignedByOthers + assignedToOthers + shared;
+    };
+  }
+
+  if(typeof sectorReportTasksForSectorId === 'function'){
+    const previousSectorReportTasksForSectorId=sectorReportTasksForSectorId;
+    window.sectorReportTasksForSectorId = sectorReportTasksForSectorId = function(sectorId,monthValue){
+      return (previousSectorReportTasksForSectorId(sectorId,monthValue) || []).filter(task=>!isPostponedTask(task));
+    };
+  }
+  if(typeof sectorReportTasksForCurrentSector === 'function'){
+    window.sectorReportTasksForCurrentSector = sectorReportTasksForCurrentSector = function(){
+      const sectorId = window.__sectorReportCurrentExportSectorId || state.profile?.sector_id || '';
+      return typeof sectorReportTasksForSectorId==='function' ? sectorReportTasksForSectorId(sectorId, getSectorReportMonthValue()) : [];
+    };
+  }
+
+  ensurePostponedStyle();
+})();
+</script>
+
 </body>
 </html>
 
