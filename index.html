@@ -19659,3 +19659,103 @@ window.openTaskFromSummary=openTaskFromSummary;
 })();
 </script>
 
+
+
+<script>
+/* === PATCH: حصر اعتمادات الإكمال للرئيس التنفيذي على مهام الإدارة التنفيذية فقط ===
+   - مدير النظام يبقى يرى اعتمادات الإكمال لكل القطاعات.
+   - الرئيس التنفيذي يرى فقط طلبات إكمال المهام التابعة للإدارة التنفيذية.
+   - رؤساء القطاعات ومدراء الأقسام تبقى صلاحياتهم كما هي دون تغيير.
+   - لا يغيّر إنشاء المهام أو التحويلات أو الفلاتر أو لوحة الأداء العام.
+*/
+(function(){
+  function normalizeArabicForExecutiveScope(value){
+    return String(value || '')
+      .trim()
+      .replace(/[إأآا]/g,'ا')
+      .replace(/ى/g,'ي')
+      .replace(/ة/g,'ه')
+      .replace(/\s+/g,' ');
+  }
+
+  function executiveManagementSectorIdSet(){
+    const rows = (typeof state !== 'undefined' && Array.isArray(state.sectors)) ? state.sectors : [];
+    const ids = rows
+      .filter(sector => {
+        const name = normalizeArabicForExecutiveScope(sector && sector.name);
+        return name === 'الاداره التنفيذيه' || (name.includes('الاداره') && name.includes('التنفيذيه'));
+      })
+      .map(sector => String(sector.id || ''))
+      .filter(Boolean);
+    return new Set(ids);
+  }
+
+  function userInExecutiveManagement(userId, executiveIds){
+    if(!userId || !executiveIds || !executiveIds.size) return false;
+    const user = ((typeof state !== 'undefined' && Array.isArray(state.users)) ? state.users : [])
+      .find(item => String(item.id) === String(userId));
+    return Boolean(user && executiveIds.has(String(user.sector_id || '')));
+  }
+
+  window.taskBelongsToExecutiveManagementForCompletionApproval = function(task){
+    if(!task) return false;
+    const executiveIds = executiveManagementSectorIdSet();
+    if(!executiveIds.size) return false;
+
+    // إذا كان للمهة قطاع مستهدف، فهو المرجع الأول لتحديد قطاع الاعتماد.
+    if(task.target_sector_id){
+      if(executiveIds.has(String(task.target_sector_id))) return true;
+    }else if(task.owner_sector_id && executiveIds.has(String(task.owner_sector_id))){
+      return true;
+    }
+
+    // في المهام القديمة أو الفردية، نراجع المسؤول الرئيسي والمسند إليهم.
+    if(userInExecutiveManagement(task.primary_responsible_id, executiveIds)) return true;
+
+    const assignees = (typeof getTaskAssignees === 'function') ? getTaskAssignees(task.id) : [];
+    return assignees.some(user => user && executiveIds.has(String(user.sector_id || '')));
+  };
+
+  const previousCanApproveCompletion = (typeof canApproveCompletion === 'function') ? canApproveCompletion : null;
+
+  const scopedCanApproveCompletion = function(task){
+    if(!task) return false;
+
+    // مدير النظام كما هو: كل القطاعات.
+    if(typeof isAdmin === 'function' && isAdmin()) return true;
+
+    // الرئيس التنفيذي: الإدارة التنفيذية فقط.
+    if(typeof isCeo === 'function' && isCeo()){
+      return window.taskBelongsToExecutiveManagementForCompletionApproval(task);
+    }
+
+    // بقية الصلاحيات كما كانت.
+    if(previousCanApproveCompletion) return previousCanApproveCompletion(task);
+    if(typeof canReviewTask === 'function') return canReviewTask(task);
+    return false;
+  };
+
+  window.canApproveCompletion = scopedCanApproveCompletion;
+  try{ canApproveCompletion = scopedCanApproveCompletion; }catch(error){}
+
+  window.getCompletionRequests = function(){
+    const rows = (typeof visibleTasks === 'function') ? visibleTasks() : [];
+    return rows.filter(task => {
+      const pending = (typeof taskIsCompletionPending === 'function')
+        ? taskIsCompletionPending(task)
+        : task && task.completion_status === 'pending';
+      return pending && scopedCanApproveCompletion(task);
+    });
+  };
+  try{ getCompletionRequests = window.getCompletionRequests; }catch(error){}
+
+  // تحديث أي صفحة مفتوحة بعد تحميل التصحيح.
+  setTimeout(function(){
+    try{
+      if(typeof renderCompletionRequests === 'function') renderCompletionRequests();
+      if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
+      if(document.getElementById('adminPage') && !document.getElementById('adminPage').classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
