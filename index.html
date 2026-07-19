@@ -13233,6 +13233,15 @@ function installPublicPerformanceDashboardStyles(){
     .public-sector-table tr:last-child td{
       border-bottom:none;
     }
+    .public-table-note{
+      margin:10px 0 0;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.8;
+    }
+    .public-future-col{
+      background:rgba(109,138,168,.05);
+    }
     @media(max-width:1100px){
       .public-kpi-grid{grid-template-columns:repeat(3,1fr);}
       .public-visual-grid{grid-template-columns:1fr;}
@@ -13258,59 +13267,128 @@ function normalizePublicMetricPayload(data){
 }
 
 function publicPerformanceFallbackFromLoadedData(){
-  const tasks=visibleTasks();
-  const total=tasks.length;
-  const done=tasks.filter(t=>t.status==='مكتملة').length;
-  const late=tasks.filter(isLate).length;
-  const progress=tasks.filter(t=>(isLate(t)?'متأخرة':t.status)==='قيد التنفيذ').length;
-  const rate=total?Math.round(done/total*100):0;
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  const dateOnly=(value)=>{
+    if(!value) return null;
+    const d=new Date(value);
+    if(isNaN(d)) return null;
+    d.setHours(0,0,0,0);
+    return d;
+  };
+  const isApprovedMetricTask=(t)=>
+    t &&
+    t.is_archived!==true &&
+    (t.approval_status || 'approved') === 'approved' &&
+    t.status !== 'مؤجلة';
+
+  const baseTasks=(state.tasks||[]).filter(isApprovedMetricTask);
+  const taskDueDate=(t)=>dateOnly(t.due_date);
+  const taskIsCompleted=(t)=>t.status==='مكتملة';
+  const taskIsOverdue=(t)=>{
+    const d=taskDueDate(t);
+    return !taskIsCompleted(t) && d && d < today;
+  };
+  const taskIsInProgress=(t)=>!taskIsCompleted(t) && !taskIsOverdue(t);
+  const taskIsFuture=(t)=>{
+    const d=taskDueDate(t);
+    return !taskIsCompleted(t) && d && d > today;
+  };
+  const taskIsMeasurable=(t)=>{
+    const d=taskDueDate(t);
+    return taskIsCompleted(t) || (d && d <= today);
+  };
+  const buildMetrics=(rows)=>{
+    const unique=uniqueTasks(rows||[]).filter(isApprovedMetricTask);
+    const total=unique.length;
+    const completed=unique.filter(taskIsCompleted).length;
+    const inProgress=unique.filter(taskIsInProgress).length;
+    const overdue=unique.filter(taskIsOverdue).length;
+    const future=unique.filter(taskIsFuture).length;
+    const measurable=unique.filter(taskIsMeasurable);
+    const measurableTotal=measurable.length;
+    const measurableCompleted=measurable.filter(taskIsCompleted).length;
+    return {
+      total,
+      completed,
+      in_progress:inProgress,
+      overdue,
+      future_tasks:future,
+      measurable_total:measurableTotal,
+      measurable_completed:measurableCompleted,
+      completion_rate:measurableTotal?Math.round(measurableCompleted/measurableTotal*100):0
+    };
+  };
+
+  const summaryMetrics=buildMetrics(baseTasks);
 
   const sectors=(state.sectors||[]).map(s=>{
-    const sectorUsers=(state.users||[]).filter(u=>u.is_active!==false && u.sector_id===s.id).map(u=>u.id);
-    const sectorTaskIds=new Set((state.assignees||[]).filter(a=>sectorUsers.includes(a.user_id)).map(a=>a.task_id));
-    const rows=uniqueTasks(tasks.filter(t=>
+    const sectorUsers=(state.users||[])
+      .filter(u=>u.is_active!==false && u.sector_id===s.id)
+      .map(u=>u.id);
+    const sectorTaskIds=new Set((state.assignees||[])
+      .filter(a=>sectorUsers.includes(a.user_id))
+      .map(a=>a.task_id));
+    const rows=baseTasks.filter(t=>
       sectorTaskIds.has(t.id) ||
       t.owner_sector_id===s.id ||
       t.target_sector_id===s.id ||
       sectorUsers.includes(t.primary_responsible_id)
-    ));
-    const sDone=rows.filter(t=>t.status==='مكتملة').length;
-    const sLate=rows.filter(isLate).length;
-    const sProgress=rows.filter(t=>(isLate(t)?'متأخرة':t.status)==='قيد التنفيذ').length;
+    );
+    const m=buildMetrics(rows);
     return {
       sector_id:s.id,
       sector_name:s.name,
-      total:rows.length,
-      completed:sDone,
-      in_progress:sProgress,
-      overdue:sLate,
-      completion_rate:rows.length?Math.round(sDone/rows.length*100):0
+      total:m.total,
+      completed:m.completed,
+      in_progress:m.in_progress,
+      overdue:m.overdue,
+      future_tasks:m.future_tasks,
+      measurable_total:m.measurable_total,
+      measurable_completed:m.measurable_completed,
+      completion_rate:m.completion_rate
     };
   });
 
   const topEmployees=(state.users||[]).filter(u=>u.is_active!==false).map(u=>{
-    const rows=tasksForUser(u.id);
-    const completed=rows.filter(t=>t.status==='مكتملة').length;
+    const rows=tasksForUser(u.id).filter(isApprovedMetricTask);
+    const completed=rows.filter(taskIsCompleted).length;
     return {employee_name:u.name, sector_name:nameOfSector(u.sector_id), completed};
   }).filter(x=>x.completed>0).sort((a,b)=>b.completed-a.completed).slice(0,5);
 
+  const pending=(state.tasks||[]).filter(t=>
+    t &&
+    t.is_archived!==true &&
+    t.approval_status==='pending' &&
+    t.status !== 'مؤجلة'
+  ).length;
+
   return {
     summary:{
-      total_tasks:total,
-      completed:done,
-      in_progress:progress,
-      overdue:late,
-      completion_rate:rate,
-      pending_approval: typeof getPendingTasks==='function' ? getPendingTasks().length : 0
+      total_tasks:summaryMetrics.total,
+      completed:summaryMetrics.completed,
+      in_progress:summaryMetrics.in_progress,
+      overdue:summaryMetrics.overdue,
+      future_tasks:summaryMetrics.future_tasks,
+      measurable_total:summaryMetrics.measurable_total,
+      measurable_completed:summaryMetrics.measurable_completed,
+      completion_rate:summaryMetrics.completion_rate,
+      pending_approval:pending
     },
     sectors,
     top_employees:topEmployees,
     sectors_need_followup:[...sectors].filter(s=>s.overdue>0).sort((a,b)=>b.overdue-a.overdue).slice(0,5),
-    best_sectors:[...sectors].filter(s=>s.total>0).sort((a,b)=>b.completion_rate-a.completion_rate).slice(0,5)
+    best_sectors:[...sectors].filter(s=>s.total>0).sort((a,b)=>b.completion_rate-a.completion_rate || b.measurable_total-a.measurable_total).slice(0,5)
   };
 }
 
 async function loadPublicPerformanceMetrics(){
+  // تعتمد لوحة الأداء العام على بيانات المهام المحملة في الواجهة حتى تظهر المهام المستقبلية ومهام القياس بوضوح،
+  // مع بقاء دالة Supabase كاحتياط عند عدم توفر البيانات محليًا.
+  if((state.tasks||[]).length){
+    publicPerformanceCache=publicPerformanceFallbackFromLoadedData();
+    return publicPerformanceCache;
+  }
   if(publicPerformanceCache) return publicPerformanceCache;
   if(publicPerformanceLoading) return null;
 
@@ -13364,6 +13442,9 @@ function renderPublicPerformanceDashboardWithData(payload){
   const done=Number(summary.completed||0);
   const progress=Number(summary.in_progress||0);
   const late=Number(summary.overdue||0);
+  const future=Number(summary.future_tasks||0);
+  const measurableTotal=Number(summary.measurable_total||0);
+  const measurableCompleted=Number(summary.measurable_completed||0);
   const rate=Number(summary.completion_rate||0);
   const pending=Number(summary.pending_approval||0);
 
@@ -13374,7 +13455,7 @@ function renderPublicPerformanceDashboardWithData(payload){
     ? `background:conic-gradient(#2f9f8f 0deg ${doneDeg}deg, var(--primary) ${doneDeg}deg ${doneDeg+progressDeg}deg, #c95656 ${doneDeg+progressDeg}deg 360deg);`
     : `background:#f2ebe6;`;
 
-  const sectorTableRows=[...sectors].sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0)).map((s,i)=>`
+  const sectorTableRows=[...sectors].sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0) || (b.measurable_total||0)-(a.measurable_total||0)).map((s,i)=>`
     <tr>
       <td>${i+1}</td>
       <td>${escapeHtml(s.sector_name||'—')}</td>
@@ -13382,6 +13463,8 @@ function renderPublicPerformanceDashboardWithData(payload){
       <td>${Number(s.completed||0)}</td>
       <td>${Number(s.in_progress||0)}</td>
       <td>${Number(s.overdue||0)}</td>
+      <td class="public-future-col">${Number(s.future_tasks||0)}</td>
+      <td>${Number(s.measurable_total||0)}</td>
       <td><strong>${Number(s.completion_rate||0)}%</strong></td>
     </tr>
   `).join('');
@@ -13392,7 +13475,7 @@ function renderPublicPerformanceDashboardWithData(payload){
         <div class="public-performance-title">
           <div>
             <h2>لوحة الأداء العام</h2>
-            <p class="meta">مؤشرات شفافة مختصرة على مستوى الشركة لتعزيز التنافس بين القطاعات، دون عرض تفاصيل المهام.</p>
+            <p class="meta">مؤشرات شفافة مختصرة على مستوى الشركة. إجمالي المهام يظهر كاملًا، ونسبة الإنجاز تقيس المستحق حتى اليوم فقط حتى لا يتضرر من يخطط لنهاية السنة.</p>
           </div>
           <span class="badge">مؤشرات عامة</span>
         </div>
@@ -13402,13 +13485,15 @@ function renderPublicPerformanceDashboardWithData(payload){
           <div class="public-kpi-card"><span>قيد التنفيذ</span><strong>${progress}</strong><small>مهام تحت المعالجة</small></div>
           <div class="public-kpi-card"><span>مكتملة</span><strong>${done}</strong><small>مهام منجزة ومعتمدة</small></div>
           <div class="public-kpi-card"><span>متأخرة</span><strong>${late}</strong><small>تحتاج متابعة</small></div>
-          <div class="public-kpi-card"><span>نسبة الإنجاز العامة</span><strong>${rate}%</strong><small>المكتمل من إجمالي المهام</small></div>
+          <div class="public-kpi-card"><span>نسبة إنجاز المستحق حتى اليوم</span><strong>${rate}%</strong><small>لا تشمل المهام المستقبلية غير المنجزة</small></div>
+          <div class="public-kpi-card"><span>مهام مستقبلية</span><strong>${future}</strong><small>مخطط لها ولا تدخل في نسبة اليوم</small></div>
+          <div class="public-kpi-card"><span>مهام القياس حتى اليوم</span><strong>${measurableTotal}</strong><small>${measurableCompleted} منجزة من مهام القياس</small></div>
           <div class="public-kpi-card"><span>بانتظار الاعتماد</span><strong>${pending}</strong><small>مهام جديدة معلقة</small></div>
         </div>
 
         <div class="public-visual-grid">
           <div class="public-chart-card">
-            <h3>ترتيب القطاعات حسب نسبة الإنجاز</h3>
+            <h3>ترتيب القطاعات حسب نسبة إنجاز المستحق حتى اليوم</h3>
             <div class="public-bar-list">
               ${publicBarRows([...sectors].sort((a,b)=>(b.completion_rate||0)-(a.completion_rate||0)), 'completion_rate', 'green')}
             </div>
@@ -13431,6 +13516,7 @@ function renderPublicPerformanceDashboardWithData(payload){
 
         <div class="public-chart-card">
           <h3>أداء القطاعات بالأرقام</h3>
+          <p class="public-table-note">نسبة الإنجاز هنا تُحسب من مهام القياس حتى اليوم فقط: المهام المستحقة أو المتأخرة حتى اليوم + المهام المنجزة مبكرًا. المهام المستقبلية تظهر للتوضيح ولا تظلم القطاع في النسبة.</p>
           <div class="table-wrap">
             <table class="public-sector-table">
               <thead>
@@ -13441,17 +13527,19 @@ function renderPublicPerformanceDashboardWithData(payload){
                   <th>مكتملة</th>
                   <th>قيد التنفيذ</th>
                   <th>متأخرة</th>
-                  <th>نسبة الإنجاز</th>
+                  <th>مهام مستقبلية</th>
+                  <th>مهام القياس حتى اليوم</th>
+                  <th>نسبة إنجاز المستحق</th>
                 </tr>
               </thead>
-              <tbody>${sectorTableRows || '<tr><td colspan="7">لا توجد بيانات.</td></tr>'}</tbody>
+              <tbody>${sectorTableRows || '<tr><td colspan="9">لا توجد بيانات.</td></tr>'}</tbody>
             </table>
           </div>
         </div>
 
         <div class="public-ranking-grid">
           <div class="public-chart-card">
-            <h3>أفضل القطاعات أداءً</h3>
+            <h3>أفضل القطاعات أداءً حتى اليوم</h3>
             <div class="public-rank-list">
               ${publicRankItems(bestSectors, 'sector_name', 'completion_rate', '%')}
             </div>
