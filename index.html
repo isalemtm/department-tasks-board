@@ -19759,3 +19759,378 @@ window.openTaskFromSummary=openTaskFromSummary;
   },0);
 })();
 </script>
+
+
+<script>
+/* === PATCH: اعتماد الإسناد الخارجي قبل ظهوره عند الموظف المستقبل ===
+   - الإسناد داخل نفس القطاع يبقى مباشرًا كما هو.
+   - الإسناد لموظف/رئيس قطاع في قطاع آخر لا ينعكس عليه إلا بعد اعتماد مدير قسمه أو رئيس قطاعه.
+   - مدير النظام يستطيع اعتماد الطلبات عند الحاجة.
+   - لا يغيّر اعتماد الإكمال أو التحويل أو لوحة الأداء العام.
+   يتطلب تشغيل SQL المرفق لإنشاء جدول task_assignment_requests ودوال الاعتماد/الرفض.
+*/
+(function(){
+  const EXTERNAL_ASSIGNMENT_TABLE = 'task_assignment_requests';
+
+  function safeArray(value){ return Array.isArray(value) ? value : []; }
+  function currentProfileSectorId(){ return state?.profile?.sector_id || ''; }
+  function currentProfileId(){ return state?.profile?.id || ''; }
+  function userByIdLocal(userId){ return (state.users || []).find(user => String(user.id) === String(userId)) || null; }
+  function taskByIdLocal(taskId){ return (state.tasks || []).find(task => String(task.id) === String(taskId)) || null; }
+  function isPrivilegedDirectAssigner(){ return (typeof isAdminOrCeo === 'function' && isAdminOrCeo()) || (typeof isAdmin === 'function' && isAdmin()) || (typeof isCeo === 'function' && isCeo()); }
+
+  function isExternalAssigneeUser(user){
+    if(!user || !currentProfileSectorId()) return false;
+    if(isPrivilegedDirectAssigner()) return false;
+    return Boolean(user.sector_id && String(user.sector_id) !== String(currentProfileSectorId()));
+  }
+
+  function assignmentRequestReviewerCanAct(request){
+    if(!request || request.status !== 'pending' || !state.profile) return false;
+    const target = userByIdLocal(request.target_user_id);
+    if(!target) return false;
+    if(typeof isAdmin === 'function' && isAdmin()) return true;
+    if(typeof isSectorHead === 'function' && isSectorHead()) return String(target.sector_id || '') === String(state.profile.sector_id || '');
+    if(typeof isDepartmentManager === 'function' && isDepartmentManager()) return String(target.department_id || '') === String(state.profile.department_id || '');
+    return false;
+  }
+
+  function externalAssignmentRequestsForReview(){
+    return safeArray(state.assignmentRequests)
+      .filter(request => request && request.status === 'pending')
+      .filter(assignmentRequestReviewerCanAct);
+  }
+
+  function externalAssignmentRequestsCreatedByMe(){
+    const myId = currentProfileId();
+    if(!myId) return [];
+    return safeArray(state.assignmentRequests).filter(request =>
+      request && request.status === 'pending' && String(request.requested_by || '') === String(myId)
+    );
+  }
+
+  const previousLoadAllForExternalAssignment = loadAll;
+  loadAll = async function(){
+    await previousLoadAllForExternalAssignment.apply(this, arguments);
+    state.assignmentRequests = [];
+    if(!state.profile) return;
+    try{
+      const {data,error} = await supabaseClient
+        .from(EXTERNAL_ASSIGNMENT_TABLE)
+        .select('*')
+        .order('created_at', {ascending:false});
+      if(error){
+        console.warn('تعذر تحميل طلبات الإسناد الخارجي. غالبًا لم يتم تشغيل SQL المرفق بعد.', error);
+        state.assignmentRequests = [];
+      }else{
+        state.assignmentRequests = data || [];
+      }
+    }catch(error){
+      console.warn('تعذر تحميل طلبات الإسناد الخارجي.', error);
+      state.assignmentRequests = [];
+    }
+  };
+
+  function ensureExternalAssignmentPanelInAdmin(){
+    if(!$('adminPage') || $('externalAssignmentRequestsPanel')) return;
+    const target = $('completionRequestsPanel') || $('transferRequestsPanel') || $('pendingTasksPanel') || $('requestsPanel');
+    const html = `<section id="externalAssignmentRequestsPanel" class="panel card hidden">
+      <h2>طلبات إسناد خارجية بانتظار الاعتماد</h2>
+      <p class="meta">أي إسناد لموظف في قطاع آخر لا يظهر للموظف المستقبل إلا بعد اعتماد مدير قسمه أو رئيس قطاعه.</p>
+      <div id="externalAssignmentRequestsList"></div>
+    </section>`;
+    if(target) target.insertAdjacentHTML('beforebegin', html);
+    else $('adminPage').insertAdjacentHTML('afterbegin', html);
+  }
+
+  function ensureExternalAssignmentPanelInTasksPage(){
+    if($('externalAssignmentActionPanel')) return;
+    const host = $('taskActionRequestsPanel') || document.querySelector('#tasksPage .add-task-panel');
+    if(host){
+      host.insertAdjacentHTML('afterend', '<div id="externalAssignmentActionPanel" class="hidden"></div>');
+    }
+  }
+
+  function assignmentRequestCard(request, reviewMode){
+    const task = taskByIdLocal(request.task_id);
+    const target = userByIdLocal(request.target_user_id);
+    const requester = userByIdLocal(request.requested_by);
+    const roleText = request.assignment_role === 'primary' ? 'مسؤول رئيسي' : 'مسند إليه';
+    const controls = reviewMode ? `<div class="actions" style="margin-top:12px;">
+      <button class="btn btn-success btn-sm" onclick="approveExternalAssignmentRequest('${request.id}')">اعتماد الإسناد</button>
+      <button class="btn btn-danger btn-sm" onclick="rejectExternalAssignmentRequest('${request.id}')">رفض الإسناد</button>
+    </div>` : '';
+    return `<div class="task-card" id="external-assignment-request-${request.id}">
+      <div class="task-top">
+        <div>
+          <div class="task-title">${escapeHtml(task?.title || 'مهمة غير موجودة')}</div>
+          <div class="meta">
+            نوع الطلب: إسناد خارجي<br>
+            طالب الإسناد: ${escapeHtml(requester?.name || nameOfUser(request.requested_by) || '—')}<br>
+            الموظف/المستقبل: ${escapeHtml(target?.name || nameOfUser(request.target_user_id) || '—')}<br>
+            دور الإسناد: ${escapeHtml(roleText)}<br>
+            قطاع المستقبل: ${escapeHtml(nameOfSector(target?.sector_id) || '—')} | قسمه: ${escapeHtml(nameOfDept(target?.department_id) || '—')}<br>
+            تاريخ الطلب: ${formatDate(request.created_at)}
+          </div>
+        </div>
+        <div class="actions"><span class="chip progress">بانتظار الاعتماد</span></div>
+      </div>
+      ${task ? `<div class="task-desc">${escapeHtml(task.description || '')}</div>${renderAttachments(task.attachment_urls, task.attachment_names)}` : ''}
+      ${controls}
+    </div>`;
+  }
+
+  function renderExternalAssignmentRequests(){
+    ensureExternalAssignmentPanelInAdmin();
+    const panel = $('externalAssignmentRequestsPanel');
+    const box = $('externalAssignmentRequestsList');
+    if(!panel || !box) return;
+    const rows = externalAssignmentRequestsForReview();
+    panel.classList.toggle('hidden', !(typeof isAdmin === 'function' && isAdmin()) && !(typeof isSectorHead === 'function' && isSectorHead()) && !(typeof isDepartmentManager === 'function' && isDepartmentManager()));
+    if(!rows.length){
+      box.innerHTML = '<div class="empty">لا توجد طلبات إسناد خارجية بانتظار الاعتماد حاليًا.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(request => assignmentRequestCard(request, true)).join('');
+  }
+
+  function renderExternalAssignmentActionPanel(){
+    ensureExternalAssignmentPanelInTasksPage();
+    const host = $('externalAssignmentActionPanel');
+    if(!host) return;
+    const reviewRows = externalAssignmentRequestsForReview();
+    const myRows = externalAssignmentRequestsCreatedByMe();
+    const total = reviewRows.length + myRows.length;
+    if(!total){
+      host.classList.add('hidden');
+      host.innerHTML = '';
+      return;
+    }
+    host.classList.remove('hidden');
+    host.innerHTML = `<section class="panel card">
+      <details open>
+        <summary style="cursor:pointer;font-weight:900;color:var(--primary2);font-size:20px;">
+          طلبات الإسناد الخارجية <span class="badge">${total}</span>
+        </summary>
+        <div style="margin-top:14px;">
+          ${reviewRows.length ? `<h3 style="color:var(--primary2);">طلبات تحتاج اعتمادك</h3>${reviewRows.map(request => assignmentRequestCard(request, true)).join('')}` : ''}
+          ${myRows.length ? `<h3 style="color:var(--primary2);margin-top:18px;">طلبات أرسلتها ولم تُعتمد بعد</h3>${myRows.map(request => assignmentRequestCard(request, false)).join('')}` : ''}
+        </div>
+      </details>
+    </section>`;
+  }
+
+  window.approveExternalAssignmentRequest = async function(requestId){
+    try{
+      const request = safeArray(state.assignmentRequests).find(item => String(item.id) === String(requestId));
+      if(!request) return showToast('لم يتم العثور على طلب الإسناد.','error');
+      if(!assignmentRequestReviewerCanAct(request)) return showToast('ليست لديك صلاحية اعتماد هذا الإسناد.','error');
+      const {data,error} = await supabaseClient.rpc('approve_task_assignment_request', {p_request_id: requestId});
+      if(error) throw error;
+      const task = taskByIdLocal(request.task_id);
+      if(task && typeof notifyAssigneesByEmailAfterTaskCreate === 'function'){
+        try{
+          await notifyAssigneesByEmailAfterTaskCreate({taskId: request.task_id, selectedUserIds:[request.target_user_id], taskPayload: task});
+        }catch(notifyError){ console.warn('تعذر إرسال إشعار البريد بعد اعتماد الإسناد.', notifyError); }
+      }
+      await loadAll();
+      if(typeof setupFilters === 'function') setupFilters();
+      if(typeof renderTasks === 'function') renderTasks();
+      if(typeof renderDashboard === 'function' && $('dashboardPage') && !$('dashboardPage').classList.contains('hidden')) renderDashboard();
+      if(typeof renderAdmin === 'function' && $('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+      renderExternalAssignmentActionPanel();
+      showToast('تم اعتماد الإسناد، وسيظهر الآن عند الموظف المستقبل.','success');
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر اعتماد الإسناد. تأكد من تشغيل SQL المرفق.','error',7000);
+    }
+  };
+
+  window.rejectExternalAssignmentRequest = async function(requestId){
+    try{
+      const request = safeArray(state.assignmentRequests).find(item => String(item.id) === String(requestId));
+      if(!request) return showToast('لم يتم العثور على طلب الإسناد.','error');
+      if(!assignmentRequestReviewerCanAct(request)) return showToast('ليست لديك صلاحية رفض هذا الإسناد.','error');
+      const ok = await askConfirm({title:'رفض الإسناد الخارجي',message:'سيتم رفض الإسناد ولن تظهر المهمة عند الموظف المستقبل. هل تريد المتابعة؟',okText:'رفض الإسناد',danger:true});
+      if(!ok) return;
+      const {data,error} = await supabaseClient.rpc('reject_task_assignment_request', {p_request_id: requestId});
+      if(error) throw error;
+      await loadAll();
+      if(typeof renderTasks === 'function') renderTasks();
+      if(typeof renderAdmin === 'function' && $('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+      renderExternalAssignmentActionPanel();
+      showToast('تم رفض طلب الإسناد الخارجي.','info');
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر رفض الإسناد. تأكد من تشغيل SQL المرفق.','error',7000);
+    }
+  };
+
+  const previousRenderAdminForExternalAssignment = renderAdmin;
+  renderAdmin = function(){
+    previousRenderAdminForExternalAssignment.apply(this, arguments);
+    ensureExternalAssignmentPanelInAdmin();
+    renderExternalAssignmentRequests();
+  };
+
+  const previousShowAppForExternalAssignment = showApp;
+  showApp = function(){
+    previousShowAppForExternalAssignment.apply(this, arguments);
+    ensureExternalAssignmentPanelInTasksPage();
+    renderExternalAssignmentActionPanel();
+  };
+
+  const previousShowPageForExternalAssignment = showPage;
+  showPage = function(page){
+    previousShowPageForExternalAssignment.apply(this, arguments);
+    if(page === 'tasks') renderExternalAssignmentActionPanel();
+    if(page === 'admin') renderExternalAssignmentRequests();
+  };
+
+  const previousRenderTasksForExternalAssignment = renderTasks;
+  renderTasks = function(){
+    previousRenderTasksForExternalAssignment.apply(this, arguments);
+    renderExternalAssignmentActionPanel();
+  };
+
+  const previousSaveTaskForExternalAssignment = saveTask;
+  saveTask = async function(){
+    const editId = $('editTaskId')?.value || '';
+    if(editId){
+      // تعديل المهام الحالية يبقى على المسار السابق منعًا لأي أثر جانبي على المهام القائمة.
+      return previousSaveTaskForExternalAssignment.apply(this, arguments);
+    }
+
+    try{
+      const title = $('taskTitle').value.trim();
+      if(!title) return showToast('اكتب عنوان المهمة.','error');
+
+      const type = $('assignmentType').value;
+      let selected = (typeof getSelectedAssigneeIdsFinal === 'function')
+        ? getSelectedAssigneeIdsFinal()
+        : [...$('assigneePicker').querySelectorAll('input:checked')].map(input => input.value);
+
+      if(type === 'all_company'){
+        selected = state.users.filter(user => user.is_active !== false).map(user => user.id);
+      }
+      if(type === 'all_sector'){
+        const sectorId = $('taskTargetSector').value || state.profile?.sector_id || '';
+        selected = state.users.filter(user => user.is_active !== false && (!sectorId || user.sector_id === sectorId)).map(user => user.id);
+      }
+      if(type === 'all_department'){
+        const departmentId = $('taskTargetDepartment').value || state.profile?.department_id || '';
+        selected = state.users.filter(user => user.is_active !== false && (!departmentId || user.department_id === departmentId)).map(user => user.id);
+      }
+
+      selected = [...new Set(selected)].filter(Boolean);
+      if(type !== 'all_company' && !selected.length) return showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error');
+
+      const validationMessage = typeof validateAssignment === 'function' ? validateAssignment(type, selected) : '';
+      if(validationMessage) return showToast(validationMessage, 'error');
+
+      const selectedUsers = selected.map(userByIdLocal).filter(Boolean);
+      const externalUsers = selectedUsers.filter(isExternalAssigneeUser);
+      const externalIds = new Set(externalUsers.map(user => user.id));
+      const immediateSelected = selected.filter(userId => !externalIds.has(userId));
+      const primaryRequested = selected[0] || state.profile.id;
+      const primaryImmediate = immediateSelected.includes(primaryRequested) ? primaryRequested : (immediateSelected[0] || state.profile.id);
+      const primaryUser = userByIdLocal(primaryImmediate) || state.profile;
+
+      const inferred = (typeof inferTaskScopeFromPrimaryUser === 'function')
+        ? inferTaskScopeFromPrimaryUser(primaryUser, $('taskTargetSector').value || state.profile?.sector_id || null, $('taskTargetDepartment').value || null)
+        : {sectorId: primaryUser?.sector_id || $('taskTargetSector').value || state.profile?.sector_id || null, departmentId: primaryUser?.department_id || $('taskTargetDepartment').value || null};
+
+      let targetSector = inferred.sectorId || state.profile?.sector_id || null;
+      let targetDept = inferred.departmentId || null;
+
+      if(externalUsers.length && !immediateSelected.length){
+        // حتى لا تُحسب المهمة على القطاع/الموظف المستقبل قبل الاعتماد، تبقى مؤقتًا ضمن قطاع المنشئ.
+        targetSector = state.profile?.sector_id || targetSector;
+        targetDept = state.profile?.department_id || null;
+      }
+
+      const files = await uploadFiles($('taskFiles').files, 'tasks');
+      const payload = {
+        title,
+        description: $('taskDescription').value.trim(),
+        priority: $('taskPriority').value,
+        owner_sector_id: state.profile.sector_id,
+        owner_department_id: state.profile.department_id,
+        target_sector_id: targetSector,
+        target_department_id: targetDept,
+        primary_responsible_id: primaryImmediate,
+        assignment_type: primaryUser?.role === 'sector_head' ? 'sector_heads' : type,
+        task_level: primaryUser?.role === 'sector_head' ? 'executive' : (type === 'all_sector' ? 'sector' : type === 'department_managers' ? 'manager' : type === 'all_department' ? 'department' : 'employee'),
+        due_date: $('taskDue').value || null,
+        attachment_urls: files.urls,
+        attachment_names: files.names,
+        status: 'جديدة',
+        created_by: state.profile.id,
+        approval_status: 'approved',
+        approved_by: state.profile.id,
+        approved_at: new Date().toISOString()
+      };
+
+      const {data,error} = await supabaseClient.from('tasks').insert(payload).select().single();
+      if(error) throw error;
+      const taskId = data.id;
+
+      const immediateRows = immediateSelected.map(userId => ({
+        task_id: taskId,
+        user_id: userId,
+        assigned_by: state.profile.id,
+        assignment_role: userId === primaryImmediate ? 'primary' : 'assignee'
+      }));
+      if(immediateRows.length){
+        const inserted = await supabaseClient.from('task_assignees').insert(immediateRows);
+        if(inserted.error) throw inserted.error;
+      }
+
+      if(externalUsers.length){
+        const requestRows = externalUsers.map(user => ({
+          task_id: taskId,
+          requested_by: state.profile.id,
+          target_user_id: user.id,
+          assignment_role: user.id === primaryRequested ? 'primary' : 'assignee',
+          reason: 'إسناد خارجي بانتظار اعتماد المدير المباشر أو رئيس القطاع'
+        }));
+        const insertedRequests = await supabaseClient.from(EXTERNAL_ASSIGNMENT_TABLE).insert(requestRows);
+        if(insertedRequests.error) throw insertedRequests.error;
+      }
+
+      let emailNotifyResult = {ok:true, skipped:true};
+      const emailTargets = immediateSelected.filter(Boolean);
+      if(emailTargets.length && typeof notifyAssigneesByEmailAfterTaskCreate === 'function'){
+        emailNotifyResult = await notifyAssigneesByEmailAfterTaskCreate({taskId, selectedUserIds:emailTargets, taskPayload:payload});
+      }
+
+      closeTaskModal();
+      await loadAll();
+      if(typeof setupFilters === 'function') setupFilters();
+      if(typeof renderTasks === 'function') renderTasks();
+      if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderAdmin();
+      if($('dashboardPage') && !$('dashboardPage').classList.contains('hidden') && typeof renderDashboard === 'function') renderDashboard();
+
+      if(externalUsers.length){
+        const names = externalUsers.map(user => user.name).join('، ');
+        showToast(`تم حفظ المهمة. الإسناد الخارجي إلى ${names} بانتظار اعتماد مدير القسم أو رئيس القطاع.`, 'success', 9000);
+      }else if(emailNotifyResult && emailNotifyResult.ok === false){
+        showToast('تم حفظ المهمة، لكن تعذر إرسال إشعار البريد لبعض المستخدمين.','error');
+      }else{
+        showToast('تم حفظ المهمة بنجاح وإرسال إشعار البريد.','success');
+      }
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر حفظ المهمة أو إنشاء طلب الإسناد الخارجي. تأكد من تشغيل SQL المرفق.','error',8000);
+    }
+  };
+
+  setTimeout(function(){
+    try{
+      ensureExternalAssignmentPanelInTasksPage();
+      renderExternalAssignmentActionPanel();
+      if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderExternalAssignmentRequests();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
