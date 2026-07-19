@@ -19659,3 +19659,220 @@ window.openTaskFromSummary=openTaskFromSummary;
 })();
 </script>
 
+
+<script>
+/* === PATCH: اعتماد معادلة الإنجاز الشهرية العادلة حتى تاريخ اليوم ===
+   المعادلة:
+   نسبة الإنجاز الشهرية = المهام المنجزة حتى تاريخ اليوم ÷ المهام المستحقة أو المتأخرة حتى تاريخ اليوم
+   مع استبعاد المهام المؤجلة والمهام المستقبلية غير المنجزة من مؤشرات الأداء والتقييم.
+*/
+(function(){
+  function metricIsPostponed(task){
+    if(typeof isPostponedTask === 'function') return isPostponedTask(task);
+    return String(task?.status || '').trim() === 'مؤجلة';
+  }
+
+  function metricOperationalRows(rows){
+    return (rows || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected' && !metricIsPostponed(task));
+  }
+
+  function metricTaskDate(value){
+    if(!value) return null;
+    const date = new Date(value);
+    return isNaN(date) ? null : date;
+  }
+
+  function metricTaskCompletedAt(task){
+    if(String(task?.status || '').trim() !== 'مكتملة') return null;
+    return metricTaskDate(task.completion_reviewed_at)
+      || metricTaskDate(task.completed_at)
+      || metricTaskDate(task.closed_at)
+      || metricTaskDate(task.updated_at)
+      || metricTaskDate(task.approved_at)
+      || metricTaskDate(task.due_date);
+  }
+
+  function metricRangeUntilCutoff(monthValue){
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+
+    if(monthValue){
+      const parts = String(monthValue).split('-').map(Number);
+      if(parts.length >= 2 && parts[0] && parts[1]){
+        year = parts[0];
+        month = parts[1] - 1;
+      }
+    }
+
+    const start = new Date(year, month, 1, 0, 0, 0, 0);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const cutoff = monthEnd < todayEnd ? monthEnd : todayEnd;
+
+    return { start, cutoff, monthEnd, todayEnd };
+  }
+
+  function metricDateInRange(date, range){
+    if(!date || isNaN(date)) return false;
+    return date >= range.start && date <= range.cutoff;
+  }
+
+  function metricDueByCutoff(task, range){
+    const due = metricTaskDate(task?.due_date);
+    if(!due) return false;
+    due.setHours(23, 59, 59, 999);
+    return due <= range.cutoff;
+  }
+
+  function metricCompletedInRange(task, range){
+    const completedAt = metricTaskCompletedAt(task);
+    return metricDateInRange(completedAt, range);
+  }
+
+  function metricCompletedBeforeRange(task, range){
+    const completedAt = metricTaskCompletedAt(task);
+    return completedAt && completedAt < range.start;
+  }
+
+  function metricRowsUntilCutoff(rows, monthValue){
+    const range = metricRangeUntilCutoff(monthValue);
+    return metricOperationalRows(rows).filter(task => {
+      if(metricCompletedBeforeRange(task, range) && !metricCompletedInRange(task, range)) return false;
+      return metricDueByCutoff(task, range) || metricCompletedInRange(task, range);
+    });
+  }
+
+  function metricTaskIsLateForCutoff(task, range){
+    if(metricTaskCompletedAt(task)) return false;
+    const due = metricTaskDate(task?.due_date);
+    if(!due) return false;
+    due.setHours(23,59,59,999);
+    return due < range.todayEnd && due <= range.cutoff;
+  }
+
+  window.monthlyMetricRowsUntilToday = metricRowsUntilCutoff;
+  window.monthlyMetricRangeUntilToday = metricRangeUntilCutoff;
+  window.monthlyMetricCompletedInRange = metricCompletedInRange;
+
+  // لوحات الأداء التي تعتمد على taskMetrics ستقيس مهام الاستحقاق/التأخر حتى اليوم فقط، وليس كل المهام المستقبلية.
+  window.taskMetrics = taskMetrics = function(rows){
+    const source = metricRowsUntilCutoff(rows);
+    const range = metricRangeUntilCutoff();
+    const total = source.length;
+    const done = source.filter(task => metricCompletedInRange(task, range)).length;
+    const late = source.filter(task => metricTaskIsLateForCutoff(task, range)).length;
+    const progress = source.filter(task => !metricCompletedInRange(task, range) && !metricTaskIsLateForCutoff(task, range)).length;
+    const fresh = progress;
+    const rate = total ? Math.round((done / total) * 100) : 0;
+    return { total, done, progress, fresh, late, rate };
+  };
+
+  // لوحة الأداء العام: إجبار الحساب من البيانات المحملة بنفس المعادلة بدل الاعتماد على RPC قديم يحسب كل المهام.
+  window.publicPerformanceFallbackFromLoadedData = publicPerformanceFallbackFromLoadedData = function(){
+    const allOperational = metricOperationalRows(typeof taskPageAllowedTasks === 'function' ? taskPageAllowedTasks() : (state.tasks || []));
+    const metricRows = metricRowsUntilCutoff(allOperational);
+    const range = metricRangeUntilCutoff();
+
+    const total = metricRows.length;
+    const done = metricRows.filter(task => metricCompletedInRange(task, range)).length;
+    const late = metricRows.filter(task => metricTaskIsLateForCutoff(task, range)).length;
+    const progress = metricRows.filter(task => !metricCompletedInRange(task, range) && !metricTaskIsLateForCutoff(task, range)).length;
+    const rate = total ? Math.round((done / total) * 100) : 0;
+
+    const sectors = (state.sectors || []).map(sector => {
+      const sectorUsers = (state.users || []).filter(user => user.is_active !== false && user.sector_id === sector.id).map(user => user.id);
+      const sectorTaskIds = new Set((state.assignees || []).filter(row => sectorUsers.includes(row.user_id)).map(row => row.task_id));
+      const sectorRows = uniqueTasks(metricRows.filter(task =>
+        sectorTaskIds.has(task.id) ||
+        task.owner_sector_id === sector.id ||
+        task.target_sector_id === sector.id ||
+        sectorUsers.includes(task.primary_responsible_id)
+      ));
+      const sDone = sectorRows.filter(task => metricCompletedInRange(task, range)).length;
+      const sLate = sectorRows.filter(task => metricTaskIsLateForCutoff(task, range)).length;
+      const sProgress = sectorRows.filter(task => !metricCompletedInRange(task, range) && !metricTaskIsLateForCutoff(task, range)).length;
+      return {
+        sector_id: sector.id,
+        sector_name: sector.name,
+        total: sectorRows.length,
+        completed: sDone,
+        in_progress: sProgress,
+        overdue: sLate,
+        completion_rate: sectorRows.length ? Math.round((sDone / sectorRows.length) * 100) : 0
+      };
+    });
+
+    const topEmployees = (state.users || []).filter(user => user.is_active !== false).map(user => {
+      const userRows = metricRowsUntilCutoff(tasksForUser(user.id));
+      const completed = userRows.filter(task => metricCompletedInRange(task, range)).length;
+      return { employee_name: user.name, sector_name: nameOfSector(user.sector_id), completed };
+    }).filter(item => item.completed > 0).sort((a,b) => b.completed - a.completed).slice(0,5);
+
+    return {
+      summary: {
+        total_tasks: total,
+        completed: done,
+        in_progress: progress,
+        overdue: late,
+        completion_rate: rate,
+        pending_approval: typeof getPendingTasks === 'function' ? getPendingTasks().length : 0
+      },
+      sectors,
+      top_employees: topEmployees,
+      sectors_need_followup: [...sectors].filter(sector => sector.overdue > 0).sort((a,b) => b.overdue - a.overdue).slice(0,5),
+      best_sectors: [...sectors].filter(sector => sector.total > 0).sort((a,b) => b.completion_rate - a.completion_rate).slice(0,5)
+    };
+  };
+
+  window.loadPublicPerformanceMetrics = loadPublicPerformanceMetrics = async function(){
+    publicPerformanceCache = publicPerformanceFallbackFromLoadedData();
+    return publicPerformanceCache;
+  };
+
+  // تقييم الإنتاجية الشهري: مهام القياس تكون المستحقة/المتأخرة حتى تاريخ اليوم + المنجزة مبكرًا داخل الشهر المختار.
+  if(typeof productivityTasksForUser === 'function'){
+    window.productivityTasksForUser = productivityTasksForUser = function(userId, range){
+      const assignedIds = new Set((state.assignees || []).filter(row => row.user_id === userId).map(row => row.task_id));
+      const monthValue = range && range.start ? `${range.start.getFullYear()}-${String(range.start.getMonth()+1).padStart(2,'0')}` : null;
+      const userRows = (state.tasks || []).filter(task => task.is_archived !== true && !metricIsPostponed(task) && (assignedIds.has(task.id) || task.primary_responsible_id === userId));
+      return metricRowsUntilCutoff(userRows, monthValue);
+    };
+  }
+
+  if(typeof productivityCompletedTasksForUser === 'function'){
+    window.productivityCompletedTasksForUser = productivityCompletedTasksForUser = function(userId, range){
+      const monthValue = range && range.start ? `${range.start.getFullYear()}-${String(range.start.getMonth()+1).padStart(2,'0')}` : null;
+      const metricRows = productivityTasksForUser(userId, range);
+      const metricRange = metricRangeUntilCutoff(monthValue);
+      return metricRows.filter(task => metricCompletedInRange(task, metricRange));
+    };
+  }
+
+  if(typeof buildProductivityAutoScores === 'function'){
+    const previousBuildProductivityAutoScores = buildProductivityAutoScores;
+    window.buildProductivityAutoScores = buildProductivityAutoScores = function(users, range){
+      const rows = previousBuildProductivityAutoScores(users, range) || [];
+      const monthValue = range && range.start ? `${range.start.getFullYear()}-${String(range.start.getMonth()+1).padStart(2,'0')}` : null;
+      const metricRange = metricRangeUntilCutoff(monthValue);
+      return rows.map(row => {
+        const monthTasks = productivityTasksForUser(row.user.id, range);
+        const doneTasks = productivityCompletedTasksForUser(row.user.id, range);
+        const lateTasks = monthTasks.filter(task => metricTaskIsLateForCutoff(task, metricRange));
+        return { ...row, monthTasks, doneTasks, lateTasks };
+      });
+    };
+  }
+
+  // توضيح تسمية كرت تقييم الإنتاجية بدون تغيير التصميم.
+  if(typeof renderProductivityEmployeeCard === 'function'){
+    const previousRenderProductivityEmployeeCard = renderProductivityEmployeeCard;
+    window.renderProductivityEmployeeCard = renderProductivityEmployeeCard = function(row, saved){
+      return String(previousRenderProductivityEmployeeCard(row, saved) || '').replace('مهام الشهر','مهام القياس حتى اليوم');
+    };
+  }
+
+  // عند فتح لوحة الأداء العام بعد التعديل، امسح الكاش القديم ليظهر الحساب الجديد مباشرة.
+  try{ publicPerformanceCache = null; }catch(e){}
+})();
+</script>
