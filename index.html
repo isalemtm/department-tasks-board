@@ -20070,3 +20070,244 @@ window.openTaskFromSummary=openTaskFromSummary;
   try{ publicPerformanceCache = null; }catch(e){}
 })();
 </script>
+
+<script>
+/* === FINAL FIX: تصحيح أعداد لوحة الأداء العام والقطاعات ===
+   سبب المشكلة السابقة أن لوحة الأداء العام كانت تستخدم نطاق صفحة المهام أو تربط المهمة بأكثر من قطاع،
+   فظهرت أعداد ناقصة/متضاربة. هذا التصحيح يحسب الأعداد من كل المهام المحملة غير المؤجلة،
+   ويصنف كل مهمة على قطاع واحد فقط، مع بقاء نسبة الإنجاز محسوبة حتى تاريخ اليوم فقط.
+*/
+(function(){
+  function fStatus(task){ return String(task?.status || '').trim(); }
+  function fIsPostponed(task){
+    if(typeof window.isPostponedTask === 'function') return window.isPostponedTask(task);
+    return fStatus(task) === 'مؤجلة';
+  }
+  function fOperational(rows){
+    return (rows || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected' && !fIsPostponed(task));
+  }
+  function fDate(value){
+    if(!value) return null;
+    const date = new Date(value);
+    return isNaN(date) ? null : date;
+  }
+  function fCompletedAt(task){
+    if(fStatus(task) !== 'مكتملة') return null;
+    return fDate(task.completion_reviewed_at)
+      || fDate(task.completed_at)
+      || fDate(task.closed_at)
+      || fDate(task.updated_at)
+      || fDate(task.approved_at)
+      || fDate(task.due_date);
+  }
+  function fRange(monthValue){
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+    if(monthValue){
+      const parts = String(monthValue).split('-').map(Number);
+      if(parts.length >= 2 && parts[0] && parts[1]){ year = parts[0]; month = parts[1] - 1; }
+    }
+    const start = new Date(year, month, 1, 0, 0, 0, 0);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const cutoff = monthEnd < todayEnd ? monthEnd : todayEnd;
+    return { start, cutoff, monthEnd, todayEnd };
+  }
+  function fInRange(date, range){ return date && !isNaN(date) && date >= range.start && date <= range.cutoff; }
+  function fCompletedInRange(task, range){ return fInRange(fCompletedAt(task), range); }
+  function fCompletedBeforeRange(task, range){ const d = fCompletedAt(task); return d && d < range.start; }
+  function fDueByCutoff(task, range){
+    const due = fDate(task?.due_date);
+    if(!due) return false;
+    due.setHours(23,59,59,999);
+    return due <= range.cutoff;
+  }
+  function fMetricRows(rows, monthValue){
+    const range = fRange(monthValue);
+    return fOperational(rows).filter(task => {
+      if(fCompletedBeforeRange(task, range) && !fCompletedInRange(task, range)) return false;
+      return fDueByCutoff(task, range) || fCompletedInRange(task, range);
+    });
+  }
+  function fIsLate(task){
+    if(fCompletedAt(task)) return false;
+    if(fStatus(task) === 'متأخرة') return true;
+    const due = fDate(task?.due_date);
+    if(!due) return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    due.setHours(0,0,0,0);
+    return due < today;
+  }
+  function fRate(rows, monthValue){
+    const range = fRange(monthValue);
+    const metricRows = fMetricRows(rows, monthValue);
+    const done = metricRows.filter(task => fCompletedInRange(task, range)).length;
+    return {
+      metric_total: metricRows.length,
+      metric_done: done,
+      rate: metricRows.length ? Math.round((done / metricRows.length) * 100) : 0
+    };
+  }
+  function fUserById(id){
+    return ((typeof state !== 'undefined' ? state.users : []) || []).find(user => String(user.id) === String(id)) || null;
+  }
+  function fAssigneeUsers(taskId){
+    if(typeof window.getTaskAssignees === 'function') return window.getTaskAssignees(taskId) || [];
+    return ((typeof state !== 'undefined' ? state.assignees : []) || [])
+      .filter(row => row.task_id === taskId)
+      .map(row => fUserById(row.user_id))
+      .filter(Boolean);
+  }
+  function fPrimaryAssigneeSector(task){
+    const primary = fUserById(task?.primary_responsible_id);
+    if(primary?.sector_id) return primary.sector_id;
+    const firstAssignee = fAssigneeUsers(task?.id).find(user => user?.sector_id);
+    return firstAssignee?.sector_id || null;
+  }
+  function fTaskSectorId(task){
+    return task?.target_sector_id || fPrimaryAssigneeSector(task) || task?.owner_sector_id || null;
+  }
+  function fCounts(rows){
+    const all = fOperational(rows);
+    const done = all.filter(task => fStatus(task) === 'مكتملة').length;
+    const late = all.filter(fIsLate).length;
+    const progress = all.filter(task => fStatus(task) !== 'مكتملة' && !fIsLate(task)).length;
+    return { total: all.length, done, progress, late };
+  }
+  function fSortSectors(rows){
+    return [...(rows || [])].sort((a,b)=>{
+      const br = Number(b.completion_rate || 0), ar = Number(a.completion_rate || 0);
+      if(br !== ar) return br - ar;
+      const bm = Number(b.metric_total || 0), am = Number(a.metric_total || 0);
+      if(bm !== am) return bm - am;
+      return Number(b.completed || 0) - Number(a.completed || 0);
+    });
+  }
+
+  window.taskMetrics = taskMetrics = function(rows){
+    const counts = fCounts(rows || []);
+    const rateInfo = fRate(rows || []);
+    return {
+      total: counts.total,
+      done: counts.done,
+      progress: counts.progress,
+      fresh: counts.progress,
+      late: counts.late,
+      rate: rateInfo.rate,
+      metric_total: rateInfo.metric_total,
+      metric_done: rateInfo.metric_done
+    };
+  };
+
+  window.publicPerformanceFallbackFromLoadedData = publicPerformanceFallbackFromLoadedData = function(){
+    const allTasks = fOperational((typeof state !== 'undefined' ? state.tasks : []) || []);
+    const summaryCounts = fCounts(allTasks);
+    const summaryRate = fRate(allTasks);
+
+    const sectorBuckets = new Map();
+    (state.sectors || []).forEach(sector => sectorBuckets.set(sector.id, { sector, tasks: [] }));
+
+    const unclassified = [];
+    allTasks.forEach(task => {
+      const sectorId = fTaskSectorId(task);
+      if(sectorId && sectorBuckets.has(sectorId)) sectorBuckets.get(sectorId).tasks.push(task);
+      else unclassified.push(task);
+    });
+
+    const sectors = [...sectorBuckets.values()].map(bucket => {
+      const rows = bucket.tasks;
+      const counts = fCounts(rows);
+      const rateInfo = fRate(rows);
+      return {
+        sector_id: bucket.sector.id,
+        sector_name: bucket.sector.name,
+        total: counts.total,
+        completed: counts.done,
+        in_progress: counts.progress,
+        overdue: counts.late,
+        completion_rate: rateInfo.rate,
+        metric_total: rateInfo.metric_total,
+        metric_done: rateInfo.metric_done
+      };
+    });
+
+    if(unclassified.length){
+      const counts = fCounts(unclassified);
+      const rateInfo = fRate(unclassified);
+      sectors.push({
+        sector_id: 'unclassified',
+        sector_name: 'غير محدد',
+        total: counts.total,
+        completed: counts.done,
+        in_progress: counts.progress,
+        overdue: counts.late,
+        completion_rate: rateInfo.rate,
+        metric_total: rateInfo.metric_total,
+        metric_done: rateInfo.metric_done
+      });
+    }
+
+    const topEmployees = ((typeof state !== 'undefined' ? state.users : []) || [])
+      .filter(user => user.is_active !== false)
+      .map(user => {
+        const rows = fOperational(typeof tasksForUser === 'function' ? tasksForUser(user.id) : []);
+        const metricRows = fMetricRows(rows);
+        const range = fRange();
+        const completed = metricRows.filter(task => fCompletedInRange(task, range)).length;
+        return { employee_name: user.name, sector_name: typeof nameOfSector === 'function' ? nameOfSector(user.sector_id) : '', completed };
+      })
+      .filter(item => item.completed > 0)
+      .sort((a,b) => b.completed - a.completed)
+      .slice(0,5);
+
+    const comparable = sectors.filter(sector => Number(sector.metric_total || 0) > 0);
+
+    return {
+      summary: {
+        total_tasks: summaryCounts.total,
+        completed: summaryCounts.done,
+        in_progress: summaryCounts.progress,
+        overdue: summaryCounts.late,
+        completion_rate: summaryRate.rate,
+        metric_total: summaryRate.metric_total,
+        metric_done: summaryRate.metric_done,
+        pending_approval: typeof getPendingTasks === 'function' ? getPendingTasks().length : 0
+      },
+      sectors,
+      top_employees: topEmployees,
+      sectors_need_followup: sectors.filter(sector => Number(sector.overdue || 0) > 0).sort((a,b)=>Number(b.overdue || 0)-Number(a.overdue || 0)).slice(0,5),
+      best_sectors: fSortSectors(comparable).slice(0,5)
+    };
+  };
+
+  window.loadPublicPerformanceMetrics = loadPublicPerformanceMetrics = async function(){
+    publicPerformanceCache = publicPerformanceFallbackFromLoadedData();
+    return publicPerformanceCache;
+  };
+
+  if(typeof renderPublicPerformanceDashboardWithData === 'function'){
+    const renderBeforeFinalCountsFix = renderPublicPerformanceDashboardWithData;
+    window.renderPublicPerformanceDashboardWithData = renderPublicPerformanceDashboardWithData = function(payload){
+      if(payload && payload.sectors){
+        payload = {
+          ...payload,
+          sectors: fSortSectors(payload.sectors),
+          best_sectors: fSortSectors((payload.best_sectors && payload.best_sectors.length ? payload.best_sectors : payload.sectors).filter(sector => Number(sector.metric_total || 0) > 0)).slice(0,5)
+        };
+      }
+      renderBeforeFinalCountsFix(payload);
+      document.querySelectorAll('.public-kpi-card small').forEach(el=>{
+        const text = String(el.textContent || '');
+        if(text.includes('المكتمل من إجمالي المهام')) el.textContent = 'المكتمل من مهام القياس حتى اليوم';
+        if(text.includes('كل المهام المعتمدة')) el.textContent = 'كل المهام غير المؤجلة';
+      });
+      document.querySelectorAll('.public-chart-card h3').forEach(el=>{
+        if(String(el.textContent || '').includes('ترتيب القطاعات حسب نسبة الإنجاز')) el.textContent = 'ترتيب القطاعات حسب نسبة الإنجاز حتى اليوم';
+      });
+    };
+  }
+
+  try{ publicPerformanceCache = null; }catch(error){}
+})();
+</script>
