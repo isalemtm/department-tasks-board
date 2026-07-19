@@ -18438,6 +18438,68 @@ init();
 })();
 </script>
 
+
+
+<script>
+/* === FINAL PATCH: إجبار لوحة الأداء العام على استخدام دالة Supabase الصحيحة ===
+   السبب: تعديلات سابقة أجبرت لوحة الأداء العام على الحساب الاحتياطي داخل index.html،
+   وهذا كان يعرض 187 بدل أرقام دالة get_public_performance_metrics الصحيحة.
+*/
+(function(){
+  function normalizeRpcPayload(data){
+    if(!data) return null;
+    if(Array.isArray(data)) return data.length ? data[0] : null;
+    return data;
+  }
+
+  window.loadPublicPerformanceMetrics = loadPublicPerformanceMetrics = async function(){
+    publicPerformanceLoading = true;
+    try{
+      publicPerformanceCache = null;
+      const { data, error } = await supabaseClient.rpc('get_public_performance_metrics');
+      if(error) throw error;
+      const payload = normalizeRpcPayload(data);
+      if(!payload || !payload.summary) throw new Error('لم ترجع دالة الأداء العام بيانات صالحة.');
+      publicPerformanceCache = payload;
+      return publicPerformanceCache;
+    } finally {
+      publicPerformanceLoading = false;
+    }
+  };
+
+  if(typeof renderDashboard === 'function'){
+    window.renderDashboard = renderDashboard = function(){
+      if(typeof installPublicPerformanceDashboardStyles === 'function') installPublicPerformanceDashboardStyles();
+      const box = $('dashboardContent');
+      if(box) box.innerHTML = '<section class="panel card"><div class="empty">جاري تحميل لوحة الأداء العام من Supabase...</div></section>';
+
+      loadPublicPerformanceMetrics()
+        .then(payload => {
+          renderPublicPerformanceDashboardWithData(payload);
+          document.querySelectorAll('.public-kpi-card small').forEach(el=>{
+            const text = String(el.textContent || '');
+            if(text.includes('المكتمل من إجمالي المهام')) el.textContent = 'المكتمل من مهام القياس حتى اليوم';
+            if(text.includes('كل المهام المعتمدة')) el.textContent = 'كل المهام غير المؤجلة';
+          });
+          document.querySelectorAll('.public-chart-card h3').forEach(el=>{
+            if(String(el.textContent || '').includes('ترتيب القطاعات حسب نسبة الإنجاز')) el.textContent = 'ترتيب القطاعات حسب نسبة الإنجاز حتى اليوم';
+          });
+        })
+        .catch(error => {
+          console.error('Public performance RPC failed:', error);
+          if(box){
+            const message = (error && error.message) ? error.message : 'تعذر تحميل بيانات لوحة الأداء العام.';
+            box.innerHTML = '<section class="panel card"><div class="notice error show">تعذر تحميل لوحة الأداء العام من دالة Supabase: '+escapeHtml(message)+'</div></section>';
+          }
+          if(typeof showToast === 'function') showToast('تعذر تحميل لوحة الأداء العام من Supabase.','error',7000);
+        });
+    };
+  }
+
+  try{ publicPerformanceCache = null; }catch(error){}
+})();
+</script>
+
 </body>
 </html>
 
