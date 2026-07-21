@@ -18438,6 +18438,170 @@ init();
 })();
 </script>
 
+
+
+<script>
+/* === FINAL PATCH: عرض عناوين المهام فقط داخل مجموعات الحالات + إسناد موظفين من كامل القطاع ===
+   - عند فتح مجموعة حالة المهام تظهر عناوين مختصرة فقط.
+   - تفاصيل المهمة لا تظهر إلا بعد الضغط على عنوان المهمة.
+   - عند نوع التكليف "موظفون محددون" تظهر أسماء موظفي القطاع المختار كاملًا، وليس القسم فقط.
+   - لا تغيير على اعتماد الإكمال، الإسناد الخارجي، لوحة الأداء العام، أو الصلاحيات الأخرى.
+*/
+(function(){
+  const POSTPONED_STATUS = 'مؤجلة';
+  const ALLOWED_SPECIFIC_ASSIGNEE_ROLES = new Set(['employee','department_manager','sector_head']);
+
+  function installCompactTaskListAndSectorAssigneeStyle(){
+    let style=document.getElementById('compactTaskListSectorAssigneeFinalStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='compactTaskListSectorAssigneeFinalStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      #tasksList .task-item-details{margin:8px 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;}
+      #tasksList .task-item-details>summary{list-style:none;}
+      #tasksList .task-item-details>summary::-webkit-details-marker{display:none;}
+      #tasksList .task-item-summary{cursor:pointer;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fbf8f5;color:var(--primary2);font-weight:900;}
+      #tasksList .task-item-summary:hover{background:#f4eee8;}
+      #tasksList .task-item-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+      #tasksList .task-item-title strong{white-space:normal;overflow-wrap:anywhere;}
+      #tasksList .task-item-mini-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px;font-weight:700;}
+      #tasksList .task-item-details-body{padding:12px;background:#fff;}
+      #tasksList .task-item-details-body>.task-card{margin-bottom:0;}
+      @media(max-width:700px){#tasksList .task-item-summary{align-items:flex-start;flex-direction:column;}#tasksList .task-item-mini-meta{justify-content:flex-start;}}
+    `;
+  }
+
+  function taskStatusForCompactList(task){
+    if(String(task?.status || '').trim() === POSTPONED_STATUS) return POSTPONED_STATUS;
+    if(String(task?.status || '').trim() === 'مكتملة') return 'مكتملة';
+    if(typeof window.isLate === 'function' && window.isLate(task)) return 'متأخرة';
+    return 'قيد التنفيذ';
+  }
+
+  function sortTaskRows(rows){
+    return [...(rows || [])].sort((a,b)=>{
+      const ad=a?.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b?.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime();
+    });
+  }
+
+  function compactTaskItemHtml(task){
+    const assignees = typeof getTaskAssignees === 'function' ? getTaskAssignees(task.id) : [];
+    const assigneeText = assignees.map(user=>user.name).join('، ') || nameOfUser(task.primary_responsible_id) || '—';
+    const status = taskStatusForCompactList(task);
+    const due = typeof formatDate === 'function' ? formatDate(task.due_date) : (task.due_date || '—');
+    const title = typeof escapeHtml === 'function' ? escapeHtml(task.title || 'بدون عنوان') : (task.title || 'بدون عنوان');
+    const safeAssignees = typeof escapeHtml === 'function' ? escapeHtml(assigneeText) : assigneeText;
+    const safeStatus = typeof escapeHtml === 'function' ? escapeHtml(status) : status;
+    const safeDue = typeof escapeHtml === 'function' ? escapeHtml(due) : due;
+    const fullCard = typeof taskCard === 'function' ? taskCard(task) : `<div class="task-card">${title}</div>`;
+    return `<details class="task-item-details" id="task-item-details-${task.id}">
+      <summary class="task-item-summary">
+        <span class="task-item-title"><strong>${title}</strong></span>
+        <span class="task-item-mini-meta"><span>${safeStatus}</span><span>المسند إليه: ${safeAssignees}</span><span>الاستحقاق: ${safeDue}</span></span>
+      </summary>
+      <div class="task-item-details-body">${fullCard}</div>
+    </details>`;
+  }
+
+  window.taskStatusSectionsHtml = function(rows){
+    installCompactTaskListAndSectorAssigneeStyle();
+    const source=rows || [];
+    const groups={
+      progress:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='قيد التنفيذ')),
+      late:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='متأخرة')),
+      completed:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='مكتملة')),
+      postponed:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)===POSTPONED_STATUS))
+    };
+    const renderGroup=(title,list,emptyText)=>{
+      const safeTitle = typeof escapeHtml === 'function' ? escapeHtml(title) : title;
+      const safeEmpty = typeof escapeHtml === 'function' ? escapeHtml(emptyText) : emptyText;
+      const body=list.length ? list.map(compactTaskItemHtml).join('') : `<div class="empty">${safeEmpty}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary"><span>${safeTitle}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    };
+    return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.');
+  };
+
+  const previousRenderTasksCompact = window.renderTasks;
+  window.renderTasks = renderTasks = function(){
+    installCompactTaskListAndSectorAssigneeStyle();
+    if(typeof previousRenderTasksCompact === 'function'){
+      return previousRenderTasksCompact.apply(this, arguments);
+    }
+  };
+
+  const previousPermittedAssigneeUsersSectorWide = window.permittedAssigneeUsers;
+  window.permittedAssigneeUsers = permittedAssigneeUsers = function(){
+    let rows = typeof previousPermittedAssigneeUsersSectorWide === 'function'
+      ? (previousPermittedAssigneeUsersSectorWide.apply(this, arguments) || [])
+      : [];
+
+    if(String(state.profile?.role || '') === 'sister_company_ceo') return rows;
+
+    const type = document.getElementById('assignmentType')?.value || 'employees';
+    const sector = document.getElementById('taskTargetSector')?.value || state.profile?.sector_id || '';
+
+    if(type === 'employees' && sector){
+      const sectorUsers = (state.users || []).filter(user =>
+        user && user.is_active !== false &&
+        ALLOWED_SPECIFIC_ASSIGNEE_ROLES.has(String(user.role || '').trim()) &&
+        String(user.sector_id || '') === String(sector)
+      );
+      rows = [...rows, ...sectorUsers];
+    }
+
+    rows = [...new Map(rows.filter(Boolean).map(user => [user.id, user])).values()].sort((a,b)=>{
+      if(a.id === state.profile?.id) return -1;
+      if(b.id === state.profile?.id) return 1;
+      return String(a.name || '').localeCompare(String(b.name || ''),'ar');
+    });
+    return rows;
+  };
+
+  const previousValidateAssignmentSectorWide = window.validateAssignment;
+  window.validateAssignment = validateAssignment = function(type, selected){
+    const selectedUsers = (selected || []).map(id => (state.users || []).find(user => String(user.id) === String(id))).filter(Boolean);
+    const sector = document.getElementById('taskTargetSector')?.value || '';
+    const error = typeof previousValidateAssignmentSectorWide === 'function'
+      ? previousValidateAssignmentSectorWide.apply(this, arguments)
+      : '';
+
+    if(type === 'employees' && error && String(error).includes('القسم المحدد')){
+      const invalidRole = selectedUsers.filter(user => !ALLOWED_SPECIFIC_ASSIGNEE_ROLES.has(String(user.role || '').trim()));
+      if(invalidRole.length) return 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات فقط.';
+      if(sector){
+        const invalidSector = selectedUsers.filter(user => String(user.sector_id || '') !== String(sector));
+        if(invalidSector.length) return 'اختر المسند إليهم من القطاع المحدد فقط.';
+      }
+      return '';
+    }
+    return error;
+  };
+
+  const previousRenderAssigneePickerSectorWide = window.renderAssigneePicker;
+  window.renderAssigneePicker = renderAssigneePicker = function(){
+    if(typeof previousRenderAssigneePickerSectorWide === 'function'){
+      const result = previousRenderAssigneePickerSectorWide.apply(this, arguments);
+      return result;
+    }
+  };
+
+  setTimeout(()=>{
+    try{
+      installCompactTaskListAndSectorAssigneeStyle();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks === 'function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
 </body>
 </html>
 
@@ -20132,5 +20296,209 @@ window.openTaskFromSummary=openTaskFromSummary;
       if($('adminPage') && !$('adminPage').classList.contains('hidden')) renderExternalAssignmentRequests();
     }catch(error){ console.error(error); }
   },0);
+})();
+</script>
+
+
+<script>
+/* === FINAL PATCH: عرض عناوين المهام فقط داخل مجموعات الحالات + إسناد موظفين من كامل القطاع ===
+   - عند فتح مجموعة حالة المهام تظهر عناوين مختصرة فقط.
+   - تفاصيل المهمة لا تظهر إلا بعد الضغط على عنوان المهمة.
+   - عند نوع التكليف "موظفون محددون" تظهر أسماء موظفي القطاع المختار كاملًا، وليس القسم فقط.
+   - لا تغيير على اعتماد الإكمال، الإسناد الخارجي، لوحة الأداء العام، أو الصلاحيات الأخرى.
+*/
+(function(){
+  const POSTPONED_STATUS = 'مؤجلة';
+  const ALLOWED_SPECIFIC_ASSIGNEE_ROLES = new Set(['employee','department_manager','sector_head']);
+
+  function installCompactTaskListAndSectorAssigneeStyle(){
+    let style=document.getElementById('compactTaskListSectorAssigneeFinalStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='compactTaskListSectorAssigneeFinalStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      #tasksList .task-item-details{margin:8px 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;}
+      #tasksList .task-item-details>summary{list-style:none;}
+      #tasksList .task-item-details>summary::-webkit-details-marker{display:none;}
+      #tasksList .task-item-summary{cursor:pointer;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fbf8f5;color:var(--primary2);font-weight:900;}
+      #tasksList .task-item-summary:hover{background:#f4eee8;}
+      #tasksList .task-item-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+      #tasksList .task-item-title strong{white-space:normal;overflow-wrap:anywhere;}
+      #tasksList .task-item-mini-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px;font-weight:700;}
+      #tasksList .task-item-details-body{padding:12px;background:#fff;}
+      #tasksList .task-item-details-body>.task-card{margin-bottom:0;}
+      @media(max-width:700px){#tasksList .task-item-summary{align-items:flex-start;flex-direction:column;}#tasksList .task-item-mini-meta{justify-content:flex-start;}}
+    `;
+  }
+
+  function taskStatusForCompactList(task){
+    if(String(task?.status || '').trim() === POSTPONED_STATUS) return POSTPONED_STATUS;
+    if(String(task?.status || '').trim() === 'مكتملة') return 'مكتملة';
+    if(typeof window.isLate === 'function' && window.isLate(task)) return 'متأخرة';
+    return 'قيد التنفيذ';
+  }
+
+  function sortTaskRows(rows){
+    return [...(rows || [])].sort((a,b)=>{
+      const ad=a?.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b?.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime();
+    });
+  }
+
+  function compactTaskItemHtml(task){
+    const assignees = typeof getTaskAssignees === 'function' ? getTaskAssignees(task.id) : [];
+    const assigneeText = assignees.map(user=>user.name).join('، ') || nameOfUser(task.primary_responsible_id) || '—';
+    const status = taskStatusForCompactList(task);
+    const due = typeof formatDate === 'function' ? formatDate(task.due_date) : (task.due_date || '—');
+    const title = typeof escapeHtml === 'function' ? escapeHtml(task.title || 'بدون عنوان') : (task.title || 'بدون عنوان');
+    const safeAssignees = typeof escapeHtml === 'function' ? escapeHtml(assigneeText) : assigneeText;
+    const safeStatus = typeof escapeHtml === 'function' ? escapeHtml(status) : status;
+    const safeDue = typeof escapeHtml === 'function' ? escapeHtml(due) : due;
+    const fullCard = typeof taskCard === 'function' ? taskCard(task) : `<div class="task-card">${title}</div>`;
+    return `<details class="task-item-details" id="task-item-details-${task.id}">
+      <summary class="task-item-summary">
+        <span class="task-item-title"><strong>${title}</strong></span>
+        <span class="task-item-mini-meta"><span>${safeStatus}</span><span>المسند إليه: ${safeAssignees}</span><span>الاستحقاق: ${safeDue}</span></span>
+      </summary>
+      <div class="task-item-details-body">${fullCard}</div>
+    </details>`;
+  }
+
+  window.taskStatusSectionsHtml = function(rows){
+    installCompactTaskListAndSectorAssigneeStyle();
+    const source=rows || [];
+    const groups={
+      progress:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='قيد التنفيذ')),
+      late:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='متأخرة')),
+      completed:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)==='مكتملة')),
+      postponed:sortTaskRows(source.filter(task=>taskStatusForCompactList(task)===POSTPONED_STATUS))
+    };
+    const renderGroup=(title,list,emptyText)=>{
+      const safeTitle = typeof escapeHtml === 'function' ? escapeHtml(title) : title;
+      const safeEmpty = typeof escapeHtml === 'function' ? escapeHtml(emptyText) : emptyText;
+      const body=list.length ? list.map(compactTaskItemHtml).join('') : `<div class="empty">${safeEmpty}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary"><span>${safeTitle}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    };
+    return renderGroup('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      renderGroup('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      renderGroup('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      renderGroup('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.');
+  };
+
+  const previousRenderTasksCompact = window.renderTasks;
+  window.renderTasks = renderTasks = function(){
+    installCompactTaskListAndSectorAssigneeStyle();
+    if(typeof previousRenderTasksCompact === 'function'){
+      return previousRenderTasksCompact.apply(this, arguments);
+    }
+  };
+
+  const previousPermittedAssigneeUsersSectorWide = window.permittedAssigneeUsers;
+  window.permittedAssigneeUsers = permittedAssigneeUsers = function(){
+    let rows = typeof previousPermittedAssigneeUsersSectorWide === 'function'
+      ? (previousPermittedAssigneeUsersSectorWide.apply(this, arguments) || [])
+      : [];
+
+    if(String(state.profile?.role || '') === 'sister_company_ceo') return rows;
+
+    const type = document.getElementById('assignmentType')?.value || 'employees';
+    const sector = document.getElementById('taskTargetSector')?.value || state.profile?.sector_id || '';
+
+    if(type === 'employees' && sector){
+      const sectorUsers = (state.users || []).filter(user =>
+        user && user.is_active !== false &&
+        ALLOWED_SPECIFIC_ASSIGNEE_ROLES.has(String(user.role || '').trim()) &&
+        String(user.sector_id || '') === String(sector)
+      );
+      rows = [...rows, ...sectorUsers];
+    }
+
+    rows = [...new Map(rows.filter(Boolean).map(user => [user.id, user])).values()].sort((a,b)=>{
+      if(a.id === state.profile?.id) return -1;
+      if(b.id === state.profile?.id) return 1;
+      return String(a.name || '').localeCompare(String(b.name || ''),'ar');
+    });
+    return rows;
+  };
+
+  const previousValidateAssignmentSectorWide = window.validateAssignment;
+  window.validateAssignment = validateAssignment = function(type, selected){
+    const selectedUsers = (selected || []).map(id => (state.users || []).find(user => String(user.id) === String(id))).filter(Boolean);
+    const sector = document.getElementById('taskTargetSector')?.value || '';
+    const error = typeof previousValidateAssignmentSectorWide === 'function'
+      ? previousValidateAssignmentSectorWide.apply(this, arguments)
+      : '';
+
+    if(type === 'employees' && error && String(error).includes('القسم المحدد')){
+      const invalidRole = selectedUsers.filter(user => !ALLOWED_SPECIFIC_ASSIGNEE_ROLES.has(String(user.role || '').trim()));
+      if(invalidRole.length) return 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات فقط.';
+      if(sector){
+        const invalidSector = selectedUsers.filter(user => String(user.sector_id || '') !== String(sector));
+        if(invalidSector.length) return 'اختر المسند إليهم من القطاع المحدد فقط.';
+      }
+      return '';
+    }
+    return error;
+  };
+
+  const previousRenderAssigneePickerSectorWide = window.renderAssigneePicker;
+  window.renderAssigneePicker = renderAssigneePicker = function(){
+    if(typeof previousRenderAssigneePickerSectorWide === 'function'){
+      const result = previousRenderAssigneePickerSectorWide.apply(this, arguments);
+      return result;
+    }
+  };
+
+  setTimeout(()=>{
+    try{
+      installCompactTaskListAndSectorAssigneeStyle();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks === 'function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
+
+<script>
+/* === HOTFIX: السماح باختيار أكثر من موظف من أقسام مختلفة داخل نفس القطاع ===
+   السبب: العرض صار يجيب موظفي القطاع كاملًا، لكن validateAssignment القديمة كانت لا تزال ترفض
+   بعض الاختيارات إذا كان المستخدم مدير قسم/موظف أو إذا اختلفت الأقسام.
+   هذا التصحيح يخص نوع التكليف "موظفون محددون" فقط.
+*/
+(function(){
+  const ALLOWED_SPECIFIC_ASSIGNEE_ROLES_FIXED = new Set(['employee','department_manager','sector_head']);
+  const previousValidateAssignmentMultiAssigneeSectorFix = window.validateAssignment;
+
+  function localUserById(userId){
+    return (state.users || []).find(user => String(user.id) === String(userId)) || null;
+  }
+
+  window.validateAssignment = validateAssignment = function(type, selected){
+    if(type !== 'employees'){
+      return typeof previousValidateAssignmentMultiAssigneeSectorFix === 'function'
+        ? (previousValidateAssignmentMultiAssigneeSectorFix.apply(this, arguments) || '')
+        : '';
+    }
+
+    const selectedIds = [...new Set((selected || []).filter(Boolean).map(String))];
+    if(!selectedIds.length) return 'اختر مستخدمًا واحدًا على الأقل.';
+
+    const selectedUsers = selectedIds.map(localUserById).filter(Boolean);
+    if(selectedUsers.length !== selectedIds.length) return 'تعذر التحقق من أحد المستخدمين المختارين.';
+
+    const inactiveUsers = selectedUsers.filter(user => user.is_active === false);
+    if(inactiveUsers.length) return 'لا يمكن الإسناد لمستخدم غير نشط.';
+
+    const invalidRole = selectedUsers.filter(user => !ALLOWED_SPECIFIC_ASSIGNEE_ROLES_FIXED.has(String(user.role || '').trim()));
+    if(invalidRole.length) return 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات فقط.';
+
+    // لا نقيّد موظفين محددين بالقسم. إذا كانوا داخل نفس القطاع يظهرون مباشرة.
+    // وإذا كان أحدهم من قطاع آخر يتعامل معه منطق طلب الإسناد الخارجي قبل ظهوره عنده.
+    return '';
+  };
 })();
 </script>
