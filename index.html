@@ -20557,3 +20557,127 @@ window.openTaskFromSummary=openTaskFromSummary;
   };
 })();
 </script>
+
+<script>
+/* === HOTFIX: منع تكرار تنفيذ الأزرار الحساسة في اللوحة ===
+   يطبّق نفس فكرة زر حفظ المهمة على الأزرار التي قد تسبب إنشاء/إضافة/إرسال/اعتماد مكرر، مثل إضافة التعليق والاستيراد والاعتمادات.
+   لا يغير SQL ولا الصلاحيات ولا منطق الاعتمادات؛ فقط يمنع الضغط المتكرر أثناء تنفيذ العملية.
+*/
+(function(){
+  const runningActions = new Set();
+
+  const protectedActions = [
+    ['addComment', 'جاري إضافة التعليق...', 'جاري إضافة التعليق، فضلاً انتظر حتى تكتمل العملية.'],
+    ['submitJoinRequest', 'جاري إرسال الطلب...', 'جاري إرسال طلب الانضمام، فضلاً انتظر.'],
+    ['completePasswordSetup', 'جاري الحفظ...', 'جاري حفظ كلمة المرور، فضلاً انتظر.'],
+    ['sendPasswordRecovery', 'جاري الإرسال...', 'جاري إرسال رابط الاستعادة، فضلاً انتظر.'],
+    ['resetPassword', 'جاري الإرسال...', 'جاري إرسال رابط الاستعادة، فضلاً انتظر.'],
+    ['inviteUserByAdmin', 'جاري الإضافة...', 'جاري إضافة المستخدم، فضلاً انتظر.'],
+    ['importUsersFromExcel', 'جاري الحفظ...', 'جاري حفظ المستخدمين، فضلاً انتظر.'],
+    ['importBoardUsersFromExcel', 'جاري الحفظ...', 'جاري حفظ المستخدمين، فضلاً انتظر.'],
+    ['importBoardTasksFromExcel', 'جاري الاستيراد...', 'جاري استيراد المهام، فضلاً انتظر.'],
+    ['sendPasswordSetupNotification', 'جاري الإرسال...', 'جاري إرسال الإشعار، فضلاً انتظر.'],
+    ['sendPendingUserInvites', 'جاري الإرسال...', 'جاري إرسال الإشعارات، فضلاً انتظر.'],
+    ['requestTaskTransfer', 'جاري إرسال الطلب...', 'جاري إرسال طلب التحويل، فضلاً انتظر.'],
+    ['directTransferTask', 'جاري التحويل...', 'جاري تحويل المهمة، فضلاً انتظر.'],
+    ['approveTransferRequest', 'جاري الاعتماد...', 'جاري اعتماد التحويل، فضلاً انتظر.'],
+    ['rejectTransferRequest', 'جاري الرفض...', 'جاري رفض التحويل، فضلاً انتظر.'],
+    ['approveRequest', 'جاري الاعتماد...', 'جاري اعتماد طلب الانضمام، فضلاً انتظر.'],
+    ['rejectRequest', 'جاري الرفض...', 'جاري رفض طلب الانضمام، فضلاً انتظر.'],
+    ['approveSubmittedTask', 'جاري الاعتماد...', 'جاري اعتماد المهمة، فضلاً انتظر.'],
+    ['rejectSubmittedTask', 'جاري الرفض...', 'جاري رفض المهمة، فضلاً انتظر.'],
+    ['approveTaskCompletion', 'جاري الاعتماد...', 'جاري اعتماد الإكمال، فضلاً انتظر.'],
+    ['rejectTaskCompletion', 'جاري الرفض...', 'جاري رفض الإكمال، فضلاً انتظر.'],
+    ['deleteTask', 'جاري الحذف...', 'جاري حذف المهمة، فضلاً انتظر.'],
+    ['deleteTaskComment', 'جاري الحذف...', 'جاري حذف التعليق، فضلاً انتظر.'],
+    ['archiveUser', 'جاري التعطيل...', 'جاري تعطيل المستخدم، فضلاً انتظر.'],
+    ['deleteUserByAdmin', 'جاري الحذف...', 'جاري حذف المستخدم، فضلاً انتظر.'],
+    ['saveUserEdit', 'جاري الحفظ...', 'جاري حفظ التعديلات، فضلاً انتظر.'],
+    ['saveProductivityEvaluationForEmployee', 'جاري الحفظ...', 'جاري حفظ تقييم الموظف، فضلاً انتظر.'],
+    ['toggleJoinRequestsEnabled', 'جاري التحديث...', 'جاري تحديث الحالة، فضلاً انتظر.']
+  ];
+
+  function actionKey(name, args){
+    try{
+      return `${name}:${(args || []).map(v => String(v ?? '')).join('|')}`;
+    }catch(e){
+      return name;
+    }
+  }
+
+  function clickedButtonForAction(name, args){
+    const evt = window.event;
+    if(evt && evt.target && typeof evt.target.closest === 'function'){
+      const btn = evt.target.closest('button');
+      if(btn && ((btn.getAttribute('onclick') || '').includes(`${name}(`))){
+        return btn;
+      }
+    }
+
+    const firstArg = args && args.length ? String(args[0] ?? '') : '';
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const candidates = buttons.filter(btn => (btn.getAttribute('onclick') || '').includes(`${name}(`));
+    if(firstArg){
+      const exact = candidates.find(btn => (btn.getAttribute('onclick') || '').includes(firstArg));
+      if(exact) return exact;
+    }
+    return candidates[0] || null;
+  }
+
+  function setButtonBusy(button, busyText){
+    if(!button){
+      return function(){};
+    }
+
+    const originalText = button.dataset.guardOriginalText || button.textContent || '';
+    const originalOpacity = button.style.opacity || '';
+    const originalCursor = button.style.cursor || '';
+
+    button.dataset.guardOriginalText = originalText;
+    button.disabled = true;
+    button.textContent = busyText || 'جاري التنفيذ...';
+    button.style.opacity = '.75';
+    button.style.cursor = 'not-allowed';
+
+    return function restoreButton(){
+      if(!button || !button.isConnected) return;
+      button.disabled = false;
+      button.textContent = button.dataset.guardOriginalText || originalText;
+      button.style.opacity = originalOpacity;
+      button.style.cursor = originalCursor;
+    };
+  }
+
+  function wrapAction(name, busyText, duplicateMessage){
+    const original = window[name];
+    if(typeof original !== 'function' || original.__duplicateActionGuardApplied) return;
+
+    const wrapped = async function(){
+      const args = Array.from(arguments);
+      const key = actionKey(name, args);
+
+      if(runningActions.has(key)){
+        if(typeof showToast === 'function') showToast(duplicateMessage || 'جاري تنفيذ العملية، فضلاً انتظر.', 'info', 3500);
+        return;
+      }
+
+      runningActions.add(key);
+      const button = clickedButtonForAction(name, args);
+      const restoreButton = setButtonBusy(button, busyText);
+
+      try{
+        return await original.apply(this, args);
+      }finally{
+        runningActions.delete(key);
+        restoreButton();
+      }
+    };
+
+    wrapped.__duplicateActionGuardApplied = true;
+    wrapped.__duplicateActionGuardOriginal = original;
+    window[name] = wrapped;
+  }
+
+  protectedActions.forEach(item => wrapAction(item[0], item[1], item[2]));
+})();
+</script>
