@@ -20502,3 +20502,58 @@ window.openTaskFromSummary=openTaskFromSummary;
   };
 })();
 </script>
+
+
+<script>
+/* === HOTFIX: منع حفظ المهمة مرتين عند الضغط المتكرر على زر حفظ المهمة ===
+   - يعطل زر حفظ المهمة فور الضغط عليه.
+   - يغير النص إلى "جاري الحفظ..." أثناء المعالجة.
+   - يتجاهل أي ضغطة ثانية حتى تنتهي عملية الحفظ أو يظهر خطأ.
+   - لا يغير الصلاحيات أو SQL أو منطق الاعتمادات.
+*/
+(function(){
+  let isTaskSaveInProgress = false;
+
+  function getTaskSaveButton(){
+    const buttons = Array.from(document.querySelectorAll('button'));
+    return buttons.find(button => {
+      const onclick = button.getAttribute('onclick') || '';
+      const text = (button.textContent || '').trim();
+      return onclick.includes('saveTask()') && (text.includes('حفظ المهمة') || text.includes('جاري الحفظ'));
+    }) || document.querySelector('#taskModal .actions .btn-primary');
+  }
+
+  const previousSaveTaskPreventDoubleSubmit = window.saveTask || saveTask;
+
+  window.saveTask = saveTask = async function(){
+    if(isTaskSaveInProgress){
+      if(typeof showToast === 'function') showToast('جاري حفظ المهمة، فضلاً انتظر حتى تكتمل العملية.','info',3500);
+      return;
+    }
+
+    isTaskSaveInProgress = true;
+    const saveButton = getTaskSaveButton();
+    const originalText = saveButton ? (saveButton.dataset.originalText || saveButton.textContent || 'حفظ المهمة') : 'حفظ المهمة';
+
+    if(saveButton){
+      saveButton.dataset.originalText = originalText;
+      saveButton.disabled = true;
+      saveButton.textContent = 'جاري الحفظ...';
+      saveButton.style.opacity = '.75';
+      saveButton.style.cursor = 'not-allowed';
+    }
+
+    try{
+      return await previousSaveTaskPreventDoubleSubmit.apply(this, arguments);
+    }finally{
+      isTaskSaveInProgress = false;
+      if(saveButton){
+        saveButton.disabled = false;
+        saveButton.textContent = saveButton.dataset.originalText || originalText || 'حفظ المهمة';
+        saveButton.style.opacity = '';
+        saveButton.style.cursor = '';
+      }
+    }
+  };
+})();
+</script>
