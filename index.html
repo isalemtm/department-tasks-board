@@ -20504,6 +20504,515 @@ window.openTaskFromSummary=openTaskFromSummary;
 </script>
 
 
+
+<script>
+/* === PHASE 2: إكمال مستقل لكل مسند إليه + نطاق ظهور التعليقات ===
+   يعتمد على أعمدة task_assignees و task_comments التي تم إنشاؤها في المرحلة الأولى.
+   - لا تتحول المهمة الجماعية كلها إلى مكتملة عند إكمال شخص واحد.
+   - كل مسند إليه له حالة مستقلة.
+   - التأخير لا يُحسب على من اكتملت حصته.
+   - التعليق في المهام الجماعية يمكن أن يكون للجميع أو للمسؤول فقط.
+*/
+(function(){
+  const STATUS_DONE = 'مكتملة';
+  const STATUS_PROGRESS = 'قيد التنفيذ';
+  const STATUS_POSTPONED = 'مؤجلة';
+  const COMPLETION_PENDING = 'pending';
+  const COMPLETION_APPROVED = 'approved';
+  const COMPLETION_REJECTED = 'rejected';
+  const COMPLETION_NONE = 'none';
+
+  function nowIso(){ return new Date().toISOString(); }
+  function eq(a,b){ return String(a || '') === String(b || ''); }
+  function safeAssigneeRows(taskId){ return (state.assignees || []).filter(row => eq(row.task_id, taskId)); }
+  function safeUser(userId){ return (state.users || []).find(user => eq(user.id, userId)) || null; }
+  function safeTask(taskId){ return (state.tasks || []).find(task => eq(task.id, taskId)) || null; }
+  function currentUserId(){ return state.profile?.id || ''; }
+  function userAssigneeRow(taskId, userId=currentUserId()){
+    if(!taskId || !userId) return null;
+    return safeAssigneeRows(taskId).find(row => eq(row.user_id, userId)) || null;
+  }
+  function rowIsDone(row){
+    return !!row && (
+      String(row.assignee_status || '').trim() === STATUS_DONE ||
+      String(row.individual_completion_status || '').trim() === COMPLETION_APPROVED ||
+      !!row.completed_at
+    );
+  }
+  function rowIsPending(row){ return !!row && String(row.individual_completion_status || '').trim() === COMPLETION_PENDING; }
+  function rowIsRejected(row){ return !!row && String(row.individual_completion_status || '').trim() === COMPLETION_REJECTED; }
+  function rowIsPostponed(row){ return !!row && String(row.assignee_status || '').trim() === STATUS_POSTPONED; }
+  function taskDueDateIsPast(task){
+    if(!task?.due_date) return false;
+    const today=new Date(); today.setHours(0,0,0,0);
+    const due=new Date(task.due_date); due.setHours(0,0,0,0);
+    return !isNaN(due) && due < today;
+  }
+  function taskRowsOrLegacy(task){
+    const rows=safeAssigneeRows(task?.id);
+    return rows.length ? rows : [];
+  }
+  function allTaskAssigneesDone(task){
+    const rows=taskRowsOrLegacy(task);
+    if(rows.length) return rows.every(rowIsDone);
+    return String(task?.status || '').trim() === STATUS_DONE;
+  }
+  function anyTaskAssigneePending(task){ return taskRowsOrLegacy(task).some(rowIsPending); }
+  function anyTaskAssigneeOpen(task){
+    const rows=taskRowsOrLegacy(task);
+    if(!rows.length) return String(task?.status || '').trim() !== STATUS_DONE;
+    return rows.some(row => !rowIsDone(row) && !rowIsPostponed(row));
+  }
+  function taskIsLateForViewer(task){
+    if(!taskDueDateIsPast(task)) return false;
+    const myRow=userAssigneeRow(task?.id);
+    if(myRow) return !rowIsDone(myRow) && !rowIsPostponed(myRow);
+    return !allTaskAssigneesDone(task) && anyTaskAssigneeOpen(task);
+  }
+  function rowStatusLabel(row, task){
+    if(rowIsPending(row)) return 'مكتملة بانتظار الاعتماد';
+    if(rowIsDone(row)) return 'مكتملة';
+    if(rowIsRejected(row)) return 'رفض الإكمال';
+    if(rowIsPostponed(row)) return 'مؤجلة';
+    if(taskDueDateIsPast(task)) return 'متأخرة';
+    return 'قيد التنفيذ';
+  }
+  function rowStatusChip(row, task){
+    const label=rowStatusLabel(row, task);
+    let cls='progress';
+    if(label === 'مكتملة') cls='done';
+    if(label === 'متأخرة' || label === 'رفض الإكمال') cls='late';
+    if(label === 'مؤجلة') cls='medium';
+    return `<span class="chip ${cls}">${escapeHtml(label)}</span>`;
+  }
+  function taskStatusForViewer(task){
+    const myRow=userAssigneeRow(task?.id);
+    if(myRow){
+      const label=rowStatusLabel(myRow, task);
+      if(label === 'مكتملة') return 'مكتملة';
+      if(label === 'متأخرة') return 'متأخرة';
+      if(label === 'مؤجلة') return 'مؤجلة';
+      if(label === 'مكتملة بانتظار الاعتماد') return 'بانتظار اعتماد الإنجاز';
+      return 'قيد التنفيذ';
+    }
+    if(allTaskAssigneesDone(task)) return 'مكتملة';
+    if(anyTaskAssigneePending(task)) return 'بانتظار اعتماد جزئي';
+    if(taskIsLateForViewer(task)) return 'متأخرة';
+    if(String(task?.status || '').trim() === STATUS_POSTPONED) return 'مؤجلة';
+    return 'قيد التنفيذ';
+  }
+
+  const previousIsLateIndividual = window.isLate;
+  window.isLate = isLate = function(task){
+    if(task && task.id && safeAssigneeRows(task.id).length){
+      return taskIsLateForViewer(task);
+    }
+    return typeof previousIsLateIndividual === 'function' ? previousIsLateIndividual(task) : taskDueDateIsPast(task);
+  };
+
+  window.taskIsCompletionPending = taskIsCompletionPending = function(task){
+    if(task && safeAssigneeRows(task.id).some(rowIsPending)) return true;
+    return task?.completion_status === COMPLETION_PENDING;
+  };
+
+  window.taskDisplayStatus = taskDisplayStatus = function(task){
+    return taskStatusForViewer(task);
+  };
+
+  window.workflowStatusChip = workflowStatusChip = function(task){
+    const status=taskStatusForViewer(task);
+    if(status === 'مكتملة') return '<span class="chip done">مكتملة</span>';
+    if(status === 'متأخرة') return '<span class="chip late">متأخرة</span>';
+    if(status === 'مؤجلة') return '<span class="chip medium">مؤجلة</span>';
+    if(status.includes('بانتظار')) return '<span class="chip progress">'+escapeHtml(status)+'</span>';
+    return '<span class="chip progress">قيد التنفيذ</span>';
+  };
+
+  function canSeeResponsibleOnlyComment(comment, task){
+    const me=currentUserId();
+    if(!me) return false;
+    if(eq(comment.user_id, me)) return true;
+    if(eq(comment.visible_to_user_id, me)) return true;
+    if(eq(task?.created_by, me)) return true;
+    if(eq(task?.primary_responsible_id, me)) return true;
+    if(typeof canReviewTask === 'function' && canReviewTask(task)) return true;
+    return false;
+  }
+
+  window.getTaskComments = getTaskComments = function(taskId){
+    const task=safeTask(taskId);
+    return (state.comments || []).filter(comment => {
+      if(!eq(comment.task_id, taskId)) return false;
+      const visibility=String(comment.visibility || 'all').trim();
+      if(visibility === 'all') return true;
+      if(visibility === 'responsible_only') return canSeeResponsibleOnlyComment(comment, task);
+      return true;
+    });
+  };
+
+  function renderAssigneeProgress(task){
+    const rows=safeAssigneeRows(task.id);
+    if(rows.length <= 1) return '';
+    const items=rows.map(row => {
+      const user=safeUser(row.user_id);
+      return `<div class="assignee-progress-item"><span>${escapeHtml(user?.name || '—')}</span>${rowStatusChip(row, task)}</div>`;
+    }).join('');
+    return `<div class="assignee-progress-box"><b>حالة المسند إليهم</b><div class="assignee-progress-grid">${items}</div></div>`;
+  }
+
+  function installIndividualCompletionStyle(){
+    let style=document.getElementById('individualCompletionPhase2Style');
+    if(!style){
+      style=document.createElement('style');
+      style.id='individualCompletionPhase2Style';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      .assignee-progress-box{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fbf8f5;}
+      .assignee-progress-box>b{display:block;margin-bottom:8px;color:var(--primary2);}
+      .assignee-progress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;}
+      .assignee-progress-item{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 10px;}
+      .comment-visibility-wrap{min-width:190px;}
+      .comment-private-note{display:inline-block;margin-inline-start:8px;color:var(--muted);font-size:12px;}
+    `;
+  }
+
+  function commentVisibilityControl(task){
+    if(safeAssigneeRows(task.id).length <= 1) return '';
+    return `<select id="commentVisibility-${task.id}" class="comment-visibility-wrap"><option value="all">التعليق يظهر للجميع</option><option value="responsible_only">التعليق للمسؤول فقط</option></select>`;
+  }
+  function renderCommentItemIndividual(comment){
+    const privateNote=String(comment.visibility || 'all') === 'responsible_only' ? '<span class="comment-private-note">تعليق خاص</span>' : '';
+    if(typeof renderCommentItem === 'function'){
+      const html=renderCommentItem(comment);
+      return privateNote ? html.replace('</div><div>', `${privateNote}</div><div>`) : html;
+    }
+    return `<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(comment.user_id))}</span><span>${formatDate(comment.created_at)} ${privateNote}</span></div><div>${escapeHtml(comment.comment_text)}</div>${renderAttachments(comment.attachment_urls,comment.attachment_names)}</div>`;
+  }
+
+  function currentAssigneeStatusControl(task){
+    const myRow=userAssigneeRow(task.id);
+    if(!myRow){
+      if(!safeAssigneeRows(task.id).length){
+        const currentSelectValue = task.status === STATUS_DONE ? STATUS_DONE : STATUS_PROGRESS;
+        return `<select onchange="changeStatus('${task.id}',this.value)"><option value="${STATUS_PROGRESS}" ${currentSelectValue===STATUS_PROGRESS?'selected':''}>قيد التنفيذ</option><option value="${STATUS_DONE}" ${currentSelectValue===STATUS_DONE?'selected':''}>مكتملة</option></select>`;
+      }
+      return '';
+    }
+    if(rowIsDone(myRow)) return '<span class="chip done">تم تنفيذ حصتك</span>';
+    if(rowIsPending(myRow)) return '<span class="chip progress">حصتك بانتظار الاعتماد</span>';
+    return `<select onchange="changeStatus('${task.id}',this.value)"><option value="${STATUS_PROGRESS}" selected>قيد التنفيذ</option><option value="${STATUS_DONE}">مكتملة</option></select>`;
+  }
+
+  window.taskCard = taskCard = function(task){
+    installIndividualCompletionStyle();
+    const ass=getTaskAssignees(task.id).map(user=>user.name).join('، ')||'—';
+    const comments=getTaskComments(task.id);
+    const editBtn=(typeof canEditTask==='function' && canEditTask(task))?`<button class="btn btn-info btn-sm" onclick="editTask('${task.id}')">تعديل</button>`:'';
+    const completionNote = anyTaskAssigneePending(task) ? '<div class="notice info show" style="margin-top:10px;">يوجد إكمال بانتظار الاعتماد لأحد المسند إليهم.</div>' : '';
+    const statusControl=currentAssigneeStatusControl(task);
+    return `<div class="task-card ${isDueSoon(task)?'due-soon':''}" id="task-card-${task.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(task.title)}</div><div class="meta">المسند منه: ${escapeHtml(nameOfUser(task.created_by))}<br>المسند إليه / إليهم: ${escapeHtml(ass)}<br>المسؤول عن المهمة: ${escapeHtml(nameOfUser(task.primary_responsible_id))}<br>تاريخ الاستحقاق: ${formatDate(task.due_date)} ${isDueSoon(task)?`<span class="due-soon-label">${getDueSoonLabel(task)}</span>`:''}</div></div><div class="actions">${workflowStatusChip(task)} ${priorityChip(task.priority)}</div></div><div class="task-desc">${escapeHtml(task.description||'')}</div>${renderAssigneeProgress(task)}${completionNote}${renderAttachments(task.attachment_urls,task.attachment_names)}<div class="comment-box"><b>التعليقات</b>${comments.length?comments.map(renderCommentItemIndividual).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${task.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${task.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${task.id}')">إضافة تعليق</button>${commentVisibilityControl(task)}${statusControl}${canRequestTransferTask(task)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${task.id}')">${canDirectTransferTask(task)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(task)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${task.id}')">حذف</button>`:''}</div>${renderTransferChooser(task)}</div></div>`;
+  };
+
+  async function refreshAfterIndividualCompletion(){
+    await loadAll();
+    if(typeof setupFilters === 'function') setupFilters();
+    if(typeof renderTasks === 'function') renderTasks();
+    if(typeof renderDashboard === 'function') renderDashboard();
+    if(document.getElementById('adminPage') && !document.getElementById('adminPage').classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+  }
+
+  async function updateTaskGlobalCompletionFromRows(taskId, updatedUserId, statusForUpdatedRow){
+    const task=safeTask(taskId);
+    if(!task) return;
+    const rows=safeAssigneeRows(taskId).map(row => {
+      if(eq(row.user_id, updatedUserId)) return {...row, assignee_status: statusForUpdatedRow, individual_completion_status: COMPLETION_APPROVED, completed_at: nowIso()};
+      return row;
+    });
+    if(rows.length && rows.every(rowIsDone)){
+      await supabaseClient.from('tasks').update({
+        status: STATUS_DONE,
+        completion_status: COMPLETION_APPROVED,
+        completion_reviewed_by: state.profile.id,
+        completion_reviewed_at: nowIso()
+      }).eq('id', taskId);
+    }else if(task.status === STATUS_DONE){
+      await supabaseClient.from('tasks').update({status: STATUS_PROGRESS, completion_status: COMPLETION_NONE}).eq('id', taskId);
+    }
+  }
+
+  window.changeStatus = changeStatus = async function(taskId,status){
+    try{
+      const task=safeTask(taskId);
+      if(!task) return showToast('تعذر العثور على المهمة.','error');
+      const myRow=userAssigneeRow(taskId);
+      if(myRow){
+        if(status === STATUS_DONE){
+          const autoApprove = (typeof canApproveCompletion === 'function' && canApproveCompletion(task) && currentRole() !== 'employee');
+          const payload = autoApprove ? {
+            assignee_status: STATUS_DONE,
+            individual_completion_status: COMPLETION_APPROVED,
+            completion_requested_at: nowIso(),
+            completion_requested_by: currentUserId(),
+            completion_reviewed_at: nowIso(),
+            completion_reviewed_by: currentUserId(),
+            completed_at: nowIso()
+          } : {
+            assignee_status: STATUS_PROGRESS,
+            individual_completion_status: COMPLETION_PENDING,
+            completion_requested_at: nowIso(),
+            completion_requested_by: currentUserId()
+          };
+          const {error}=await supabaseClient.from('task_assignees').update(payload).eq('task_id',taskId).eq('user_id',currentUserId());
+          if(error) throw error;
+          if(autoApprove) await updateTaskGlobalCompletionFromRows(taskId, currentUserId(), STATUS_DONE);
+          else await supabaseClient.from('tasks').update({completion_status: COMPLETION_NONE, status: STATUS_PROGRESS}).eq('id', taskId).neq('status', STATUS_POSTPONED);
+          await refreshAfterIndividualCompletion();
+          showToast(autoApprove ? 'تم اعتماد إكمال حصتك من المهمة.' : 'تم إرسال طلب اعتماد إكمال حصتك من المهمة.','success',7000);
+          return;
+        }
+        const {error}=await supabaseClient.from('task_assignees').update({
+          assignee_status: STATUS_PROGRESS,
+          individual_completion_status: COMPLETION_NONE,
+          completion_requested_at: null,
+          completion_requested_by: null,
+          completion_reviewed_at: null,
+          completion_reviewed_by: null,
+          completed_at: null,
+          completion_note: null
+        }).eq('task_id',taskId).eq('user_id',currentUserId());
+        if(error) throw error;
+        await supabaseClient.from('tasks').update({status: STATUS_PROGRESS, completion_status: COMPLETION_NONE}).eq('id', taskId).neq('status', STATUS_POSTPONED);
+        await refreshAfterIndividualCompletion();
+        showToast('تم تحديث حالة حصتك من المهمة.','success');
+        return;
+      }
+
+      // مسار احتياطي للمهام القديمة التي لا تحتوي على صفوف مسند إليهم.
+      if(status === STATUS_DONE){
+        const {error}=await supabaseClient.from('tasks').update({
+          status: STATUS_DONE,
+          completion_status: COMPLETION_APPROVED,
+          completion_requested_by: currentUserId(),
+          completion_requested_at: nowIso(),
+          completion_reviewed_by: currentUserId(),
+          completion_reviewed_at: nowIso()
+        }).eq('id',taskId);
+        if(error) throw error;
+      }else{
+        const {error}=await supabaseClient.from('tasks').update({status: STATUS_PROGRESS, completion_status: COMPLETION_NONE}).eq('id',taskId);
+        if(error) throw error;
+      }
+      await refreshAfterIndividualCompletion();
+      showToast('تم تحديث حالة المهمة.','success');
+    }catch(error){ console.error(error); showToast(error.message||'تعذر تحديث حالة المهمة.','error',7000); }
+  };
+
+  function individualCompletionRequests(){
+    const tasks=(typeof visibleTasks === 'function' ? visibleTasks() : (state.tasks || []));
+    const taskMap=new Map(tasks.map(task => [String(task.id), task]));
+    return (state.assignees || [])
+      .filter(row => rowIsPending(row))
+      .map(row => ({row, task: taskMap.get(String(row.task_id)), user: safeUser(row.user_id)}))
+      .filter(item => item.task && item.user)
+      .filter(item => typeof canApproveCompletion === 'function' ? canApproveCompletion(item.task) : true);
+  }
+
+  window.getCompletionRequests = getCompletionRequests = function(){ return individualCompletionRequests(); };
+
+  window.renderCompletionRequests = renderCompletionRequests = function(){
+    if(typeof ensureCompletionApprovalDom === 'function') ensureCompletionApprovalDom();
+    const box=document.getElementById('completionRequestsList');
+    if(!box) return;
+    const rows=individualCompletionRequests();
+    if(!rows.length){ box.innerHTML='<div class="empty">لا توجد حصص مهام مكتملة بانتظار الاعتماد حاليًا.</div>'; return; }
+    box.innerHTML=rows.map(item=>`<div class="task-card"><div class="task-top"><div><div class="task-title">${escapeHtml(item.task.title||'بدون عنوان')}</div><div class="meta">طالب الإكمال: ${escapeHtml(item.user.name||'—')}<br>المسؤول عن المهمة: ${escapeHtml(nameOfUser(item.task.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(item.task.target_sector_id||item.task.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(item.task.target_department_id||item.task.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(item.task.due_date)}<br>تاريخ طلب الإكمال: ${formatDate(item.row.completion_requested_at)}</div></div><div class="actions"><span class="chip progress">بانتظار اعتماد إكمال ${escapeHtml(item.user.name||'')}</span>${priorityChip(item.task.priority)}</div></div><div class="task-desc">${escapeHtml(item.task.description||'')}</div><div class="actions"><button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${item.task.id}','${item.user.id}')">اعتماد إكمال هذا الشخص</button><button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${item.task.id}','${item.user.id}')">رفض إكمال هذا الشخص</button></div></div>`).join('');
+  };
+
+  window.approveTaskCompletion = approveTaskCompletion = async function(taskId,userId){
+    try{
+      const task=safeTask(taskId);
+      if(!task || !(typeof canApproveCompletion === 'function' && canApproveCompletion(task))) return showToast('ليست لديك صلاحية اعتماد إكمال هذه المهمة.','error');
+      const targetUserId=userId || task.completion_requested_by || task.primary_responsible_id;
+      if(!targetUserId) return showToast('تعذر تحديد الشخص المطلوب اعتماد إكماله.','error');
+      const {error}=await supabaseClient.from('task_assignees').update({
+        assignee_status: STATUS_DONE,
+        individual_completion_status: COMPLETION_APPROVED,
+        completion_reviewed_at: nowIso(),
+        completion_reviewed_by: currentUserId(),
+        completed_at: nowIso()
+      }).eq('task_id',taskId).eq('user_id',targetUserId);
+      if(error) throw error;
+      await updateTaskGlobalCompletionFromRows(taskId, targetUserId, STATUS_DONE);
+      await refreshAfterIndividualCompletion();
+      showToast('تم اعتماد إكمال هذا الشخص من المهمة.','success');
+    }catch(error){ console.error(error); showToast(error.message||'تعذر اعتماد الإكمال.','error',7000); }
+  };
+
+  window.rejectTaskCompletion = rejectTaskCompletion = async function(taskId,userId){
+    try{
+      const task=safeTask(taskId);
+      if(!task || !(typeof canApproveCompletion === 'function' && canApproveCompletion(task))) return showToast('ليست لديك صلاحية رفض إكمال هذه المهمة.','error');
+      const ok=await askConfirm({title:'رفض إكمال المهمة',message:'سيعود هذا الشخص إلى قيد التنفيذ وتبقى المهمة لديه. هل تريد المتابعة؟',okText:'رفض الإكمال',danger:true});
+      if(!ok) return;
+      const targetUserId=userId || task.completion_requested_by || task.primary_responsible_id;
+      if(!targetUserId) return showToast('تعذر تحديد الشخص المطلوب رفض إكماله.','error');
+      const {error}=await supabaseClient.from('task_assignees').update({
+        assignee_status: STATUS_PROGRESS,
+        individual_completion_status: COMPLETION_REJECTED,
+        completion_reviewed_at: nowIso(),
+        completion_reviewed_by: currentUserId(),
+        completed_at: null
+      }).eq('task_id',taskId).eq('user_id',targetUserId);
+      if(error) throw error;
+      await supabaseClient.from('tasks').update({status: STATUS_PROGRESS, completion_status: COMPLETION_NONE}).eq('id', taskId).neq('status', STATUS_POSTPONED);
+      await refreshAfterIndividualCompletion();
+      showToast('تم رفض إكمال هذا الشخص وبقيت حصته قيد التنفيذ.','info');
+    }catch(error){ console.error(error); showToast(error.message||'تعذر رفض الإكمال.','error',7000); }
+  };
+
+  window.addComment = addComment = async function(taskId){
+    try{
+      const task=safeTask(taskId);
+      const textEl=document.getElementById('comment-' + taskId);
+      const fileEl=document.getElementById('commentFiles-' + taskId);
+      const visibilityEl=document.getElementById('commentVisibility-' + taskId);
+      const text=String(textEl?.value || '').trim();
+      const files=await uploadFiles(fileEl?.files, 'comments/' + taskId);
+      if(!text && !files.urls.length){ showToast('اكتب تعليقًا أو أرفق ملفًا.','error'); return; }
+      const visibility=visibilityEl?.value || 'all';
+      const visibleToUserId = visibility === 'responsible_only' ? (task?.primary_responsible_id || task?.created_by || null) : null;
+      const finalText=text || 'مرفق بدون تعليق';
+      const payload={
+        task_id: taskId,
+        user_id: currentUserId(),
+        comment_text: finalText,
+        attachment_urls: files.urls,
+        attachment_names: files.names,
+        visibility,
+        visible_to_user_id: visibleToUserId
+      };
+      const {error}=await supabaseClient.from('task_comments').insert(payload);
+      if(error) throw error;
+
+      if(typeof notifyTaskEventByEmail === 'function'){
+        let recipients=[];
+        if(visibility === 'responsible_only'){
+          recipients=[visibleToUserId, task?.created_by].filter(Boolean);
+        }else{
+          recipients=[task?.created_by, task?.primary_responsible_id, ...safeAssigneeRows(taskId).map(row=>row.user_id)].filter(Boolean);
+        }
+        await notifyTaskEventByEmail({
+          task,
+          userIds:[...new Set(recipients)],
+          subject:`تعليق جديد على المهمة - ${task?.title || 'مهمة'}`,
+          heading:'تعليق جديد على مهمة',
+          intro: visibility === 'responsible_only' ? 'تمت إضافة تعليق خاص على مهمة مرتبطة بك.' : 'تمت إضافة تعليق جديد على مهمة مرتبطة بك في لوحة متابعة مهام القطاعات.',
+          details:finalText,
+          actorName:state.profile?.name || 'النظام',
+          excludeCurrent:true
+        });
+      }
+      await loadAll();
+      if(typeof renderTasks === 'function') renderTasks();
+      showToast(visibility === 'responsible_only' ? 'تمت إضافة التعليق الخاص وإرسال الإشعار للمسؤول.' : 'تمت إضافة التعليق وإرسال الإشعار للأطراف المعنية.','success');
+    }catch(error){ console.error(error); showToast(error.message || 'تعذر إضافة التعليق أو إرسال الإشعار.','error',7000); }
+  };
+
+  window.tasksForUser = tasksForUser = function(userId){
+    const assignedIds=new Set((state.assignees || []).filter(row => eq(row.user_id, userId)).map(row => row.task_id));
+    return (typeof visibleTasks === 'function' ? visibleTasks() : (state.tasks || []))
+      .filter(task => assignedIds.has(task.id) || eq(task.primary_responsible_id, userId))
+      .map(task => ({...task, _metricUserId:userId}));
+  };
+
+  function metricStatusForTask(task){
+    const metricUserId=task?._metricUserId;
+    if(metricUserId){
+      const row=userAssigneeRow(task.id, metricUserId);
+      if(row){
+        if(rowIsDone(row)) return 'done';
+        if(rowIsPostponed(row)) return 'postponed';
+        if(taskDueDateIsPast(task)) return 'late';
+        return String(task.status || '').trim() === 'جديدة' ? 'fresh' : 'progress';
+      }
+    }
+    if(allTaskAssigneesDone(task)) return 'done';
+    if(taskDueDateIsPast(task) && anyTaskAssigneeOpen(task)) return 'late';
+    return String(task.status || '').trim() === 'جديدة' ? 'fresh' : 'progress';
+  }
+
+  window.taskMetrics = taskMetrics = function(rows){
+    const source=rows || [];
+    const active=source.filter(task => metricStatusForTask(task) !== 'postponed');
+    const total=active.length;
+    const done=active.filter(task => metricStatusForTask(task) === 'done').length;
+    const late=active.filter(task => metricStatusForTask(task) === 'late').length;
+    const fresh=active.filter(task => metricStatusForTask(task) === 'fresh').length;
+    const progress=active.filter(task => metricStatusForTask(task) === 'progress').length;
+    const rate=total ? Math.round(done/total*100) : 0;
+    return {total,done,progress,fresh,late,rate};
+  };
+
+  window.renderStats = renderStats = function(tasks=(typeof visibleTasks === 'function' ? visibleTasks() : [])){
+    const m=taskMetrics(tasks.map(task => userAssigneeRow(task.id) ? {...task,_metricUserId:currentUserId()} : task));
+    const set=(id,value)=>{ const el=document.getElementById(id); if(el) el.textContent=value; };
+    set('statTotal',m.total);
+    set('statNew',m.fresh);
+    set('statProgress',m.progress);
+    set('statDone',m.done);
+    set('statLate',m.late);
+  };
+
+  window.taskStatusSectionsHtml = function(rows){
+    installIndividualCompletionStyle();
+    const source=rows || [];
+    const statusOf=task => taskStatusForViewer(task);
+    const sortRows=list => [...list].sort((a,b)=>{
+      const ad=a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime();
+    });
+    const groups={
+      progress:sortRows(source.filter(task => ['قيد التنفيذ','بانتظار اعتماد الإنجاز','بانتظار اعتماد جزئي'].includes(statusOf(task)))),
+      late:sortRows(source.filter(task => statusOf(task)==='متأخرة')),
+      completed:sortRows(source.filter(task => statusOf(task)==='مكتملة')),
+      postponed:sortRows(source.filter(task => statusOf(task)==='مؤجلة'))
+    };
+    function compactItem(task){
+      const assignees=getTaskAssignees(task.id).map(user=>user.name).join('، ') || nameOfUser(task.primary_responsible_id) || '—';
+      const status=statusOf(task);
+      const due=formatDate(task.due_date);
+      const full=taskCard(task);
+      return `<details class="task-item-details" id="task-item-details-${task.id}"><summary class="task-item-summary"><span class="task-item-title"><strong>${escapeHtml(task.title||'بدون عنوان')}</strong></span><span class="task-item-mini-meta"><span>${escapeHtml(status)}</span><span>المسند إليه: ${escapeHtml(assignees)}</span><span>الاستحقاق: ${escapeHtml(due)}</span></span></summary><div class="task-item-details-body">${full}</div></details>`;
+    }
+    function group(title,list,empty){
+      const body=list.length ? list.map(compactItem).join('') : `<div class="empty">${escapeHtml(empty)}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    }
+    return group('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      group('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      group('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      group('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.');
+  };
+
+  const previousRenderAdminIndividualCompletion = window.renderAdmin;
+  window.renderAdmin = renderAdmin = function(){
+    if(typeof previousRenderAdminIndividualCompletion === 'function') previousRenderAdminIndividualCompletion.apply(this, arguments);
+    if(typeof renderCompletionRequests === 'function') renderCompletionRequests();
+  };
+
+  setTimeout(function(){
+    try{
+      installIndividualCompletionStyle();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks === 'function') renderTasks();
+      if(document.getElementById('adminPage') && !document.getElementById('adminPage').classList.contains('hidden') && typeof renderAdmin === 'function') renderAdmin();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
 <script>
 /* === HOTFIX: منع حفظ المهمة مرتين عند الضغط المتكرر على زر حفظ المهمة ===
    - يعطل زر حفظ المهمة فور الضغط عليه.
