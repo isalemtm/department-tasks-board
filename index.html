@@ -21190,3 +21190,326 @@ window.openTaskFromSummary=openTaskFromSummary;
   protectedActions.forEach(item => wrapAction(item[0], item[1], item[2]));
 })();
 </script>
+
+<script>
+/* === HOTFIX: استرجاع حالة مؤجلة بعد منطق الإكمال الفردي ===
+   - يعيد خيار مؤجلة في قائمة حالة المهمة داخل البطاقة.
+   - يدعم تأجيل حصة المسند إليه في المهام الجماعية دون إلغاء المهمة كلها.
+   - يعرض مؤجلة في الفلتر ومجموعة المهام، ويستبعدها من مؤشرات المستخدم.
+   - لا يغير SQL ولا منطق اعتماد الإكمال. */
+(function(){
+  const STATUS_DONE = 'مكتملة';
+  const STATUS_PROGRESS = 'قيد التنفيذ';
+  const STATUS_POSTPONED = 'مؤجلة';
+  const COMPLETION_PENDING = 'pending';
+  const COMPLETION_APPROVED = 'approved';
+  const COMPLETION_NONE = 'none';
+
+  function eq(a,b){ return String(a || '') === String(b || ''); }
+  function nowIso(){ return new Date().toISOString(); }
+  function currentUserId(){ return state.profile?.id || ''; }
+  function taskRows(taskId){ return (state.assignees || []).filter(row => eq(row.task_id, taskId)); }
+  function myRow(taskId){ return taskRows(taskId).find(row => eq(row.user_id, currentUserId())) || null; }
+  function rowDone(row){ return !!row && (String(row.assignee_status || '').trim() === STATUS_DONE || String(row.individual_completion_status || '').trim() === COMPLETION_APPROVED || !!row.completed_at); }
+  function rowPending(row){ return !!row && String(row.individual_completion_status || '').trim() === COMPLETION_PENDING; }
+  function rowPostponed(row){ return !!row && String(row.assignee_status || '').trim() === STATUS_POSTPONED; }
+  function taskPostponed(task){ return String(task?.status || '').trim() === STATUS_POSTPONED; }
+  function duePast(task){
+    if(!task?.due_date) return false;
+    const today=new Date(); today.setHours(0,0,0,0);
+    const due=new Date(task.due_date); due.setHours(0,0,0,0);
+    return !isNaN(due) && due < today;
+  }
+  function assigneeUserName(row){
+    const user=(state.users || []).find(u => eq(u.id, row.user_id));
+    return user?.name || '—';
+  }
+  function assigneeNames(task){
+    if(typeof getTaskAssignees === 'function'){
+      const names=getTaskAssignees(task.id).map(user=>user.name).filter(Boolean);
+      if(names.length) return names.join('، ');
+    }
+    return nameOfUser(task.primary_responsible_id) || '—';
+  }
+  function taskStatus(task){
+    if(taskPostponed(task)) return STATUS_POSTPONED;
+    const mine=myRow(task?.id);
+    if(mine){
+      if(rowPostponed(mine)) return STATUS_POSTPONED;
+      if(rowPending(mine)) return 'بانتظار اعتماد الإنجاز';
+      if(rowDone(mine)) return STATUS_DONE;
+      if(duePast(task)) return 'متأخرة';
+      return STATUS_PROGRESS;
+    }
+    const rows=taskRows(task?.id);
+    if(rows.length){
+      const activeRows=rows.filter(row => !rowPostponed(row));
+      if(!activeRows.length) return STATUS_POSTPONED;
+      if(activeRows.every(rowDone)) return STATUS_DONE;
+      if(activeRows.some(rowPending)) return 'بانتظار اعتماد جزئي';
+      if(duePast(task) && activeRows.some(row => !rowDone(row))) return 'متأخرة';
+      return STATUS_PROGRESS;
+    }
+    if(String(task?.status || '').trim() === STATUS_DONE) return STATUS_DONE;
+    if(duePast(task)) return 'متأخرة';
+    return STATUS_PROGRESS;
+  }
+
+  window.taskDisplayStatus = taskDisplayStatus = taskStatus;
+  window.workflowDisplayStatus = workflowDisplayStatus = taskStatus;
+
+  window.isLate = isLate = function(task){ return taskStatus(task) === 'متأخرة'; };
+
+  window.workflowStatusChip = workflowStatusChip = function(task){
+    const status=taskStatus(task);
+    if(status === STATUS_DONE) return '<span class="chip done">مكتملة</span>';
+    if(status === 'متأخرة') return '<span class="chip late">متأخرة</span>';
+    if(status === STATUS_POSTPONED) return '<span class="chip medium">مؤجلة</span>';
+    if(status.includes('بانتظار')) return '<span class="chip progress">'+escapeHtml(status)+'</span>';
+    return '<span class="chip progress">قيد التنفيذ</span>';
+  };
+  window.statusChip = statusChip = function(task){ return workflowStatusChip(task); };
+
+  function installPostponedAfterIndividualStyle(){
+    let style=document.getElementById('postponedAfterIndividualHotfixStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='postponedAfterIndividualHotfixStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      .chip.medium{background:#f4f0ec!important;color:#61463b!important;}
+      .assignee-progress-item.is-postponed{opacity:.9;background:#fbf8f5;}
+      #tasksList .task-group-summary.postponed{background:#fbf8f5!important;border-color:var(--line)!important;color:var(--primary2)!important;}
+    `;
+  }
+
+  function ensurePostponedStatusFilter(){
+    const filter=document.getElementById('filterStatus');
+    if(!filter) return;
+    const current=filter.value || '';
+    filter.innerHTML='<option value="">كل الحالات</option><option value="قيد التنفيذ">قيد التنفيذ</option><option value="مكتملة">مكتملة</option><option value="متأخرة">متأخرة</option><option value="مؤجلة">مؤجلة</option>';
+    if(['قيد التنفيذ','مكتملة','متأخرة','مؤجلة'].includes(current)) filter.value=current;
+  }
+
+  const previousSetupFiltersPostponedAfterIndividual = window.setupFilters;
+  window.setupFilters = setupFilters = function(){
+    if(typeof previousSetupFiltersPostponedAfterIndividual === 'function') previousSetupFiltersPostponedAfterIndividual.apply(this, arguments);
+    ensurePostponedStatusFilter();
+  };
+
+  function visibleForTaskPage(){
+    if(typeof taskPageAllowedTasks === 'function') return taskPageAllowedTasks();
+    return (state.tasks || []).filter(task => task && task.is_archived !== true && task.approval_status !== 'rejected');
+  }
+
+  window.getFilteredTasks = getFilteredTasks = function(){
+    const rows=visibleForTaskPage();
+    const query=document.getElementById('searchInput')?.value?.trim().toLowerCase() || '';
+    const createdBy=document.getElementById('filterCreatedBy')?.value || '';
+    const assigneeId=document.getElementById('filterAssignee')?.value || '';
+    const status=document.getElementById('filterStatus')?.value || '';
+    return rows.filter(task => {
+      const assignees=typeof getTaskAssignees==='function' ? getTaskAssignees(task.id) : [];
+      const text=`${task.title||''} ${task.description||''} ${nameOfUser(task.created_by)} ${nameOfUser(task.primary_responsible_id)} ${assignees.map(user=>user.name).join(' ')}`.toLowerCase();
+      const display=taskStatus(task).includes('بانتظار') ? STATUS_PROGRESS : taskStatus(task);
+      return (!query || text.includes(query)) &&
+        (!createdBy || task.created_by===createdBy) &&
+        (!assigneeId || task.primary_responsible_id===assigneeId || assignees.some(user=>eq(user.id, assigneeId))) &&
+        (!status || display===status);
+    });
+  };
+
+  function rowStatusChip(row, task){
+    let label=STATUS_PROGRESS;
+    let cls='progress';
+    if(rowPostponed(row)){ label=STATUS_POSTPONED; cls='medium'; }
+    else if(rowPending(row)){ label='مكتملة بانتظار الاعتماد'; cls='progress'; }
+    else if(rowDone(row)){ label=STATUS_DONE; cls='done'; }
+    else if(duePast(task)){ label='متأخرة'; cls='late'; }
+    return `<span class="chip ${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  function renderAssigneeProgressBox(task){
+    const rows=taskRows(task.id);
+    if(rows.length <= 1) return '';
+    const items=rows.map(row => `<div class="assignee-progress-item ${rowPostponed(row)?'is-postponed':''}"><span>${escapeHtml(assigneeUserName(row))}</span>${rowStatusChip(row, task)}</div>`).join('');
+    return `<div class="assignee-progress-box"><b>حالة المسند إليهم</b><div class="assignee-progress-grid">${items}</div></div>`;
+  }
+
+  function commentVisibilityControlHotfix(task){
+    if(taskRows(task.id).length <= 1) return '';
+    return `<select id="commentVisibility-${task.id}" class="comment-visibility-wrap"><option value="all">التعليق يظهر للجميع</option><option value="responsible_only">التعليق للمسؤول فقط</option></select>`;
+  }
+
+  function renderCommentItemHotfix(comment){
+    const privateNote=String(comment.visibility || 'all') === 'responsible_only' ? '<span class="comment-private-note">تعليق خاص</span>' : '';
+    if(typeof renderCommentItem === 'function'){
+      const html=renderCommentItem(comment);
+      return privateNote ? html.replace('</div><div>', `${privateNote}</div><div>`) : html;
+    }
+    return `<div class="comment"><div class="comment-head"><span>${escapeHtml(nameOfUser(comment.user_id))}</span><span>${formatDate(comment.created_at)} ${privateNote}</span></div><div>${escapeHtml(comment.comment_text||'')}</div>${renderAttachments(comment.attachment_urls,comment.attachment_names)}</div>`;
+  }
+
+  function statusControl(task){
+    const rows=taskRows(task.id);
+    const mine=myRow(task.id);
+    const current=taskStatus(task);
+    if(mine){
+      if(rowDone(mine)) return '<span class="chip done">تم تنفيذ حصتك</span>';
+      if(rowPending(mine)) return '<span class="chip progress">حصتك بانتظار الاعتماد</span>';
+      return `<select onchange="changeStatus('${task.id}',this.value)">
+        <option value="${STATUS_PROGRESS}" ${current===STATUS_PROGRESS||current==='متأخرة'?'selected':''}>قيد التنفيذ</option>
+        <option value="${STATUS_POSTPONED}" ${current===STATUS_POSTPONED?'selected':''}>مؤجلة</option>
+        <option value="${STATUS_DONE}">مكتملة</option>
+      </select>`;
+    }
+    if(!rows.length || taskPostponed(task)){
+      return `<select onchange="changeStatus('${task.id}',this.value)">
+        <option value="${STATUS_PROGRESS}" ${current===STATUS_PROGRESS||current==='متأخرة'?'selected':''}>قيد التنفيذ</option>
+        <option value="${STATUS_POSTPONED}" ${current===STATUS_POSTPONED?'selected':''}>مؤجلة</option>
+        <option value="${STATUS_DONE}" ${current===STATUS_DONE?'selected':''}>مكتملة</option>
+      </select>`;
+    }
+    return '';
+  }
+
+  window.taskCard = taskCard = function(task){
+    installPostponedAfterIndividualStyle();
+    const ass=assigneeNames(task);
+    const comments=typeof getTaskComments === 'function' ? getTaskComments(task.id) : [];
+    const editBtn=(typeof canEditTask==='function' && canEditTask(task))?`<button class="btn btn-info btn-sm" onclick="editTask('${task.id}')">تعديل</button>`:'';
+    const pending=taskRows(task.id).some(rowPending);
+    const completionNote=pending ? '<div class="notice info show" style="margin-top:10px;">يوجد إكمال بانتظار الاعتماد لأحد المسند إليهم.</div>' : '';
+    return `<div class="task-card ${isDueSoon(task)?'due-soon':''}" id="task-card-${task.id}"><div class="task-top"><div><div class="task-title">${escapeHtml(task.title||'بدون عنوان')}</div><div class="meta">المسند منه: ${escapeHtml(nameOfUser(task.created_by))}<br>المسند إليه / إليهم: ${escapeHtml(ass)}<br>المسؤول عن المهمة: ${escapeHtml(nameOfUser(task.primary_responsible_id))}<br>تاريخ الاستحقاق: ${formatDate(task.due_date)} ${isDueSoon(task)?`<span class="due-soon-label">${getDueSoonLabel(task)}</span>`:''}</div></div><div class="actions">${workflowStatusChip(task)} ${priorityChip(task.priority)}</div></div><div class="task-desc">${escapeHtml(task.description||'')}</div>${renderAssigneeProgressBox(task)}${completionNote}${renderAttachments(task.attachment_urls,task.attachment_names)}<div class="comment-box"><b>التعليقات</b>${comments.length?comments.map(renderCommentItemHotfix).join(''):'<div class="empty" style="padding:10px">لا توجد تعليقات</div>'}<div class="form-grid" style="margin-top:10px"><textarea id="comment-${task.id}" placeholder="اكتب تعليقًا..."></textarea><input id="commentFiles-${task.id}" type="file" multiple></div><div class="actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="addComment('${task.id}')">إضافة تعليق</button>${commentVisibilityControlHotfix(task)}${statusControl(task)}${canRequestTransferTask(task)?`<button class="btn btn-sm" onclick="toggleTransferChooser('${task.id}')">${canDirectTransferTask(task)?'تحويل المهمة':'طلب تحويل المهمة'}</button>`:''}${editBtn}${canDeleteTask(task)?`<button class="btn btn-danger btn-sm" onclick="deleteTask('${task.id}')">حذف</button>`:''}</div>${renderTransferChooser(task)}</div></div>`;
+  };
+
+  const previousChangeStatusPostponedAfterIndividual = window.changeStatus;
+  window.changeStatus = changeStatus = async function(taskId, status){
+    try{
+      const task=(state.tasks || []).find(item => eq(item.id, taskId));
+      if(!task) return showToast('تعذر العثور على المهمة.','error');
+      const mine=myRow(taskId);
+
+      if(status === STATUS_POSTPONED){
+        if(mine){
+          const {error}=await supabaseClient.from('task_assignees').update({
+            assignee_status: STATUS_POSTPONED,
+            individual_completion_status: COMPLETION_NONE,
+            completion_requested_at: null,
+            completion_requested_by: null,
+            completion_reviewed_at: null,
+            completion_reviewed_by: null,
+            completed_at: null,
+            completion_note: null
+          }).eq('task_id', taskId).eq('user_id', currentUserId());
+          if(error) throw error;
+        }else{
+          const {error}=await supabaseClient.from('tasks').update({status: STATUS_POSTPONED, completion_status: COMPLETION_NONE}).eq('id', taskId);
+          if(error) throw error;
+        }
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        if(typeof renderDashboard==='function' && document.getElementById('dashboardPage') && !document.getElementById('dashboardPage').classList.contains('hidden')) renderDashboard();
+        showToast('تم تأجيل المهمة، ولن تدخل في مؤشرات الأداء الخاصة بك.','success');
+        return;
+      }
+
+      if(status === STATUS_PROGRESS && mine && rowPostponed(mine)){
+        const {error}=await supabaseClient.from('task_assignees').update({assignee_status: STATUS_PROGRESS, individual_completion_status: COMPLETION_NONE}).eq('task_id', taskId).eq('user_id', currentUserId());
+        if(error) throw error;
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        if(typeof renderDashboard==='function' && document.getElementById('dashboardPage') && !document.getElementById('dashboardPage').classList.contains('hidden')) renderDashboard();
+        showToast('تمت إعادة حصتك إلى قيد التنفيذ.','success');
+        return;
+      }
+
+      if(status === STATUS_PROGRESS && taskPostponed(task) && !mine){
+        const {error}=await supabaseClient.from('tasks').update({status: STATUS_PROGRESS, completion_status: COMPLETION_NONE}).eq('id', taskId);
+        if(error) throw error;
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        showToast('تمت إعادة المهمة إلى قيد التنفيذ.','success');
+        return;
+      }
+
+      if(typeof previousChangeStatusPostponedAfterIndividual === 'function') return previousChangeStatusPostponedAfterIndividual.apply(this, arguments);
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر تحديث حالة المهمة.','error',7000);
+    }
+  };
+
+  window.taskStatusSectionsHtml = taskStatusSectionsHtml = function(rows){
+    installPostponedAfterIndividualStyle();
+    const source=rows || [];
+    const sortRows=list => [...list].sort((a,b)=>{
+      const ad=a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime();
+    });
+    const groups={
+      progress:sortRows(source.filter(task => ['قيد التنفيذ','بانتظار اعتماد الإنجاز','بانتظار اعتماد جزئي'].includes(taskStatus(task)))),
+      late:sortRows(source.filter(task => taskStatus(task)==='متأخرة')),
+      completed:sortRows(source.filter(task => taskStatus(task)==='مكتملة')),
+      postponed:sortRows(source.filter(task => taskStatus(task)==='مؤجلة'))
+    };
+    function compactItem(task){
+      const status=taskStatus(task);
+      const due=formatDate(task.due_date);
+      return `<details class="task-item-details" id="task-item-details-${task.id}"><summary class="task-item-summary"><span class="task-item-title"><strong>${escapeHtml(task.title||'بدون عنوان')}</strong></span><span class="task-item-mini-meta"><span>${escapeHtml(status)}</span><span>المسند إليه: ${escapeHtml(assigneeNames(task))}</span><span>الاستحقاق: ${escapeHtml(due)}</span></span></summary><div class="task-item-details-body">${taskCard(task)}</div></details>`;
+    }
+    function group(title,list,empty,extra=''){
+      const body=list.length ? list.map(compactItem).join('') : `<div class="empty">${escapeHtml(empty)}</div>`;
+      return `<details class="task-group-details"><summary class="task-group-summary ${extra}"><span>${escapeHtml(title)}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+    }
+    return group('قيد التنفيذ',groups.progress,'لا توجد مهام قيد التنفيذ.')+
+      group('متأخرة',groups.late,'لا توجد مهام متأخرة.')+
+      group('مكتملة',groups.completed,'لا توجد مهام مكتملة.')+
+      group('مؤجلة',groups.postponed,'لا توجد مهام مؤجلة.','postponed');
+  };
+
+  window.taskMetrics = taskMetrics = function(rows){
+    const source=rows || [];
+    const active=source.filter(task => taskStatus(task) !== STATUS_POSTPONED);
+    const total=active.length;
+    const done=active.filter(task => taskStatus(task) === STATUS_DONE).length;
+    const late=active.filter(task => taskStatus(task) === 'متأخرة').length;
+    const fresh=active.filter(task => String(task.status||'').trim()==='جديدة' && taskStatus(task)===STATUS_PROGRESS).length;
+    const progress=active.filter(task => ['قيد التنفيذ','بانتظار اعتماد الإنجاز','بانتظار اعتماد جزئي'].includes(taskStatus(task))).length;
+    const rate=total ? Math.round(done/total*100) : 0;
+    return {total,done,progress,fresh,late,rate};
+  };
+
+  const previousRenderTasksPostponedAfterIndividual = window.renderTasks;
+  window.renderTasks = renderTasks = function(){
+    installPostponedAfterIndividualStyle();
+    if(typeof ensureTaskFiltersDom === 'function') ensureTaskFiltersDom();
+    ensurePostponedStatusFilter();
+    const rows=getFilteredTasks();
+    if(typeof renderStats === 'function') renderStats(rows);
+    if(typeof setupCreatedByFilter === 'function') setupCreatedByFilter();
+    if(typeof setupEmployeeFilter === 'function') setupEmployeeFilter();
+    ensurePostponedStatusFilter();
+    const list=document.getElementById('tasksList');
+    if(!list){
+      if(typeof previousRenderTasksPostponedAfterIndividual === 'function') return previousRenderTasksPostponedAfterIndividual.apply(this, arguments);
+      return;
+    }
+    list.innerHTML = rows.length ? taskStatusSectionsHtml(rows) : '<div class="empty">لا توجد مهام.</div>';
+  };
+
+  installPostponedAfterIndividualStyle();
+  setTimeout(function(){
+    try{
+      ensurePostponedStatusFilter();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks === 'function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
