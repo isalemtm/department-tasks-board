@@ -21513,3 +21513,150 @@ window.openTaskFromSummary=openTaskFromSummary;
   },0);
 })();
 </script>
+
+
+<script>
+/* === PATCH: فصل المتأخرات بين المحسوبة على القطاع والمتأخرات للمتابعة ===
+   - يطابق قسم "متأخرة محسوبة على القطاع" منطق لوحة الأداء العام.
+   - تبقى المهام المتأخرة التي يتابعها المستخدم ولا تُحسب على قطاعه في قسم مستقل.
+   - لا يغير SQL ولا دالة لوحة الأداء العام. */
+(function(){
+  function eq(a,b){ return String(a || '') === String(b || ''); }
+  function role(){ return state.profile?.role || ''; }
+  function currentSectorId(){ return state.profile?.sector_id || ''; }
+  function userById(id){ return (state.users || []).find(u => eq(u.id, id)) || null; }
+  function userSector(id){ return userById(id)?.sector_id || ''; }
+  function assigneeRows(taskId){ return (state.assignees || []).filter(row => eq(row.task_id, taskId)); }
+  function taskStatusValue(task){
+    if(typeof window.taskDisplayStatus === 'function') return window.taskDisplayStatus(task);
+    if(typeof window.workflowDisplayStatus === 'function') return window.workflowDisplayStatus(task);
+    if(typeof window.isLate === 'function' && window.isLate(task)) return 'متأخرة';
+    return task?.status || 'قيد التنفيذ';
+  }
+  function sortRows(list){
+    return [...(list || [])].sort((a,b)=>{
+      const ad=a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd=b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if(ad!==bd) return ad-bd;
+      return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime();
+    });
+  }
+  function assigneeNamesForTask(task){
+    if(typeof getTaskAssignees === 'function'){
+      const names=(getTaskAssignees(task.id) || []).map(u => u.name).filter(Boolean);
+      if(names.length) return names.join('، ');
+    }
+    return (typeof nameOfUser === 'function' ? nameOfUser(task.primary_responsible_id) : '') || '—';
+  }
+  function metricSectorIdsForTask(task){
+    const sectors=new Set();
+    if(!task) return sectors;
+
+    // نفس أولوية دالة لوحة الأداء العام:
+    // القطاع المستهدف، ثم قطاع المسؤول الرئيسي، ثم قطاعات المسند إليهم، ثم قطاع المنشئ كحل أخير.
+    if(task.target_sector_id){
+      sectors.add(String(task.target_sector_id));
+      return sectors;
+    }
+
+    const primarySector=userSector(task.primary_responsible_id);
+    if(primarySector){
+      sectors.add(String(primarySector));
+      return sectors;
+    }
+
+    const assignees=assigneeRows(task.id);
+    assignees.forEach(row => {
+      const sid=userSector(row.user_id);
+      if(sid) sectors.add(String(sid));
+    });
+    if(sectors.size) return sectors;
+
+    if(task.owner_sector_id) sectors.add(String(task.owner_sector_id));
+    return sectors;
+  }
+  function shouldSplitForCurrentSector(){
+    const r=role();
+    return !!currentSectorId() && ['sector_head','department_manager','employee'].includes(r);
+  }
+  function countedOnCurrentSector(task){
+    const sid=currentSectorId();
+    if(!sid) return true;
+    return metricSectorIdsForTask(task).has(String(sid));
+  }
+  function installSplitOverdueStyle(){
+    let style=document.getElementById('splitOverdueBySectorStyle');
+    if(!style){
+      style=document.createElement('style');
+      style.id='splitOverdueBySectorStyle';
+      document.head.appendChild(style);
+    }
+    style.textContent=`
+      .task-group-summary.counted-overdue{border-inline-start:4px solid var(--bad);}
+      .task-group-summary.followup-overdue{border-inline-start:4px solid var(--warn);}
+      .task-group-hint{display:block;margin-top:4px;color:var(--muted);font-size:12px;font-weight:500;}
+    `;
+  }
+  function compactItem(task){
+    const status=taskStatusValue(task);
+    const due=typeof formatDate === 'function' ? formatDate(task.due_date) : (task.due_date || '—');
+    const assignees=assigneeNamesForTask(task);
+    return `<details class="task-item-details" id="task-item-details-${task.id}"><summary class="task-item-summary"><span class="task-item-title"><strong>${escapeHtml(task.title||'بدون عنوان')}</strong></span><span class="task-item-mini-meta"><span>${escapeHtml(status)}</span><span>المسند إليه: ${escapeHtml(assignees)}</span><span>الاستحقاق: ${escapeHtml(due)}</span></span></summary><div class="task-item-details-body">${taskCard(task)}</div></details>`;
+  }
+  function group(title,list,empty,extra='',hint=''){
+    const body=list.length ? list.map(compactItem).join('') : `<div class="empty">${escapeHtml(empty)}</div>`;
+    const hintHtml=hint ? `<span class="task-group-hint">${escapeHtml(hint)}</span>` : '';
+    return `<details class="task-group-details"><summary class="task-group-summary ${extra}"><span>${escapeHtml(title)}${hintHtml}</span><span class="badge">${list.length} مهمة</span></summary><div style="margin-top:12px;">${body}</div></details>`;
+  }
+
+  const previousTaskStatusSectionsSplit = window.taskStatusSectionsHtml;
+  window.taskStatusSectionsHtml = taskStatusSectionsHtml = function(rows){
+    installSplitOverdueStyle();
+    const source=rows || [];
+    const progress=sortRows(source.filter(task => ['قيد التنفيذ','بانتظار اعتماد الإنجاز','بانتظار اعتماد جزئي'].includes(taskStatusValue(task))));
+    const late=sortRows(source.filter(task => taskStatusValue(task)==='متأخرة'));
+    const completed=sortRows(source.filter(task => taskStatusValue(task)==='مكتملة'));
+    const postponed=sortRows(source.filter(task => taskStatusValue(task)==='مؤجلة'));
+
+    let lateHtml='';
+    if(shouldSplitForCurrentSector()){
+      const counted=sortRows(late.filter(countedOnCurrentSector));
+      const followup=sortRows(late.filter(task => !countedOnCurrentSector(task)));
+      lateHtml = group('متأخرة محسوبة على القطاع', counted, 'لا توجد مهام متأخرة محسوبة على القطاع.', 'counted-overdue', 'هذه هي المتأخرات التي تدخل في مؤشرات القطاع') +
+        group('متأخرة للمتابعة', followup, 'لا توجد مهام متأخرة للمتابعة.', 'followup-overdue', 'تظهر لك للمتابعة، لكنها محسوبة على جهة التنفيذ');
+    }else{
+      lateHtml = group('متأخرة', late, 'لا توجد مهام متأخرة.');
+    }
+
+    return group('قيد التنفيذ', progress, 'لا توجد مهام قيد التنفيذ.')+
+      lateHtml+
+      group('مكتملة', completed, 'لا توجد مهام مكتملة.')+
+      group('مؤجلة', postponed, 'لا توجد مهام مؤجلة.','postponed');
+  };
+
+  const previousRenderTasksSplitOverdue = window.renderTasks;
+  window.renderTasks = renderTasks = function(){
+    installSplitOverdueStyle();
+    if(typeof ensureTaskFiltersDom === 'function') ensureTaskFiltersDom();
+    if(typeof ensurePostponedStatusFilter === 'function') ensurePostponedStatusFilter();
+    const rows=typeof getFilteredTasks === 'function' ? getFilteredTasks() : [];
+    if(typeof renderStats === 'function') renderStats(rows);
+    if(typeof setupCreatedByFilter === 'function') setupCreatedByFilter();
+    if(typeof setupEmployeeFilter === 'function') setupEmployeeFilter();
+    if(typeof ensurePostponedStatusFilter === 'function') ensurePostponedStatusFilter();
+    const list=document.getElementById('tasksList');
+    if(!list){
+      if(typeof previousRenderTasksSplitOverdue === 'function') return previousRenderTasksSplitOverdue.apply(this, arguments);
+      return;
+    }
+    list.innerHTML = rows.length ? window.taskStatusSectionsHtml(rows) : '<div class="empty">لا توجد مهام.</div>';
+  };
+
+  installSplitOverdueStyle();
+  setTimeout(function(){
+    try{
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks === 'function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
