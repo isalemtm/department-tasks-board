@@ -21907,3 +21907,273 @@ window.openTaskFromSummary=openTaskFromSummary;
   },0);
 })();
 </script>
+
+
+<script>
+/* === PATCH: تثبيت طلب إكمال الموظف كـ pending حتى يظهر للاعتماد ===
+   - الموظف/المسند إليه عند اختيار مكتملة: لا يعتمدها مباشرة، بل يسجلها pending على task_assignees ويضع تنبيه pending على task.
+   - شاشة الاعتمادات تقرأ الطلبات الفردية والقديمة بدون تكرار.
+   - اعتماد/رفض الإكمال يعمل على حصة الموظف، ثم يحدّث حالة المهمة العامة حسب باقي الحصص.
+   - رئيس القطاع/مدير القسم/مدير النظام إذا اختار مكتملة: يعتمد المهمة لجميع المسند إليهم.
+   - التأجيل يبقى محصورًا على رئيس القطاع/مدير القسم/مدير النظام. */
+(function(){
+  const STATUS_DONE='مكتملة';
+  const STATUS_PROGRESS='قيد التنفيذ';
+  const STATUS_POSTPONED='مؤجلة';
+  const COMPLETION_PENDING='pending';
+  const COMPLETION_APPROVED='approved';
+  const COMPLETION_REJECTED='rejected';
+  const COMPLETION_NONE='none';
+
+  function eq(a,b){ return String(a||'')===String(b||''); }
+  function nowIso(){ return new Date().toISOString(); }
+  function me(){ return state.profile || {}; }
+  function meId(){ return me().id || ''; }
+  function userById(id){ return (state.users||[]).find(u=>eq(u.id,id)) || null; }
+  function taskById(id){ return (state.tasks||[]).find(t=>eq(t.id,id)) || null; }
+  function assigneeRows(taskId){ return (state.assignees||[]).filter(r=>eq(r.task_id,taskId)); }
+  function rowDone(row){ return !!row && (String(row.assignee_status||'').trim()===STATUS_DONE || String(row.individual_completion_status||'').trim()===COMPLETION_APPROVED || !!row.completed_at); }
+  function rowPending(row){ return !!row && String(row.individual_completion_status||'').trim()===COMPLETION_PENDING; }
+  function rowPostponed(row){ return !!row && String(row.assignee_status||'').trim()===STATUS_POSTPONED; }
+  function canSuperviseTaskLocal(task){ return !!task && typeof canReviewTask==='function' && canReviewTask(task) && currentRole()!=='employee'; }
+  function canApproveCompletionItemLocal(item){
+    const task=item?.task || taskById(item?.row?.task_id || item?.id);
+    const user=item?.user || userById(item?.row?.user_id || item?.completion_requested_by || item?.primary_responsible_id);
+    if(!task || !user || !meId()) return false;
+    if(typeof isAdmin==='function' && isAdmin()) return true;
+    if(typeof isCeo==='function' && isCeo()){
+      if(typeof taskBelongsToExecutiveManagementForCompletionApproval==='function') return taskBelongsToExecutiveManagementForCompletionApproval(task);
+      return false;
+    }
+    if(typeof isSectorHead==='function' && isSectorHead()){
+      return eq(user.sector_id, me().sector_id) || eq(task.target_sector_id, me().sector_id) || eq(task.owner_sector_id, me().sector_id);
+    }
+    if(typeof isDepartmentManager==='function' && isDepartmentManager()){
+      return eq(user.department_id, me().department_id) || eq(task.target_department_id, me().department_id) || eq(task.owner_department_id, me().department_id);
+    }
+    return false;
+  }
+  async function reloadAllScreens(){
+    await loadAll();
+    if(typeof setupFilters==='function') setupFilters();
+    if(typeof renderTasks==='function') renderTasks();
+    if(typeof renderDashboard==='function' && document.getElementById('dashboardPage') && !document.getElementById('dashboardPage').classList.contains('hidden')) renderDashboard();
+    if(typeof renderAdmin==='function' && document.getElementById('adminPage') && !document.getElementById('adminPage').classList.contains('hidden')) renderAdmin();
+    if(typeof renderCompletionRequests==='function') renderCompletionRequests();
+    if(typeof renderTaskActionRequests==='function') renderTaskActionRequests();
+  }
+  async function updateTaskAggregate(taskId){
+    const rows=assigneeRows(taskId);
+    const active=rows.filter(r=>!rowPostponed(r));
+    if(rows.length && !active.length){
+      await supabaseClient.from('tasks').update({status:STATUS_POSTPONED, completion_status:COMPLETION_NONE, completion_requested_by:null, completion_requested_at:null}).eq('id',taskId);
+      return;
+    }
+    if(active.some(rowPending)){
+      const firstPending=active.find(rowPending);
+      await supabaseClient.from('tasks').update({status:STATUS_PROGRESS, completion_status:COMPLETION_PENDING, completion_requested_by:firstPending?.user_id||null, completion_requested_at:firstPending?.completion_requested_at||nowIso()}).eq('id',taskId).neq('status',STATUS_POSTPONED);
+      return;
+    }
+    if(active.length && active.every(rowDone)){
+      await supabaseClient.from('tasks').update({status:STATUS_DONE, completion_status:COMPLETION_APPROVED, completion_reviewed_by:meId(), completion_reviewed_at:nowIso()}).eq('id',taskId);
+      return;
+    }
+    await supabaseClient.from('tasks').update({status:STATUS_PROGRESS, completion_status:COMPLETION_NONE, completion_requested_by:null, completion_requested_at:null}).eq('id',taskId).neq('status',STATUS_POSTPONED);
+  }
+
+  async function requestMyCompletion(task){
+    const rows=assigneeRows(task.id);
+    let mine=rows.find(r=>eq(r.user_id,meId()));
+    const payload={
+      assignee_status:STATUS_PROGRESS,
+      individual_completion_status:COMPLETION_PENDING,
+      completion_requested_at:nowIso(),
+      completion_requested_by:meId(),
+      completion_reviewed_at:null,
+      completion_reviewed_by:null,
+      completed_at:null
+    };
+
+    if(mine){
+      const {error}=await supabaseClient.from('task_assignees').update(payload).eq('task_id',task.id).eq('user_id',meId());
+      if(error) throw error;
+    }else if(eq(task.primary_responsible_id, meId()) || eq(task.created_by, meId())){
+      const {error}=await supabaseClient.from('task_assignees').insert({
+        task_id:task.id,
+        user_id:meId(),
+        assigned_by:task.created_by||meId(),
+        assignment_role:eq(task.primary_responsible_id,meId())?'primary':'assignee',
+        ...payload
+      });
+      if(error) throw error;
+    }else{
+      return showToast('لا يمكنك طلب إكمال مهمة لست ضمن المسند إليهم.','error');
+    }
+
+    const {error:taskError}=await supabaseClient.from('tasks').update({
+      status:STATUS_PROGRESS,
+      completion_status:COMPLETION_PENDING,
+      completion_requested_by:meId(),
+      completion_requested_at:nowIso()
+    }).eq('id',task.id).neq('status',STATUS_POSTPONED);
+    if(taskError) throw taskError;
+
+    await reloadAllScreens();
+    showToast('تم إرسال طلب اعتماد الإكمال للمدير المباشر أو رئيس القطاع.','success',7000);
+  }
+
+  window.getCompletionRequests = getCompletionRequests = function(){
+    const tasks=(typeof visibleTasks==='function' ? visibleTasks() : (state.tasks||[]));
+    const taskMap=new Map(tasks.map(t=>[String(t.id),t]));
+    const items=[];
+
+    (state.assignees||[]).filter(rowPending).forEach(row=>{
+      const task=taskMap.get(String(row.task_id));
+      const user=userById(row.user_id);
+      const item={row, task, user};
+      if(task && user && canApproveCompletionItemLocal(item)) items.push(item);
+    });
+
+    tasks.filter(t=>t && t.completion_status===COMPLETION_PENDING).forEach(task=>{
+      const user=userById(task.completion_requested_by || task.primary_responsible_id);
+      const row=(state.assignees||[]).find(r=>eq(r.task_id,task.id) && eq(r.user_id,user?.id) && rowPending(r)) || null;
+      const item={row, task, user};
+      if(task && user && canApproveCompletionItemLocal(item)) items.push(item);
+    });
+
+    const seen=new Set();
+    return items.filter(item=>{
+      const key=String(item.task?.id||'')+'::'+String(item.user?.id||'');
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  window.renderCompletionApprovalCard = function(item){
+    const task=item?.task || item;
+    const user=item?.user || userById(task?.completion_requested_by || task?.primary_responsible_id);
+    const row=item?.row || null;
+    const requestedAt=row?.completion_requested_at || task?.completion_requested_at;
+    return `<div class="task-card" id="completion-request-${escapeHtml(task?.id||'')}-${escapeHtml(user?.id||'')}">
+      <div class="task-top"><div><div class="task-title">${escapeHtml(task?.title||'بدون عنوان')}</div>
+      <div class="meta">طالب الإكمال: ${escapeHtml(user?.name||'—')}<br>المسؤول عن المهمة: ${escapeHtml(nameOfUser(task?.primary_responsible_id))}<br>القطاع: ${escapeHtml(nameOfSector(task?.target_sector_id||task?.owner_sector_id))} | الإدارة: ${escapeHtml(nameOfDept(task?.target_department_id||task?.owner_department_id))}<br>تاريخ الاستحقاق: ${formatDate(task?.due_date)}<br>تاريخ طلب الإكمال: ${formatDate(requestedAt)}</div></div><div class="actions"><span class="chip progress">بانتظار اعتماد الإنجاز</span>${priorityChip(task?.priority)}</div></div>
+      <div class="task-desc">${escapeHtml(task?.description||'')}</div>${renderAttachments(task?.attachment_urls,task?.attachment_names)}
+      <div class="actions" style="margin-top:12px;"><button class="btn btn-success btn-sm" onclick="approveTaskCompletion('${task?.id}','${user?.id||''}')">اعتماد الإكمال</button><button class="btn btn-danger btn-sm" onclick="rejectTaskCompletion('${task?.id}','${user?.id||''}')">رفض الإكمال</button></div>
+    </div>`;
+  };
+
+  window.renderCompletionRequests = renderCompletionRequests = function(){
+    if(typeof ensureCompletionApprovalDom==='function') ensureCompletionApprovalDom();
+    const box=document.getElementById('completionRequestsList');
+    if(!box) return;
+    const rows=getCompletionRequests();
+    box.innerHTML=rows.length ? rows.map(window.renderCompletionApprovalCard).join('') : '<div class="empty">لا توجد مهام مكتملة بانتظار الاعتماد حاليًا.</div>';
+  };
+
+  window.approveTaskCompletion = approveTaskCompletion = async function(taskId,userId){
+    try{
+      const task=taskById(taskId);
+      const row=assigneeRows(taskId).find(r=>eq(r.user_id,userId));
+      const item={task,row,user:userById(userId || task?.completion_requested_by || task?.primary_responsible_id)};
+      if(!task || !canApproveCompletionItemLocal(item)) return showToast('ليست لديك صلاحية اعتماد إكمال هذه المهمة.','error');
+      if(row){
+        const {error}=await supabaseClient.from('task_assignees').update({assignee_status:STATUS_DONE, individual_completion_status:COMPLETION_APPROVED, completion_reviewed_at:nowIso(), completion_reviewed_by:meId(), completed_at:nowIso()}).eq('task_id',taskId).eq('user_id',userId);
+        if(error) throw error;
+        await loadAll();
+        await updateTaskAggregate(taskId);
+      }else{
+        const {error}=await supabaseClient.from('tasks').update({status:STATUS_DONE, completion_status:COMPLETION_APPROVED, completion_reviewed_by:meId(), completion_reviewed_at:nowIso()}).eq('id',taskId);
+        if(error) throw error;
+      }
+      await reloadAllScreens();
+      showToast('تم اعتماد الإكمال.','success');
+    }catch(error){ console.error(error); showToast(error.message||'تعذر اعتماد الإكمال.','error',7000); }
+  };
+
+  window.rejectTaskCompletion = rejectTaskCompletion = async function(taskId,userId){
+    try{
+      const task=taskById(taskId);
+      const row=assigneeRows(taskId).find(r=>eq(r.user_id,userId));
+      const item={task,row,user:userById(userId || task?.completion_requested_by || task?.primary_responsible_id)};
+      if(!task || !canApproveCompletionItemLocal(item)) return showToast('ليست لديك صلاحية رفض إكمال هذه المهمة.','error');
+      const ok=await askConfirm({title:'رفض إكمال المهمة',message:'سيعود طالب الإكمال إلى قيد التنفيذ. هل تريد المتابعة؟',okText:'رفض الإكمال',danger:true});
+      if(!ok) return;
+      if(row){
+        const {error}=await supabaseClient.from('task_assignees').update({assignee_status:STATUS_PROGRESS, individual_completion_status:COMPLETION_REJECTED, completion_reviewed_at:nowIso(), completion_reviewed_by:meId(), completed_at:null}).eq('task_id',taskId).eq('user_id',userId);
+        if(error) throw error;
+        await loadAll();
+        await updateTaskAggregate(taskId);
+      }else{
+        const {error}=await supabaseClient.from('tasks').update({status:STATUS_PROGRESS, completion_status:COMPLETION_REJECTED, completion_reviewed_by:meId(), completion_reviewed_at:nowIso()}).eq('id',taskId);
+        if(error) throw error;
+      }
+      await reloadAllScreens();
+      showToast('تم رفض الإكمال وبقيت المهمة قيد التنفيذ.','info');
+    }catch(error){ console.error(error); showToast(error.message||'تعذر رفض الإكمال.','error',7000); }
+  };
+
+  const previousChangeStatusCompletionPendingFix = window.changeStatus;
+  window.changeStatus = changeStatus = async function(taskId,status){
+    try{
+      const task=taskById(taskId);
+      if(!task) return showToast('تعذر العثور على المهمة.','error');
+      const rows=assigneeRows(taskId);
+      const canSupervise=canSuperviseTaskLocal(task);
+
+      if(status===STATUS_POSTPONED && !canSupervise) return showToast('التأجيل من صلاحية رئيس القطاع أو مدير القسم فقط.','error');
+
+      if(status===STATUS_POSTPONED && canSupervise){
+        if(rows.length){
+          const {error}=await supabaseClient.from('task_assignees').update({assignee_status:STATUS_POSTPONED, individual_completion_status:COMPLETION_NONE, completion_requested_at:null, completion_requested_by:null, completion_reviewed_at:null, completion_reviewed_by:null, completed_at:null}).eq('task_id',taskId);
+          if(error) throw error;
+        }
+        const {error}=await supabaseClient.from('tasks').update({status:STATUS_POSTPONED, completion_status:COMPLETION_NONE, completion_requested_by:null, completion_requested_at:null}).eq('id',taskId);
+        if(error) throw error;
+        await reloadAllScreens();
+        showToast('تم تأجيل المهمة.','success');
+        return;
+      }
+
+      if(status===STATUS_DONE && canSupervise){
+        if(rows.length){
+          const {error}=await supabaseClient.from('task_assignees').update({assignee_status:STATUS_DONE, individual_completion_status:COMPLETION_APPROVED, completion_requested_at:nowIso(), completion_requested_by:meId(), completion_reviewed_at:nowIso(), completion_reviewed_by:meId(), completed_at:nowIso()}).eq('task_id',taskId);
+          if(error) throw error;
+        }
+        const {error}=await supabaseClient.from('tasks').update({status:STATUS_DONE, completion_status:COMPLETION_APPROVED, completion_requested_by:meId(), completion_requested_at:nowIso(), completion_reviewed_by:meId(), completion_reviewed_at:nowIso()}).eq('id',taskId);
+        if(error) throw error;
+        await reloadAllScreens();
+        showToast('تم تحويل المهمة كاملة إلى مكتملة لكل المسند إليهم.','success');
+        return;
+      }
+
+      if(status===STATUS_DONE){
+        await requestMyCompletion(task);
+        return;
+      }
+
+      if(status===STATUS_PROGRESS && canSupervise){
+        if(rows.length){
+          const {error}=await supabaseClient.from('task_assignees').update({assignee_status:STATUS_PROGRESS, individual_completion_status:COMPLETION_NONE, completion_requested_at:null, completion_requested_by:null, completion_reviewed_at:null, completion_reviewed_by:null, completed_at:null}).eq('task_id',taskId);
+          if(error) throw error;
+        }
+        const {error}=await supabaseClient.from('tasks').update({status:STATUS_PROGRESS, completion_status:COMPLETION_NONE, completion_requested_by:null, completion_requested_at:null}).eq('id',taskId);
+        if(error) throw error;
+        await reloadAllScreens();
+        showToast('تمت إعادة المهمة إلى قيد التنفيذ.','success');
+        return;
+      }
+
+      if(typeof previousChangeStatusCompletionPendingFix==='function') return previousChangeStatusCompletionPendingFix.apply(this, arguments);
+    }catch(error){ console.error(error); showToast(error.message||'تعذر تحديث حالة المهمة.','error',7000); }
+  };
+
+  setTimeout(function(){
+    try{
+      if(typeof renderCompletionRequests==='function') renderCompletionRequests();
+      if(typeof renderTaskActionRequests==='function') renderTaskActionRequests();
+      if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks==='function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
