@@ -18882,6 +18882,81 @@ init();
 })();
 </script>
 
+
+
+<script>
+/* === HOTFIX: السماح للرئيس التنفيذي بإسناد مهمة لرئيس تنفيذي شركة شقيقة ===
+   السبب: آخر تحقق لنوع التكليف "موظفون محددون" كان يسمح فقط بـ employee / department_manager / sector_head.
+   هذا التصحيح يضيف sister_company_ceo للرئيس التنفيذي فقط، مع بقاء منعه عن باقي المستخدمين.
+*/
+(function(){
+  const SISTER_ROLE = 'sister_company_ceo';
+  const NORMAL_ASSIGNABLE_ROLES = new Set(['employee','department_manager','sector_head']);
+  const previousValidateAssignmentSisterCeoFix = window.validateAssignment;
+
+  function currentRoleSafe(){
+    try{ return String((typeof currentRole === 'function' ? currentRole() : state.profile?.role) || '').trim(); }
+    catch(error){ return String(state.profile?.role || '').trim(); }
+  }
+
+  function isMainCeoSafe(){
+    try{ return typeof isCeo === 'function' ? isCeo() : currentRoleSafe() === 'ceo'; }
+    catch(error){ return currentRoleSafe() === 'ceo'; }
+  }
+
+  function localUserById(userId){
+    return (state.users || []).find(user => String(user.id) === String(userId)) || null;
+  }
+
+  function isSisterCompanyCeo(user){
+    return String(user?.role || '').trim() === SISTER_ROLE;
+  }
+
+  window.validateAssignment = validateAssignment = function(type, selected){
+    if(type !== 'employees'){
+      return typeof previousValidateAssignmentSisterCeoFix === 'function'
+        ? (previousValidateAssignmentSisterCeoFix.apply(this, arguments) || '')
+        : '';
+    }
+
+    const selectedIds = [...new Set((selected || []).filter(Boolean).map(String))];
+    if(!selectedIds.length) return 'اختر مستخدمًا واحدًا على الأقل.';
+
+    const selectedUsers = selectedIds.map(localUserById).filter(Boolean);
+    if(selectedUsers.length !== selectedIds.length) return 'تعذر التحقق من أحد المستخدمين المختارين.';
+
+    const inactiveUsers = selectedUsers.filter(user => user.is_active === false);
+    if(inactiveUsers.length) return 'لا يمكن الإسناد لمستخدم غير نشط.';
+
+    // رئيس تنفيذي شركة شقيقة إذا دخل بحسابه لا يسند إلا لنفسه.
+    if(currentRoleSafe() === SISTER_ROLE){
+      const invalidSelf = selectedUsers.filter(user => String(user.id) !== String(state.profile?.id));
+      if(invalidSelf.length) return 'رئيس تنفيذي شركة شقيقة يستطيع إسناد مهمة لنفسه فقط.';
+      return '';
+    }
+
+    const hasSisterCeo = selectedUsers.some(isSisterCompanyCeo);
+    if(hasSisterCeo && !isMainCeoSafe()){
+      return 'لا يمكن إسناد مهمة إلى رئيس تنفيذي شركة شقيقة إلا من الرئيس التنفيذي.';
+    }
+
+    const invalidRole = selectedUsers.filter(user => {
+      const role = String(user.role || '').trim();
+      if(role === SISTER_ROLE) return !isMainCeoSafe();
+      return !NORMAL_ASSIGNABLE_ROLES.has(role);
+    });
+
+    if(invalidRole.length){
+      return isMainCeoSafe()
+        ? 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات ورؤساء التنفيذ في الشركات الشقيقة فقط.'
+        : 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات فقط.';
+    }
+
+    return '';
+  };
+})();
+</script>
+
 </body>
 </html>
 
