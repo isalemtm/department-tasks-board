@@ -23354,6 +23354,26 @@ window.openTaskFromSummary=openTaskFromSummary;
 
   function renderOrgCost(){
     ensureOrgCostDom();
+    if(typeof ensureUnifiedButtonTheme === 'function') ensureUnifiedButtonTheme();
+
+    if(!document.getElementById('orgCostOrgLikeStyle')){
+      const style=document.createElement('style');
+      style.id='orgCostOrgLikeStyle';
+      style.textContent=`
+        .org-cost-chart .org-person-card{position:relative;}
+        .org-cost-salary-line{display:block;margin-top:8px;color:var(--primary2);font-weight:900;font-size:14px;line-height:1.7;}
+        .org-cost-salary-line.missing{color:#b35b5b;}
+        .org-cost-salary-edit{display:flex;gap:6px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap;}
+        .org-cost-salary-edit input{width:130px;max-width:100%;text-align:center;border-radius:12px;padding:8px 10px;border:1px solid var(--line);background:#fff;}
+        .org-cost-salary-edit .btn{padding:8px 10px;font-size:12px;border-radius:12px;}
+        .org-cost-sector-total{font-size:13px;color:var(--muted);text-align:center;margin-top:8px;font-weight:700;}
+        .org-cost-chart .org-sector-title-card small{display:block;font-size:13px;color:var(--muted);font-weight:700;margin-top:4px;}
+        .org-cost-chart .org-dept-title-card .org-cost-sector-total{margin-top:5px;}
+        @media(max-width:900px){.org-cost-salary-edit input{width:115px;}}
+      `;
+      document.head.appendChild(style);
+    }
+
     const box=document.getElementById('orgCostContent');
     if(!box) return;
     if(!canViewOrgCost()){
@@ -23361,58 +23381,89 @@ window.openTaskFromSummary=openTaskFromSummary;
       return;
     }
 
-    const users=activeUsersForCost();
+    const users=(state.users||[]).filter(u=>u.is_active!==false);
     const compMap=new Map((state.compensations || []).map(c => [String(c.user_id), c]));
-    const monthlyTotal=users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0), 0);
-    const entered=users.filter(u => Number(compMap.get(String(u.id))?.monthly_salary || 0) > 0).length;
-    const missing=users.length - entered;
+    const salaryOf = u => Number(compMap.get(String(u.id))?.monthly_salary || 0);
+    const monthlyTotal=users.reduce((sum,u)=>sum+salaryOf(u),0);
+    const entered=users.filter(u=>salaryOf(u)>0).length;
+    const missing=users.length-entered;
 
-    const sectorMap=new Map();
-    users.forEach(u=>{
-      const sectorKey=u.sector_id || 'no-sector';
-      if(!sectorMap.has(sectorKey)) sectorMap.set(sectorKey, {id:u.sector_id, name:nameOfSector(u.sector_id)||'بدون قطاع', users:[]});
-      sectorMap.get(sectorKey).users.push(u);
-    });
+    function salaryBlock(u){
+      const salary=salaryOf(u);
+      const shown=salary>0
+        ? `<span class="org-cost-salary-line">الراتب الشهري: ${money(salary)}</span><span class="org-job">التكلفة السنوية: ${money(salary*12)}</span>`
+        : `<span class="org-cost-salary-line missing">الراتب الشهري: لم يُدخل</span>`;
+      return `${shown}<div class="org-cost-salary-edit"><input id="salary-${u.id}" type="number" min="0" step="0.01" value="${salary>0?salary:''}" placeholder="الراتب الشهري"><button class="btn btn-primary btn-sm" onclick="saveEmployeeSalary('${u.id}')">حفظ</button></div>`;
+    }
 
-    const sectors=[...sectorMap.values()].map(sector=>{
-      const sectorMonthly=sector.users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0),0);
-      const deptMap=new Map();
-      sector.users.forEach(u=>{
-        const deptKey=u.department_id || 'no-dept';
-        if(!deptMap.has(deptKey)) deptMap.set(deptKey, {id:u.department_id, name:nameOfDept(u.department_id)||'بدون قسم', users:[]});
-        deptMap.get(deptKey).users.push(u);
-      });
-      const depts=[...deptMap.values()].map(dep=>{
-        const depMonthly=dep.users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0),0);
-        const rows=dep.users.map(u=>{
-          const comp=compMap.get(String(u.id));
-          const salary=comp?.monthly_salary ?? '';
-          const salaryNumber=Number(salary || 0);
-          return `<tr>
-            <td>${escapeHtml(u.name||'—')}</td>
-            <td>${escapeHtml(u.job_title||'—')}</td>
-            <td>${escapeHtml(roleLabel(u.role)||'—')}</td>
-            <td><input id="salary-${u.id}" type="number" min="0" step="0.01" value="${salary!=='' && salary!==null && salary!==undefined ? Number(salary) : ''}" placeholder="الراتب الشهري"></td>
-            <td>${salaryNumber>0?`<span class="org-cost-entered">${money(salaryNumber)}</span>`:'<span class="org-cost-missing">لم يُدخل</span>'}</td>
-            <td>${salaryNumber>0?money(salaryNumber*12):'—'}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="saveEmployeeSalary('${u.id}')">حفظ</button></td>
-          </tr>`;
-        }).join('');
-        return `<div class="org-cost-dept">
-          <div class="org-cost-dept-title"><span>${escapeHtml(dep.name)}</span><span class="badge">${dep.users.length} موظف | ${money(depMonthly)} شهريًا</span></div>
-          <div class="table-wrap"><table class="org-cost-table"><thead><tr><th>الموظف</th><th>المسمى</th><th>الدور</th><th>الراتب الشهري</th><th>التكلفة الشهرية</th><th>التكلفة السنوية</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>
+    function costPersonCard(u, roleClass='employee', roleLabelText='موظف'){
+      if(!u) return '<div class="org-note-line">غير محدد</div>';
+      const job=u.job_title || roleLabel(u.role) || roleLabelText || 'موظف';
+      return `<div class="org-person-card ${roleClass}"><span class="org-role-label">${escapeHtml(roleLabelText)}</span><span class="org-name">${escapeHtml(u.name||'—')}</span><span class="org-job">${escapeHtml(job)}</span>${salaryBlock(u)}</div>`;
+    }
+
+    function costMiniHeadCards(usersList, roleLabelText='رئيس القطاع'){
+      if(!usersList || !usersList.length) return '<div class="org-note-line">غير محدد</div>';
+      return usersList.map(u=>costPersonCard(u,'head',roleLabelText)).join('');
+    }
+
+    const ceos=users.filter(u=>u.role==='ceo');
+    const ceoCards=ceos.length ? ceos.map(u=>costPersonCard(u,'head','الرئيس التنفيذي')).join('') : '<div class="org-note-line">لم يتم تحديد الرئيس التنفيذي في النظام.</div>';
+
+    const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+    const sectorHtml=sectors.map(sector=>{
+      const sectorUsers=users.filter(u=>u.sector_id===sector.id && u.role!=='ceo');
+      const sectorMonthly=sectorUsers.reduce((sum,u)=>sum+salaryOf(u),0);
+      const heads=sectorUsers.filter(u=>u.role==='sector_head');
+      const departments=(state.departments||[]).filter(d=>d.sector_id===sector.id).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+      const departmentsHtml=departments.map(dep=>{
+        const depUsers=users.filter(u=>u.department_id===dep.id);
+        const depMonthly=depUsers.reduce((sum,u)=>sum+salaryOf(u),0);
+        const managers=depUsers.filter(u=>u.role==='department_manager');
+        const employees=depUsers.filter(u=>!['department_manager','sector_head','ceo'].includes(u.role));
+        const managerBlock=managers.length ? `<div class="org-person-cards">${managers.map(u=>costPersonCard(u,'manager','مدير القسم')).join('')}</div>` : '<div class="org-note-line">لا يوجد مدير قسم محدد.</div>';
+        const employeeBlock=employees.length ? `<div class="org-person-cards">${employees.map(u=>costPersonCard(u,'employee', roleLabel(u.role)||'موظف')).join('')}</div>` : '<div class="org-note-line">لا يوجد موظفون مسجلون في هذا القسم.</div>';
+        return `<div class="org-department-box">
+          <div class="org-dept-title-card">
+            <span class="org-role-label">القسم</span>
+            <span class="org-name">${escapeHtml(dep.name||'—')}</span>
+            <span class="org-job">${escapeHtml(nameOfSector(dep.sector_id)||'')}</span>
+            <div class="org-cost-sector-total">${depUsers.length} موظف | ${money(depMonthly)} شهريًا | ${money(depMonthly*12)} سنويًا</div>
+          </div>
+          <div class="org-tree-line"></div>
+          ${managerBlock}
+          <div class="org-note-line">الموظفون</div>
+          ${employeeBlock}
         </div>`;
       }).join('');
-      return `<section class="org-cost-sector">
-        <div class="org-cost-sector-title"><span>${escapeHtml(sector.name)}</span><span class="badge">${sector.users.length} موظف | ${money(sectorMonthly)} شهريًا | ${money(sectorMonthly*12)} سنويًا</span></div>
-        ${depts || '<div class="empty">لا يوجد موظفون.</div>'}
-      </section>`;
+
+      const usersWithoutDepartment=sectorUsers.filter(u=>!u.department_id && !['sector_head','ceo'].includes(u.role));
+      const noDeptMonthly=usersWithoutDepartment.reduce((sum,u)=>sum+salaryOf(u),0);
+      const noDeptBlock=usersWithoutDepartment.length ? `<div class="org-department-box">
+        <div class="org-dept-title-card">
+          <span class="org-role-label">قسم غير محدد</span>
+          <span class="org-name">بدون قسم</span>
+          <span class="org-job">مستخدمون تابعون مباشرة للقطاع</span>
+          <div class="org-cost-sector-total">${usersWithoutDepartment.length} موظف | ${money(noDeptMonthly)} شهريًا | ${money(noDeptMonthly*12)} سنويًا</div>
+        </div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards">${usersWithoutDepartment.map(u=>costPersonCard(u,'employee',roleLabel(u.role)||'موظف')).join('')}</div>
+      </div>` : '';
+
+      return `<div class="org-sector-box">
+        <div class="org-sector-title-card">${escapeHtml(sector.name||'—')}<small>${sectorUsers.length} موظف | ${money(sectorMonthly)} شهريًا | ${money(sectorMonthly*12)} سنويًا</small></div>
+        <div class="org-tree-line"></div>
+        <div class="org-person-cards" style="max-width:700px;margin:0 auto;">${costMiniHeadCards(heads,'رئيس القطاع')}</div>
+        <div class="org-tree-line"></div>
+        <div class="org-departments-grid">${departmentsHtml || '<div class="org-note-line">لا توجد أقسام مسجلة تحت هذا القطاع.</div>'}${noDeptBlock}</div>
+      </div>`;
     }).join('');
 
     box.innerHTML=`<section class="panel card">
       <div class="section-head">
-        <div><h2>تكلفة الهيكل التنظيمي</h2><p class="meta">تظهر هذه الصفحة للرئيس التنفيذي ومدير النظام فقط، والراتب محفوظ في جدول مستقل عن بيانات المستخدمين.</p></div>
-        <button class="btn btn-info btn-sm" onclick="exportOrgCostToExcel()">تصدير Excel</button>
+        <div><h2>تكلفة الهيكل التنظيمي</h2><p class="meta">نفس عرض الهيكل التنظيمي، مع إظهار الراتب الشهري تحت المسمى الوظيفي لكل موظف. الصفحة مخصصة للرئيس التنفيذي ومدير النظام فقط.</p></div>
+        <div class="actions"><button class="btn btn-info btn-sm" onclick="exportOrgCostToExcel()">تصدير Excel</button></div>
       </div>
       <div class="org-cost-summary">
         <div class="org-cost-stat"><span>إجمالي التكلفة الشهرية</span><strong>${money(monthlyTotal)}</strong></div>
@@ -23420,7 +23471,14 @@ window.openTaskFromSummary=openTaskFromSummary;
         <div class="org-cost-stat"><span>عدد الموظفين</span><strong>${users.length}</strong></div>
         <div class="org-cost-stat"><span>لم تُدخل رواتبهم</span><strong>${missing}</strong></div>
       </div>
-      ${sectors || '<div class="empty">لا توجد بيانات موظفين.</div>'}
+      <div class="org-chart-page org-cost-chart">
+        <div class="org-sector-box org-ceo-card">
+          <div class="org-sector-title-card">الإدارة التنفيذية</div>
+          <div class="org-tree-line"></div>
+          <div class="org-person-cards">${ceoCards}</div>
+        </div>
+        <div class="org-sector-stack">${sectorHtml || '<div class="empty">لا توجد قطاعات مسجلة.</div>'}</div>
+      </div>
     </section>`;
   }
 
