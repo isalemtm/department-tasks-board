@@ -4974,7 +4974,7 @@ function userLine(u){
 
 function renderOrgPage(){
   ensurePerformanceAndOrgPagesDom();
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -5092,7 +5092,7 @@ function orgRoleSortOrder(role){
 }
 
 function orgExportRows(){
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
   const rows=[];
 
@@ -5230,7 +5230,7 @@ function exportOrgChartToExcel(){
 renderOrgPage = function(){
   ensurePerformanceAndOrgPagesDom();
   ensureUnifiedButtonTheme();
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -5662,7 +5662,7 @@ renderOrgPage = function(){
   ensurePerformanceAndOrgPagesDom();
   ensureUnifiedButtonTheme();
 
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -8591,7 +8591,7 @@ renderOrgPage = function(){
   ensurePerformanceAndOrgPagesDom();
   ensureUnifiedButtonTheme();
 
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -11260,7 +11260,7 @@ showApp = function(){
 
 /* === PATCH: لوحة الموظف تعرض موظفي القطاع بدل الموظف نفسه === */
 function dashboardSectorUsersForEmployee(){
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   if(currentRole()==='employee'){
     return users.filter(u=>u.sector_id===state.profile?.sector_id);
   }
@@ -12726,7 +12726,7 @@ function execTransferPendingCount(){
 }
 
 function execTopEmployeeCounts(){
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   return users.map(u=>({
     name:u.name||'—',
     count:tasksForUser(u.id).length
@@ -16299,7 +16299,7 @@ renderOrgPage = function(){
   ensureUnifiedButtonTheme();
   ensureCommercialSectorOrgStyle();
 
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -16390,7 +16390,7 @@ function renderOrgPageUniformAllSectors(){
   ensurePerformanceAndOrgPagesDom();
   ensureUnifiedButtonTheme();
 
-  const users=(state.users||[]).filter(u=>u.is_active!==false);
+  const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
   const ceos=users.filter(u=>u.role==='ceo');
   const sectors=(state.sectors||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
@@ -23169,6 +23169,10 @@ window.openTaskFromSummary=openTaskFromSummary;
     return typeof isAdminOrCeo === 'function' ? isAdminOrCeo() : (typeof isAdmin==='function' && isAdmin()) || (typeof isCeo==='function' && isCeo());
   }
 
+  function canEditOrgCost(){
+    return typeof isAdmin === 'function' ? isAdmin() : state?.profile?.role === 'admin';
+  }
+
   function money(value){
     const n = Number(value || 0);
     if(!Number.isFinite(n)) return '0 ر.س';
@@ -23204,7 +23208,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   }
 
   async function upsertCompensation(userId, salaryValue, notes=''){
-    if(!canViewOrgCost()) throw new Error('ليست لديك صلاحية تعديل الرواتب.');
+    if(!canEditOrgCost()) throw new Error('تعديل الرواتب مخصص لمدير النظام فقط.');
     const existing = getCompensation(userId);
     const payload = {
       user_id:userId,
@@ -23238,7 +23242,7 @@ window.openTaskFromSummary=openTaskFromSummary;
   }
 
   async function saveCompensationsForRows(rows){
-    if(!canViewOrgCost()) return 0;
+    if(!canEditOrgCost()) return 0;
     const candidates = (rows || []).filter(r => r && r.monthly_salary !== null && r.monthly_salary !== undefined && r.monthly_salary !== '');
     if(!candidates.length) return 0;
     const emails = candidates.map(r => String(r.email || '').trim().toLowerCase()).filter(Boolean);
@@ -23329,9 +23333,11 @@ window.openTaskFromSummary=openTaskFromSummary;
   }
 
   function ensureDirectInviteSalaryField(){
+    const existing=document.getElementById('adminInviteMonthlySalary')?.closest('.form-group');
+    if(!canEditOrgCost()){ existing?.remove(); return; }
     const grid=document.querySelector('#directInvitePanel .form-grid');
     if(!grid || document.getElementById('adminInviteMonthlySalary')) return;
-    const html=`<div class="form-group"><label>الراتب الشهري</label><input id="adminInviteMonthlySalary" type="number" min="0" step="0.01" placeholder="اختياري"></div>`;
+    const html=`<div class="form-group"><label>الراتب الشهري</label><input id="adminInviteMonthlySalary" type="number" min="0" step="0.01" placeholder="اختياري - مدير النظام فقط"></div>`;
     const dept=document.getElementById('adminInviteDepartment')?.closest('.form-group');
     if(dept) dept.insertAdjacentHTML('afterend', html);
     else grid.insertAdjacentHTML('beforeend', html);
@@ -23339,7 +23345,7 @@ window.openTaskFromSummary=openTaskFromSummary;
 
   function activeUsersForCost(){
     return (state.users || [])
-      .filter(u => u.is_active !== false)
+      .filter(u => u.is_active !== false && u.role !== 'sister_company_ceo')
       .slice()
       .sort((a,b)=>{
         const sa=String(nameOfSector(a.sector_id)||'بدون قطاع');
@@ -23381,7 +23387,7 @@ window.openTaskFromSummary=openTaskFromSummary;
       return;
     }
 
-    const users=(state.users||[]).filter(u=>u.is_active!==false);
+    const users=(state.users||[]).filter(u=>u.is_active!==false && u.role!=='sister_company_ceo');
     const compMap=new Map((state.compensations || []).map(c => [String(c.user_id), c]));
     const salaryOf = u => Number(compMap.get(String(u.id))?.monthly_salary || 0);
     const monthlyTotal=users.reduce((sum,u)=>sum+salaryOf(u),0);
@@ -23393,6 +23399,7 @@ window.openTaskFromSummary=openTaskFromSummary;
       const shown=salary>0
         ? `<span class="org-cost-salary-line">الراتب الشهري: ${money(salary)}</span><span class="org-job">التكلفة السنوية: ${money(salary*12)}</span>`
         : `<span class="org-cost-salary-line missing">الراتب الشهري: لم يُدخل</span>`;
+      if(!canEditOrgCost()) return shown;
       return `${shown}<div class="org-cost-salary-edit"><input id="salary-${u.id}" type="number" min="0" step="0.01" value="${salary>0?salary:''}" placeholder="الراتب الشهري"><button class="btn btn-primary btn-sm" onclick="saveEmployeeSalary('${u.id}')">حفظ</button></div>`;
     }
 
@@ -23462,7 +23469,7 @@ window.openTaskFromSummary=openTaskFromSummary;
 
     box.innerHTML=`<section class="panel card">
       <div class="section-head">
-        <div><h2>تكلفة الهيكل التنظيمي</h2><p class="meta">نفس عرض الهيكل التنظيمي، مع إظهار الراتب الشهري تحت المسمى الوظيفي لكل موظف. الصفحة مخصصة للرئيس التنفيذي ومدير النظام فقط.</p></div>
+        <div><h2>تكلفة الهيكل التنظيمي</h2><p class="meta">نفس عرض الهيكل التنظيمي، مع إظهار الراتب الشهري تحت المسمى الوظيفي لكل موظف. الصفحة مخصصة للرئيس التنفيذي ومدير النظام فقط، وتعديل الرواتب مخصص لمدير النظام.</p></div>
         <div class="actions"><button class="btn btn-info btn-sm" onclick="exportOrgCostToExcel()">تصدير Excel</button></div>
       </div>
       <div class="org-cost-summary">
@@ -23484,7 +23491,7 @@ window.openTaskFromSummary=openTaskFromSummary;
 
   window.saveEmployeeSalary = async function(userId){
     try{
-      if(!canViewOrgCost()) return showToast('ليست لديك صلاحية تعديل الرواتب.','error');
+      if(!canEditOrgCost()) return showToast('تعديل الرواتب مخصص لمدير النظام فقط.','error');
       const input=document.getElementById(`salary-${userId}`);
       if(!input) return;
       const parsed=parseOptionalSalary(input.value);
@@ -23590,6 +23597,9 @@ window.openTaskFromSummary=openTaskFromSummary;
   const previousInviteUserByAdminComp = window.inviteUserByAdmin || (typeof inviteUserByAdmin === 'function' ? inviteUserByAdmin : null);
   if(typeof previousInviteUserByAdminComp === 'function'){
     window.inviteUserByAdmin = inviteUserByAdmin = async function(){
+      if(!canEditOrgCost()){
+        return previousInviteUserByAdminComp.apply(this, arguments);
+      }
       const emailBefore = String(document.getElementById('adminInviteEmail')?.value || '').trim().toLowerCase();
       const parsed = parseOptionalSalary(document.getElementById('adminInviteMonthlySalary')?.value || '');
       if(!parsed.valid) return showToast(parsed.error,'error');
