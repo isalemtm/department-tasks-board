@@ -18957,6 +18957,136 @@ init();
 })();
 </script>
 
+
+
+<script>
+/* === PERFORMANCE PATCH: تسريع عمليات الحفظ والاعتماد والتعليقات ===
+   - لا يغيّر الصلاحيات أو منطق الاعتمادات.
+   - يجعل إشعارات البريد تعمل في الخلفية بدل انتظارها.
+   - يمنع إعادة تحميل كل بيانات اللوحة قبل إظهار رسالة النجاح.
+   - يحدث الشاشة في الخلفية بعد انتهاء العملية الأساسية.
+*/
+(function(){
+  if(window.__FAST_SAVE_ACTIONS_PATCH_INSTALLED__) return;
+  window.__FAST_SAVE_ACTIONS_PATCH_INSTALLED__ = true;
+
+  let suppressFullReloadOnce = false;
+  let backgroundRefreshTimer = null;
+
+  const originalLoadAll = (typeof loadAll === 'function') ? loadAll : null;
+
+  function isVisible(id){
+    const el = document.getElementById(id);
+    return !!(el && !el.classList.contains('hidden'));
+  }
+
+  function safeRenderCurrentViews(){
+    try{
+      if(typeof setupFilters === 'function') setupFilters();
+      if(typeof renderTasks === 'function') renderTasks();
+      if(isVisible('dashboardPage') && typeof renderDashboard === 'function') renderDashboard();
+      if(isVisible('adminPage') && typeof renderAdmin === 'function') renderAdmin();
+      if(typeof renderCompletionRequests === 'function') renderCompletionRequests();
+      if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
+      if(typeof renderExternalAssignmentActionPanel === 'function') renderExternalAssignmentActionPanel();
+      if(isVisible('adminPage') && typeof renderExternalAssignmentRequests === 'function') renderExternalAssignmentRequests();
+    }catch(error){
+      console.warn('تعذر تحديث الواجهة بعد العملية السريعة:', error);
+    }
+  }
+
+  function queueBackgroundRefresh(delay){
+    if(!originalLoadAll) return;
+    clearTimeout(backgroundRefreshTimer);
+    backgroundRefreshTimer = setTimeout(async function(){
+      try{
+        await originalLoadAll();
+        safeRenderCurrentViews();
+      }catch(error){
+        console.warn('تعذر تحديث بيانات اللوحة في الخلفية:', error);
+      }
+    }, typeof delay === 'number' ? delay : 350);
+  }
+
+  if(originalLoadAll){
+    loadAll = async function(){
+      if(suppressFullReloadOnce){
+        return;
+      }
+      return await originalLoadAll.apply(this, arguments);
+    };
+  }
+
+  if(typeof reloadAllScreens === 'function'){
+    const originalReloadAllScreens = reloadAllScreens;
+    reloadAllScreens = async function(){
+      if(suppressFullReloadOnce){
+        safeRenderCurrentViews();
+        return;
+      }
+      return await originalReloadAllScreens.apply(this, arguments);
+    };
+  }
+
+  function runNotificationInBackground(fn, args, label){
+    setTimeout(async function(){
+      try{
+        await fn.apply(this, args);
+      }catch(error){
+        console.warn(label || 'تعذر تنفيذ الإشعار في الخلفية:', error);
+      }
+    }, 0);
+    return Promise.resolve({ok:true, queued:true, background:true});
+  }
+
+  if(typeof notifyAssigneesByEmailAfterTaskCreate === 'function'){
+    const originalNotifyAssigneesByEmailAfterTaskCreate = notifyAssigneesByEmailAfterTaskCreate;
+    notifyAssigneesByEmailAfterTaskCreate = function(){
+      return runNotificationInBackground(originalNotifyAssigneesByEmailAfterTaskCreate, arguments, 'تعذر إرسال إشعار إنشاء المهمة في الخلفية:');
+    };
+  }
+
+  if(typeof notifyTaskEventByEmail === 'function'){
+    const originalNotifyTaskEventByEmail = notifyTaskEventByEmail;
+    notifyTaskEventByEmail = function(){
+      return runNotificationInBackground(originalNotifyTaskEventByEmail, arguments, 'تعذر إرسال إشعار حدث المهمة في الخلفية:');
+    };
+  }
+
+  function wrapFastAction(functionName){
+    const original = window[functionName] || (typeof globalThis !== 'undefined' ? globalThis[functionName] : null);
+    if(typeof original !== 'function' || original.__fastActionWrapped) return;
+
+    const wrapped = async function(){
+      suppressFullReloadOnce = true;
+      try{
+        return await original.apply(this, arguments);
+      }finally{
+        suppressFullReloadOnce = false;
+        queueBackgroundRefresh(250);
+      }
+    };
+    wrapped.__fastActionWrapped = true;
+
+    window[functionName] = wrapped;
+    try{ globalThis[functionName] = wrapped; }catch(e){}
+    try{ eval(functionName + ' = window[functionName];'); }catch(e){}
+  }
+
+  [
+    'saveTask',
+    'addComment',
+    'approveTaskCompletion',
+    'rejectTaskCompletion',
+    'approveExternalAssignmentRequest',
+    'rejectExternalAssignmentRequest',
+    'approveTransferRequest',
+    'rejectTransferRequest',
+    'changeStatus'
+  ].forEach(wrapFastAction);
+})();
+</script>
+
 </body>
 </html>
 
