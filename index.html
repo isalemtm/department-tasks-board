@@ -18957,136 +18957,6 @@ init();
 })();
 </script>
 
-
-
-<script>
-/* === PERFORMANCE PATCH: تسريع عمليات الحفظ والاعتماد والتعليقات ===
-   - لا يغيّر الصلاحيات أو منطق الاعتمادات.
-   - يجعل إشعارات البريد تعمل في الخلفية بدل انتظارها.
-   - يمنع إعادة تحميل كل بيانات اللوحة قبل إظهار رسالة النجاح.
-   - يحدث الشاشة في الخلفية بعد انتهاء العملية الأساسية.
-*/
-(function(){
-  if(window.__FAST_SAVE_ACTIONS_PATCH_INSTALLED__) return;
-  window.__FAST_SAVE_ACTIONS_PATCH_INSTALLED__ = true;
-
-  let suppressFullReloadOnce = false;
-  let backgroundRefreshTimer = null;
-
-  const originalLoadAll = (typeof loadAll === 'function') ? loadAll : null;
-
-  function isVisible(id){
-    const el = document.getElementById(id);
-    return !!(el && !el.classList.contains('hidden'));
-  }
-
-  function safeRenderCurrentViews(){
-    try{
-      if(typeof setupFilters === 'function') setupFilters();
-      if(typeof renderTasks === 'function') renderTasks();
-      if(isVisible('dashboardPage') && typeof renderDashboard === 'function') renderDashboard();
-      if(isVisible('adminPage') && typeof renderAdmin === 'function') renderAdmin();
-      if(typeof renderCompletionRequests === 'function') renderCompletionRequests();
-      if(typeof renderTaskActionRequests === 'function') renderTaskActionRequests();
-      if(typeof renderExternalAssignmentActionPanel === 'function') renderExternalAssignmentActionPanel();
-      if(isVisible('adminPage') && typeof renderExternalAssignmentRequests === 'function') renderExternalAssignmentRequests();
-    }catch(error){
-      console.warn('تعذر تحديث الواجهة بعد العملية السريعة:', error);
-    }
-  }
-
-  function queueBackgroundRefresh(delay){
-    if(!originalLoadAll) return;
-    clearTimeout(backgroundRefreshTimer);
-    backgroundRefreshTimer = setTimeout(async function(){
-      try{
-        await originalLoadAll();
-        safeRenderCurrentViews();
-      }catch(error){
-        console.warn('تعذر تحديث بيانات اللوحة في الخلفية:', error);
-      }
-    }, typeof delay === 'number' ? delay : 350);
-  }
-
-  if(originalLoadAll){
-    loadAll = async function(){
-      if(suppressFullReloadOnce){
-        return;
-      }
-      return await originalLoadAll.apply(this, arguments);
-    };
-  }
-
-  if(typeof reloadAllScreens === 'function'){
-    const originalReloadAllScreens = reloadAllScreens;
-    reloadAllScreens = async function(){
-      if(suppressFullReloadOnce){
-        safeRenderCurrentViews();
-        return;
-      }
-      return await originalReloadAllScreens.apply(this, arguments);
-    };
-  }
-
-  function runNotificationInBackground(fn, args, label){
-    setTimeout(async function(){
-      try{
-        await fn.apply(this, args);
-      }catch(error){
-        console.warn(label || 'تعذر تنفيذ الإشعار في الخلفية:', error);
-      }
-    }, 0);
-    return Promise.resolve({ok:true, queued:true, background:true});
-  }
-
-  if(typeof notifyAssigneesByEmailAfterTaskCreate === 'function'){
-    const originalNotifyAssigneesByEmailAfterTaskCreate = notifyAssigneesByEmailAfterTaskCreate;
-    notifyAssigneesByEmailAfterTaskCreate = function(){
-      return runNotificationInBackground(originalNotifyAssigneesByEmailAfterTaskCreate, arguments, 'تعذر إرسال إشعار إنشاء المهمة في الخلفية:');
-    };
-  }
-
-  if(typeof notifyTaskEventByEmail === 'function'){
-    const originalNotifyTaskEventByEmail = notifyTaskEventByEmail;
-    notifyTaskEventByEmail = function(){
-      return runNotificationInBackground(originalNotifyTaskEventByEmail, arguments, 'تعذر إرسال إشعار حدث المهمة في الخلفية:');
-    };
-  }
-
-  function wrapFastAction(functionName){
-    const original = window[functionName] || (typeof globalThis !== 'undefined' ? globalThis[functionName] : null);
-    if(typeof original !== 'function' || original.__fastActionWrapped) return;
-
-    const wrapped = async function(){
-      suppressFullReloadOnce = true;
-      try{
-        return await original.apply(this, arguments);
-      }finally{
-        suppressFullReloadOnce = false;
-        queueBackgroundRefresh(250);
-      }
-    };
-    wrapped.__fastActionWrapped = true;
-
-    window[functionName] = wrapped;
-    try{ globalThis[functionName] = wrapped; }catch(e){}
-    try{ eval(functionName + ' = window[functionName];'); }catch(e){}
-  }
-
-  [
-    'saveTask',
-    'addComment',
-    'approveTaskCompletion',
-    'rejectTaskCompletion',
-    'approveExternalAssignmentRequest',
-    'rejectExternalAssignmentRequest',
-    'approveTransferRequest',
-    'rejectTransferRequest',
-    'changeStatus'
-  ].forEach(wrapFastAction);
-})();
-</script>
-
 </body>
 </html>
 
@@ -22923,6 +22793,369 @@ window.openTaskFromSummary=openTaskFromSummary;
       if(typeof renderCompletionRequests==='function') renderCompletionRequests();
       if(typeof renderTaskActionRequests==='function') renderTaskActionRequests();
       if(document.getElementById('tasksPage') && !document.getElementById('tasksPage').classList.contains('hidden') && typeof renderTasks==='function') renderTasks();
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
+
+<script>
+/* === FEATURE: واجهة إنشاء قوالب المهام الدورية ===
+   تعتمد على الجداول والدالة التي تم إنشاؤها في Supabase:
+   recurring_task_templates, recurring_task_template_assignees, generate_due_recurring_tasks.
+   لا تغيّر منطق المهام العادية ولا الاعتمادات الحالية. */
+(function(){
+  const NORMAL_TASK='normal';
+  const RECURRING_TASK='recurring';
+  let recurringSaveInProgress=false;
+  let recurringGenerationRan=false;
+
+  function el(id){ return document.getElementById(id); }
+  function safeHtml(value){ return typeof escapeHtml==='function' ? escapeHtml(value) : String(value||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+  function insertRecurringStyles(){
+    if(el('recurringTaskFeatureStyle')) return;
+    const style=document.createElement('style');
+    style.id='recurringTaskFeatureStyle';
+    style.textContent=`
+      .recurring-task-box{
+        border:1px dashed var(--line,#d9c8bd);
+        border-radius:14px;
+        padding:14px;
+        background:#fffaf7;
+        margin-top:4px;
+      }
+      .recurring-task-box.hidden{display:none!important;}
+      .recurring-task-note{
+        font-size:12px;
+        color:#7b665c;
+        line-height:1.8;
+        margin-top:6px;
+      }
+      .recurring-task-type-row{
+        border:1px solid var(--line,#d9c8bd);
+        border-radius:14px;
+        padding:10px 12px;
+        background:#fff;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function createRecurringControls(){
+    insertRecurringStyles();
+    if(el('taskKind')) return;
+
+    const dueGroup=el('taskDue')?.closest('.form-group');
+    const descriptionGroup=el('taskDescription')?.closest('.form-group');
+    const parent=dueGroup?.parentElement || descriptionGroup?.parentElement || el('taskModal')?.querySelector('.form-grid');
+    if(!parent) return;
+
+    const typeGroup=document.createElement('div');
+    typeGroup.className='form-group recurring-task-type-row';
+    typeGroup.id='taskKindGroup';
+    typeGroup.innerHTML=`
+      <label>نوع المهمة</label>
+      <select id="taskKind" onchange="toggleRecurringTaskFields()">
+        <option value="normal" selected>مهمة عادية</option>
+        <option value="recurring">مهمة دورية</option>
+      </select>
+    `;
+
+    if(dueGroup && dueGroup.parentNode){
+      dueGroup.parentNode.insertBefore(typeGroup, dueGroup);
+    }else{
+      parent.insertBefore(typeGroup, parent.firstChild);
+    }
+
+    const recurringWrap=document.createElement('div');
+    recurringWrap.id='recurringTaskFields';
+    recurringWrap.className='form-group full recurring-task-box hidden';
+    recurringWrap.innerHTML=`
+      <div class="form-grid">
+        <div class="form-group">
+          <label>تكرار المهمة</label>
+          <select id="recurrenceFrequency">
+            <option value="weekly">أسبوعي</option>
+            <option value="monthly" selected>شهري</option>
+            <option value="quarterly">ربع سنوي</option>
+            <option value="semiannual">نصف سنوي</option>
+            <option value="yearly">سنوي</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>إنشاء المهمة قبل الاستحقاق بـ</label>
+          <select id="recurringGenerateDaysBefore">
+            <option value="0">في يوم الاستحقاق</option>
+            <option value="7" selected>7 أيام</option>
+            <option value="15">15 يوم</option>
+            <option value="30">30 يوم</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>نهاية التكرار</label>
+          <select id="recurringEndMode" onchange="toggleRecurringEndFields()">
+            <option value="none" selected>بدون نهاية</option>
+            <option value="date">حتى تاريخ محدد</option>
+            <option value="count">عدد مرات محدد</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="recurringEndDateGroup">
+          <label>تاريخ نهاية التكرار</label>
+          <input id="recurringEndDate" type="date">
+        </div>
+        <div class="form-group hidden" id="recurringMaxOccurrencesGroup">
+          <label>عدد مرات التكرار</label>
+          <input id="recurringMaxOccurrences" type="number" min="1" step="1" placeholder="مثال: 12">
+        </div>
+      </div>
+      <div class="recurring-task-note">
+        سيتم حفظها كقالب دوري، ولا تُحسب في الأداء إلا عند توليد المهمة الفعلية. تاريخ الاستحقاق أعلاه يُستخدم كأول تاريخ استحقاق.
+      </div>
+    `;
+
+    if(descriptionGroup && descriptionGroup.parentNode){
+      descriptionGroup.parentNode.insertBefore(recurringWrap, descriptionGroup.nextSibling);
+    }else{
+      parent.appendChild(recurringWrap);
+    }
+  }
+
+  window.toggleRecurringEndFields=function(){
+    const mode=el('recurringEndMode')?.value || 'none';
+    el('recurringEndDateGroup')?.classList.toggle('hidden', mode!=='date');
+    el('recurringMaxOccurrencesGroup')?.classList.toggle('hidden', mode!=='count');
+  };
+
+  window.toggleRecurringTaskFields=function(){
+    const isRecurring=(el('taskKind')?.value===RECURRING_TASK);
+    const wrap=el('recurringTaskFields');
+    if(wrap) wrap.classList.toggle('hidden', !isRecurring);
+    const dueLabel=el('taskDue')?.closest('.form-group')?.querySelector('label');
+    if(dueLabel) dueLabel.textContent=isRecurring?'تاريخ أول استحقاق':'تاريخ الاستحقاق';
+    const title=el('taskModalTitle');
+    if(title && !el('editTaskId')?.value){
+      title.textContent=isRecurring?'إضافة مهمة دورية':'إضافة مهمة';
+    }
+    window.toggleRecurringEndFields();
+  };
+
+  function resetRecurringControls(){
+    createRecurringControls();
+    if(el('taskKind')) el('taskKind').value=NORMAL_TASK;
+    if(el('recurrenceFrequency')) el('recurrenceFrequency').value='monthly';
+    if(el('recurringGenerateDaysBefore')) el('recurringGenerateDaysBefore').value='7';
+    if(el('recurringEndMode')) el('recurringEndMode').value='none';
+    if(el('recurringEndDate')) el('recurringEndDate').value='';
+    if(el('recurringMaxOccurrences')) el('recurringMaxOccurrences').value='';
+    window.toggleRecurringTaskFields();
+  }
+
+  const previousOpenTaskModalRecurring=window.openTaskModal || (typeof openTaskModal==='function'?openTaskModal:null);
+  if(typeof previousOpenTaskModalRecurring==='function'){
+    window.openTaskModal=openTaskModal=function(){
+      const result=previousOpenTaskModalRecurring.apply(this, arguments);
+      resetRecurringControls();
+      return result;
+    };
+  }else{
+    setTimeout(createRecurringControls,0);
+  }
+
+  function selectedAssigneeIdsForCurrentForm(type){
+    let selected=[...(el('assigneePicker')?.querySelectorAll('input:checked')||[])].map(i=>i.value);
+    if(type==='all_company'){
+      selected=(state.users||[]).filter(u=>u.is_active!==false).map(u=>u.id);
+    }
+    if(type==='all_sector'){
+      const sector=el('taskTargetSector')?.value || '';
+      selected=(state.users||[]).filter(u=>u.is_active!==false && (!sector || u.sector_id===sector)).map(u=>u.id);
+    }
+    if(type==='all_department'){
+      const dept=el('taskTargetDepartment')?.value || '';
+      selected=(state.users||[]).filter(u=>u.is_active!==false && (!dept || u.department_id===dept)).map(u=>u.id);
+    }
+    return [...new Set(selected)].filter(Boolean);
+  }
+
+  function recurrenceTaskLevel(type){
+    if(type==='sector_heads') return 'executive';
+    if(type==='all_sector') return 'sector';
+    if(type==='department_managers') return 'manager';
+    if(type==='all_department') return 'department';
+    return 'employee';
+  }
+
+  function calculateTargetSector(type){
+    const chosen=el('taskTargetSector')?.value || '';
+    if((typeof isSectorHead==='function' && isSectorHead() && type!=='sector_heads') ||
+       (typeof isDepartmentManager==='function' && isDepartmentManager()) ||
+       (typeof currentRole==='function' && currentRole()==='employee')){
+      return state.profile?.sector_id || null;
+    }
+    return chosen || state.profile?.sector_id || null;
+  }
+
+  function calculateTargetDepartment(){
+    if(typeof isDepartmentManager==='function' && isDepartmentManager()) return state.profile?.department_id || null;
+    return el('taskTargetDepartment')?.value || null;
+  }
+
+  async function generateDueRecurringTasksQuiet(showMessage){
+    try{
+      const {data,error}=await supabaseClient.rpc('generate_due_recurring_tasks');
+      if(error) throw error;
+      const created=Number(data?.created_count || 0);
+      if(created>0){
+        await loadAll();
+        if(typeof setupFilters==='function') setupFilters();
+        if(typeof renderTasks==='function') renderTasks();
+        if(showMessage && typeof showToast==='function') showToast(`تم توليد ${created} مهمة دورية مستحقة.`,'success');
+      }else if(showMessage && typeof showToast==='function'){
+        showToast('لا توجد مهام دورية مستحقة للتوليد الآن.','info');
+      }
+      return data;
+    }catch(error){
+      console.error('generate_due_recurring_tasks failed', error);
+      if(showMessage && typeof showToast==='function') showToast(error.message || 'تعذر توليد المهام الدورية.','error',7000);
+      return null;
+    }
+  }
+
+  window.generateDueRecurringTasksNow=function(){
+    return generateDueRecurringTasksQuiet(true);
+  };
+
+  async function saveRecurringTaskTemplate(){
+    if(recurringSaveInProgress){
+      if(typeof showToast==='function') showToast('جاري حفظ المهمة الدورية، فضلاً انتظر.','info');
+      return;
+    }
+
+    recurringSaveInProgress=true;
+    const saveButton=document.querySelector('#taskModal .actions .btn-primary');
+    const originalText=saveButton?.textContent || 'حفظ المهمة';
+    if(saveButton){
+      saveButton.disabled=true;
+      saveButton.textContent='جاري حفظ المهمة الدورية...';
+      saveButton.style.opacity='.75';
+      saveButton.style.cursor='not-allowed';
+    }
+
+    try{
+      const title=el('taskTitle')?.value.trim() || '';
+      if(!title){ showToast('اكتب عنوان المهمة.','error'); return; }
+      const firstDueDate=el('taskDue')?.value || '';
+      if(!firstDueDate){ showToast('اختر تاريخ أول استحقاق للمهمة الدورية.','error'); return; }
+
+      const type=el('assignmentType')?.value || 'employees';
+      const selected=selectedAssigneeIdsForCurrentForm(type);
+      if(type!=='all_company' && !selected.length){ showToast('اختر مستخدمًا واحدًا على الأقل أو غيّر نوع التكليف.','error'); return; }
+
+      if(typeof validateAssignment==='function'){
+        const validationMessage=validateAssignment(type, selected);
+        if(validationMessage){ showToast(validationMessage,'error'); return; }
+      }
+
+      if((el('taskFiles')?.files || []).length){
+        showToast('مرفقات القوالب الدورية غير مدعومة في هذه المرحلة. احفظ القالب بدون مرفقات.','error',6500);
+        return;
+      }
+
+      const primary=selected[0] || state.profile?.id || null;
+      const targetSector=calculateTargetSector(type);
+      const targetDept=calculateTargetDepartment();
+      const endMode=el('recurringEndMode')?.value || 'none';
+      const endDate=endMode==='date' ? (el('recurringEndDate')?.value || null) : null;
+      const maxOccurrences=endMode==='count' ? Number(el('recurringMaxOccurrences')?.value || 0) : null;
+
+      if(endMode==='date' && !endDate){ showToast('اختر تاريخ نهاية التكرار.','error'); return; }
+      if(endMode==='count' && (!maxOccurrences || maxOccurrences < 1)){ showToast('اكتب عدد مرات التكرار بشكل صحيح.','error'); return; }
+
+      const payload={
+        title,
+        description:el('taskDescription')?.value.trim() || '',
+        priority:el('taskPriority')?.value || 'عادية',
+        created_by:state.profile?.id,
+        owner_sector_id:state.profile?.sector_id || null,
+        owner_department_id:state.profile?.department_id || null,
+        target_sector_id:targetSector,
+        target_department_id:targetDept,
+        primary_responsible_id:primary,
+        assignment_type:type,
+        task_level:recurrenceTaskLevel(type),
+        recurrence_frequency:el('recurrenceFrequency')?.value || 'monthly',
+        first_due_date:firstDueDate,
+        next_due_date:firstDueDate,
+        generate_days_before:Number(el('recurringGenerateDaysBefore')?.value || 7),
+        end_date:endDate,
+        max_occurrences:endMode==='count' ? maxOccurrences : null,
+        is_active:true
+      };
+
+      const {data,error}=await supabaseClient.from('recurring_task_templates').insert(payload).select().single();
+      if(error) throw error;
+
+      const rows=selected.map(uid=>({
+        template_id:data.id,
+        user_id:uid,
+        assignment_role:uid===primary?'primary':'assignee'
+      }));
+      if(rows.length){
+        const r=await supabaseClient.from('recurring_task_template_assignees').insert(rows);
+        if(r.error) throw r.error;
+      }
+
+      closeTaskModal();
+      const generated=await generateDueRecurringTasksQuiet(false);
+      await loadAll();
+      if(typeof setupFilters==='function') setupFilters();
+      if(typeof renderTasks==='function') renderTasks();
+      const createdCount=Number(generated?.created_count || 0);
+      if(createdCount>0){
+        showToast(`تم حفظ قالب المهمة الدورية وتوليد ${createdCount} مهمة مستحقة.`,'success',6500);
+      }else{
+        showToast('تم حفظ قالب المهمة الدورية. ستظهر المهمة عند الاقتراب من تاريخ الاستحقاق.','success',6500);
+      }
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر حفظ المهمة الدورية.','error',7000);
+    }finally{
+      recurringSaveInProgress=false;
+      if(saveButton && saveButton.isConnected){
+        saveButton.disabled=false;
+        saveButton.textContent=originalText;
+        saveButton.style.opacity='';
+        saveButton.style.cursor='';
+      }
+    }
+  }
+
+  const previousSaveTaskRecurring=window.saveTask || (typeof saveTask==='function'?saveTask:null);
+  window.saveTask=saveTask=async function(){
+    createRecurringControls();
+    if(el('taskKind')?.value===RECURRING_TASK && !el('editTaskId')?.value){
+      return saveRecurringTaskTemplate();
+    }
+    return previousSaveTaskRecurring ? previousSaveTaskRecurring.apply(this, arguments) : undefined;
+  };
+
+  const previousBootstrapRecurring=window.bootstrap || (typeof bootstrap==='function'?bootstrap:null);
+  if(typeof previousBootstrapRecurring==='function'){
+    window.bootstrap=bootstrap=async function(){
+      const result=await previousBootstrapRecurring.apply(this, arguments);
+      if(result && !recurringGenerationRan && state?.profile){
+        recurringGenerationRan=true;
+        setTimeout(()=>generateDueRecurringTasksQuiet(false),300);
+      }
+      return result;
+    };
+  }
+
+  setTimeout(function(){
+    try{
+      createRecurringControls();
+      window.toggleRecurringTaskFields();
     }catch(error){ console.error(error); }
   },0);
 })();
