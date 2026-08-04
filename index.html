@@ -23159,4 +23159,532 @@ window.openTaskFromSummary=openTaskFromSummary;
     }catch(error){ console.error(error); }
   },0);
 })();
+
+
+/* === PATCH: صفحة تكلفة الهيكل التنظيمي + ربط الراتب بالمستخدم === */
+(function(){
+  const ORG_COST_PAGE_ID = 'orgCostPage';
+
+  function canViewOrgCost(){
+    return typeof isAdminOrCeo === 'function' ? isAdminOrCeo() : (typeof isAdmin==='function' && isAdmin()) || (typeof isCeo==='function' && isCeo());
+  }
+
+  function money(value){
+    const n = Number(value || 0);
+    if(!Number.isFinite(n)) return '0 ر.س';
+    return n.toLocaleString('ar-SA', {maximumFractionDigits:2}) + ' ر.س';
+  }
+
+  function parseOptionalSalary(raw){
+    const text = String(raw ?? '').replace(/,/g,'').trim();
+    if(text === '') return {value:null, valid:true};
+    const n = Number(text);
+    if(!Number.isFinite(n) || n < 0) return {value:null, valid:false, error:'الراتب يجب أن يكون رقمًا صحيحًا أو عشريًا موجبًا'};
+    return {value:Math.round(n * 100) / 100, valid:true};
+  }
+
+  function getCompensation(userId){
+    return (state.compensations || []).find(row => String(row.user_id) === String(userId)) || null;
+  }
+
+  async function loadEmployeeCompensations(){
+    state.compensations = [];
+    if(!canViewOrgCost()) return;
+    try{
+      const {data,error} = await supabaseClient
+        .from('employee_compensation')
+        .select('*')
+        .order('updated_at', {ascending:false});
+      if(error) throw error;
+      state.compensations = data || [];
+    }catch(error){
+      console.error('تعذر تحميل تكلفة الهيكل التنظيمي', error);
+      state.compensations = [];
+    }
+  }
+
+  async function upsertCompensation(userId, salaryValue, notes=''){
+    if(!canViewOrgCost()) throw new Error('ليست لديك صلاحية تعديل الرواتب.');
+    const existing = getCompensation(userId);
+    const payload = {
+      user_id:userId,
+      monthly_salary: salaryValue,
+      notes: notes || existing?.notes || null,
+      updated_by: state.profile?.id || null,
+      updated_at: new Date().toISOString()
+    };
+    if(!existing){
+      payload.created_by = state.profile?.id || null;
+    }
+    const {error} = await supabaseClient
+      .from('employee_compensation')
+      .upsert(payload, {onConflict:'user_id'});
+    if(error) throw error;
+  }
+
+  async function upsertCompensationByEmail(email, salaryValue){
+    if(salaryValue === null || salaryValue === undefined || salaryValue === '') return false;
+    const targetEmail = String(email || '').trim().toLowerCase();
+    if(!targetEmail) return false;
+    let user = (state.users || []).find(u => String(u.email || '').trim().toLowerCase() === targetEmail);
+    if(!user){
+      const {data,error} = await supabaseClient.from('users').select('id,email').eq('email', targetEmail).maybeSingle();
+      if(error) throw error;
+      user = data;
+    }
+    if(!user?.id) return false;
+    await upsertCompensation(user.id, salaryValue);
+    return true;
+  }
+
+  async function saveCompensationsForRows(rows){
+    if(!canViewOrgCost()) return 0;
+    const candidates = (rows || []).filter(r => r && r.monthly_salary !== null && r.monthly_salary !== undefined && r.monthly_salary !== '');
+    if(!candidates.length) return 0;
+    const emails = candidates.map(r => String(r.email || '').trim().toLowerCase()).filter(Boolean);
+    if(!emails.length) return 0;
+    const {data,error} = await supabaseClient.from('users').select('id,email').in('email', emails);
+    if(error) throw error;
+    const userByEmailMap = new Map((data || []).map(u => [String(u.email || '').trim().toLowerCase(), u]));
+    const payload=[];
+    for(const row of candidates){
+      const user = userByEmailMap.get(String(row.email || '').trim().toLowerCase());
+      if(!user?.id) continue;
+      payload.push({
+        user_id:user.id,
+        monthly_salary: row.monthly_salary,
+        updated_by: state.profile?.id || null,
+        updated_at: new Date().toISOString(),
+        created_by: state.profile?.id || null
+      });
+    }
+    if(!payload.length) return 0;
+    const {error:upsertError} = await supabaseClient.from('employee_compensation').upsert(payload, {onConflict:'user_id'});
+    if(upsertError) throw upsertError;
+    return payload.length;
+  }
+
+  function ensureOrgCostDom(){
+    if(!document.getElementById('orgCostPatchStyle')){
+      const style=document.createElement('style');
+      style.id='orgCostPatchStyle';
+      style.textContent=`
+        .org-cost-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px;}
+        .org-cost-stat{border:1px solid var(--line);border-radius:16px;background:#fffdfb;padding:14px;text-align:center;}
+        .org-cost-stat span{display:block;color:var(--muted);font-size:13px;margin-bottom:6px;}
+        .org-cost-stat strong{font-size:24px;color:var(--primary2);}
+        .org-cost-sector{border:1px solid var(--line);border-radius:18px;background:#fff;padding:16px;margin-bottom:14px;}
+        .org-cost-sector-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;color:var(--primary2);font-weight:900;font-size:20px;}
+        .org-cost-dept{border:1px dashed #d8cac0;border-radius:16px;background:#fbf8f5;padding:12px;margin-top:10px;}
+        .org-cost-dept-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-weight:800;color:var(--primary2);}
+        .org-cost-table input[type=number]{max-width:150px;text-align:center;}
+        .org-cost-missing{color:#b35b5b;font-weight:800;}
+        .org-cost-entered{color:#2f8f7a;font-weight:800;}
+        @media(max-width:900px){.org-cost-summary{grid-template-columns:1fr 1fr}.org-cost-table{font-size:12px}.org-cost-table input[type=number]{max-width:110px}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    const actions=document.querySelector('#appSection .app-actions');
+    if(actions && !document.getElementById('tabOrgCost')){
+      const btn=document.createElement('button');
+      btn.id='tabOrgCost';
+      btn.className='btn btn-secondary hidden';
+      btn.type='button';
+      btn.textContent='تكلفة الهيكل التنظيمي';
+      btn.setAttribute('onclick', "showPage('orgCost')");
+      const orgBtn=document.getElementById('tabOrg');
+      if(orgBtn && orgBtn.parentNode===actions) orgBtn.insertAdjacentElement('afterend', btn);
+      else actions.appendChild(btn);
+    }
+
+    const executiveNav=document.getElementById('executiveInnerNav');
+    if(executiveNav && !document.getElementById('executiveInnerOrgCostBtn')){
+      const btn=document.createElement('button');
+      btn.id='executiveInnerOrgCostBtn';
+      btn.className='btn';
+      btn.type='button';
+      btn.textContent='تكلفة الهيكل التنظيمي';
+      btn.setAttribute('onclick', "showPage('orgCost')");
+      const orgBtn=executiveNav.querySelector("button[onclick*=\"showPage('org')\"]");
+      if(orgBtn) orgBtn.insertAdjacentElement('afterend', btn);
+      else executiveNav.appendChild(btn);
+    }
+
+    if(!document.getElementById(ORG_COST_PAGE_ID)){
+      const html=`<section id="${ORG_COST_PAGE_ID}" class="hidden"><div id="orgCostContent"></div></section>`;
+      const admin=document.getElementById('adminPage');
+      if(admin) admin.insertAdjacentHTML('afterend', html);
+      else document.querySelector('#appSection .container')?.insertAdjacentHTML('beforeend', html);
+    }
+
+    ensureDirectInviteSalaryField();
+    updateOrgCostVisibility();
+  }
+
+  function updateOrgCostVisibility(){
+    const can=canViewOrgCost();
+    document.getElementById('tabOrgCost')?.classList.toggle('hidden', !can);
+    document.getElementById('executiveInnerOrgCostBtn')?.classList.toggle('hidden', !can);
+  }
+
+  function ensureDirectInviteSalaryField(){
+    const grid=document.querySelector('#directInvitePanel .form-grid');
+    if(!grid || document.getElementById('adminInviteMonthlySalary')) return;
+    const html=`<div class="form-group"><label>الراتب الشهري</label><input id="adminInviteMonthlySalary" type="number" min="0" step="0.01" placeholder="اختياري"></div>`;
+    const dept=document.getElementById('adminInviteDepartment')?.closest('.form-group');
+    if(dept) dept.insertAdjacentHTML('afterend', html);
+    else grid.insertAdjacentHTML('beforeend', html);
+  }
+
+  function activeUsersForCost(){
+    return (state.users || [])
+      .filter(u => u.is_active !== false)
+      .slice()
+      .sort((a,b)=>{
+        const sa=String(nameOfSector(a.sector_id)||'بدون قطاع');
+        const sb=String(nameOfSector(b.sector_id)||'بدون قطاع');
+        if(sa!==sb) return sa.localeCompare(sb,'ar');
+        const da=String(nameOfDept(a.department_id)||'بدون قسم');
+        const db=String(nameOfDept(b.department_id)||'بدون قسم');
+        if(da!==db) return da.localeCompare(db,'ar');
+        return String(a.name||'').localeCompare(String(b.name||''),'ar');
+      });
+  }
+
+  function renderOrgCost(){
+    ensureOrgCostDom();
+    const box=document.getElementById('orgCostContent');
+    if(!box) return;
+    if(!canViewOrgCost()){
+      box.innerHTML='<section class="panel card"><div class="empty">تكلفة الهيكل التنظيمي مخصصة للرئيس التنفيذي ومدير النظام فقط.</div></section>';
+      return;
+    }
+
+    const users=activeUsersForCost();
+    const compMap=new Map((state.compensations || []).map(c => [String(c.user_id), c]));
+    const monthlyTotal=users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0), 0);
+    const entered=users.filter(u => Number(compMap.get(String(u.id))?.monthly_salary || 0) > 0).length;
+    const missing=users.length - entered;
+
+    const sectorMap=new Map();
+    users.forEach(u=>{
+      const sectorKey=u.sector_id || 'no-sector';
+      if(!sectorMap.has(sectorKey)) sectorMap.set(sectorKey, {id:u.sector_id, name:nameOfSector(u.sector_id)||'بدون قطاع', users:[]});
+      sectorMap.get(sectorKey).users.push(u);
+    });
+
+    const sectors=[...sectorMap.values()].map(sector=>{
+      const sectorMonthly=sector.users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0),0);
+      const deptMap=new Map();
+      sector.users.forEach(u=>{
+        const deptKey=u.department_id || 'no-dept';
+        if(!deptMap.has(deptKey)) deptMap.set(deptKey, {id:u.department_id, name:nameOfDept(u.department_id)||'بدون قسم', users:[]});
+        deptMap.get(deptKey).users.push(u);
+      });
+      const depts=[...deptMap.values()].map(dep=>{
+        const depMonthly=dep.users.reduce((sum,u)=>sum + Number(compMap.get(String(u.id))?.monthly_salary || 0),0);
+        const rows=dep.users.map(u=>{
+          const comp=compMap.get(String(u.id));
+          const salary=comp?.monthly_salary ?? '';
+          const salaryNumber=Number(salary || 0);
+          return `<tr>
+            <td>${escapeHtml(u.name||'—')}</td>
+            <td>${escapeHtml(u.job_title||'—')}</td>
+            <td>${escapeHtml(roleLabel(u.role)||'—')}</td>
+            <td><input id="salary-${u.id}" type="number" min="0" step="0.01" value="${salary!=='' && salary!==null && salary!==undefined ? Number(salary) : ''}" placeholder="الراتب الشهري"></td>
+            <td>${salaryNumber>0?`<span class="org-cost-entered">${money(salaryNumber)}</span>`:'<span class="org-cost-missing">لم يُدخل</span>'}</td>
+            <td>${salaryNumber>0?money(salaryNumber*12):'—'}</td>
+            <td><button class="btn btn-primary btn-sm" onclick="saveEmployeeSalary('${u.id}')">حفظ</button></td>
+          </tr>`;
+        }).join('');
+        return `<div class="org-cost-dept">
+          <div class="org-cost-dept-title"><span>${escapeHtml(dep.name)}</span><span class="badge">${dep.users.length} موظف | ${money(depMonthly)} شهريًا</span></div>
+          <div class="table-wrap"><table class="org-cost-table"><thead><tr><th>الموظف</th><th>المسمى</th><th>الدور</th><th>الراتب الشهري</th><th>التكلفة الشهرية</th><th>التكلفة السنوية</th><th>إجراء</th></tr></thead><tbody>${rows}</tbody></table></div>
+        </div>`;
+      }).join('');
+      return `<section class="org-cost-sector">
+        <div class="org-cost-sector-title"><span>${escapeHtml(sector.name)}</span><span class="badge">${sector.users.length} موظف | ${money(sectorMonthly)} شهريًا | ${money(sectorMonthly*12)} سنويًا</span></div>
+        ${depts || '<div class="empty">لا يوجد موظفون.</div>'}
+      </section>`;
+    }).join('');
+
+    box.innerHTML=`<section class="panel card">
+      <div class="section-head">
+        <div><h2>تكلفة الهيكل التنظيمي</h2><p class="meta">تظهر هذه الصفحة للرئيس التنفيذي ومدير النظام فقط، والراتب محفوظ في جدول مستقل عن بيانات المستخدمين.</p></div>
+        <button class="btn btn-info btn-sm" onclick="exportOrgCostToExcel()">تصدير Excel</button>
+      </div>
+      <div class="org-cost-summary">
+        <div class="org-cost-stat"><span>إجمالي التكلفة الشهرية</span><strong>${money(monthlyTotal)}</strong></div>
+        <div class="org-cost-stat"><span>إجمالي التكلفة السنوية</span><strong>${money(monthlyTotal*12)}</strong></div>
+        <div class="org-cost-stat"><span>عدد الموظفين</span><strong>${users.length}</strong></div>
+        <div class="org-cost-stat"><span>لم تُدخل رواتبهم</span><strong>${missing}</strong></div>
+      </div>
+      ${sectors || '<div class="empty">لا توجد بيانات موظفين.</div>'}
+    </section>`;
+  }
+
+  window.saveEmployeeSalary = async function(userId){
+    try{
+      if(!canViewOrgCost()) return showToast('ليست لديك صلاحية تعديل الرواتب.','error');
+      const input=document.getElementById(`salary-${userId}`);
+      if(!input) return;
+      const parsed=parseOptionalSalary(input.value);
+      if(!parsed.valid) return showToast(parsed.error,'error');
+      input.disabled=true;
+      await upsertCompensation(userId, parsed.value);
+      await loadEmployeeCompensations();
+      renderOrgCost();
+      showToast('تم حفظ راتب الموظف.','success');
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر حفظ الراتب.','error');
+    }
+  };
+
+  window.exportOrgCostToExcel = function(){
+    try{
+      if(!canViewOrgCost()) return showToast('ليست لديك صلاحية التصدير.','error');
+      if(typeof XLSX === 'undefined') return showToast('أداة Excel غير محملة. حدّث الصفحة وحاول مرة أخرى.','error');
+      const compMap=new Map((state.compensations || []).map(c => [String(c.user_id), c]));
+      const rows=activeUsersForCost().map(u=>{
+        const salary=Number(compMap.get(String(u.id))?.monthly_salary || 0);
+        return {
+          'القطاع':nameOfSector(u.sector_id)||'بدون قطاع',
+          'القسم':nameOfDept(u.department_id)||'بدون قسم',
+          'الموظف':u.name||'',
+          'البريد':u.email||'',
+          'المسمى الوظيفي':u.job_title||'',
+          'الدور':roleLabel(u.role)||'',
+          'الراتب الشهري':salary || '',
+          'التكلفة السنوية':salary ? salary*12 : ''
+        };
+      });
+      const ws=XLSX.utils.json_to_sheet(rows);
+      ws['!cols']=[{wch:28},{wch:28},{wch:28},{wch:34},{wch:28},{wch:22},{wch:18},{wch:18}];
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'تكلفة الهيكل التنظيمي');
+      XLSX.writeFile(wb, `تكلفة_الهيكل_التنظيمي_${new Date().toISOString().slice(0,10)}.xlsx`);
+      showToast('تم تصدير تكلفة الهيكل التنظيمي.','success');
+    }catch(error){
+      console.error(error);
+      showToast(error.message || 'تعذر التصدير.','error');
+    }
+  };
+
+  const previousRoleLabelComp = window.roleLabel || (typeof roleLabel === 'function' ? roleLabel : null);
+  if(typeof previousRoleLabelComp === 'function'){
+    window.roleLabel = roleLabel = function(role){
+      if(role === 'sister_company_ceo') return 'رئيس تنفيذي شركة شقيقة';
+      return previousRoleLabelComp(role);
+    };
+  }
+
+  const previousLoadAllComp = window.loadAll || (typeof loadAll === 'function' ? loadAll : null);
+  if(typeof previousLoadAllComp === 'function'){
+    window.loadAll = loadAll = async function(){
+      await previousLoadAllComp.apply(this, arguments);
+      await loadEmployeeCompensations();
+    };
+  }
+
+  const previousShowAppComp = window.showApp || (typeof showApp === 'function' ? showApp : null);
+  if(typeof previousShowAppComp === 'function'){
+    window.showApp = showApp = function(){
+      previousShowAppComp.apply(this, arguments);
+      ensureOrgCostDom();
+      updateOrgCostVisibility();
+    };
+  }
+
+  const previousShowPageComp = window.showPage || (typeof showPage === 'function' ? showPage : null);
+  if(typeof previousShowPageComp === 'function'){
+    window.showPage = showPage = function(page){
+      ensureOrgCostDom();
+      if(page === 'orgCost'){
+        if(!canViewOrgCost()) return showToast('تكلفة الهيكل التنظيمي مخصصة للرئيس التنفيذي ومدير النظام فقط.','error');
+        document.querySelectorAll('#appSection section[id$="Page"]').forEach(section => section.classList.add('hidden'));
+        document.getElementById(ORG_COST_PAGE_ID)?.classList.remove('hidden');
+        document.querySelectorAll('#appSection .app-actions .btn, #executiveInnerNav .btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('tabOrgCost')?.classList.add('active');
+        document.getElementById('executiveInnerOrgCostBtn')?.classList.add('active');
+        renderOrgCost();
+        return;
+      }
+      const result = previousShowPageComp.apply(this, arguments);
+      document.getElementById(ORG_COST_PAGE_ID)?.classList.add('hidden');
+      document.getElementById('tabOrgCost')?.classList.remove('active');
+      document.getElementById('executiveInnerOrgCostBtn')?.classList.remove('active');
+      updateOrgCostVisibility();
+      return result;
+    };
+  }
+
+  const previousRenderAdminComp = window.renderAdmin || (typeof renderAdmin === 'function' ? renderAdmin : null);
+  if(typeof previousRenderAdminComp === 'function'){
+    window.renderAdmin = renderAdmin = function(){
+      const result = previousRenderAdminComp.apply(this, arguments);
+      ensureDirectInviteSalaryField();
+      return result;
+    };
+  }
+
+  const previousInviteUserByAdminComp = window.inviteUserByAdmin || (typeof inviteUserByAdmin === 'function' ? inviteUserByAdmin : null);
+  if(typeof previousInviteUserByAdminComp === 'function'){
+    window.inviteUserByAdmin = inviteUserByAdmin = async function(){
+      const emailBefore = String(document.getElementById('adminInviteEmail')?.value || '').trim().toLowerCase();
+      const parsed = parseOptionalSalary(document.getElementById('adminInviteMonthlySalary')?.value || '');
+      if(!parsed.valid) return showToast(parsed.error,'error');
+      await previousInviteUserByAdminComp.apply(this, arguments);
+      if(parsed.value !== null && emailBefore){
+        try{
+          await upsertCompensationByEmail(emailBefore, parsed.value);
+          await loadEmployeeCompensations();
+          const salaryInput=document.getElementById('adminInviteMonthlySalary');
+          if(salaryInput) salaryInput.value='';
+          showToast('تم حفظ راتب المستخدم الجديد في تكلفة الهيكل التنظيمي.','success');
+        }catch(error){
+          console.error(error);
+          showToast('تمت إضافة المستخدم، لكن تعذر حفظ الراتب. يمكنك إدخاله من صفحة تكلفة الهيكل التنظيمي.','error',7000);
+        }
+      }
+    };
+  }
+
+  const originalValidateImportedUserComp = window.validateImportedUser || (typeof validateImportedUser === 'function' ? validateImportedUser : null);
+  if(typeof originalValidateImportedUserComp === 'function'){
+    window.validateImportedUser = validateImportedUser = function(row, index){
+      const result = originalValidateImportedUserComp(row, index);
+      const rawSalary = getImportCell(row, ['الراتب الشهري','الراتب','salary','monthly_salary','Monthly Salary']);
+      const parsed = parseOptionalSalary(rawSalary);
+      result.monthly_salary = parsed.value;
+      if(!parsed.valid){
+        result.valid = false;
+        result.errors = result.errors || [];
+        result.errors.push(parsed.error);
+      }
+      return result;
+    };
+  }
+
+  const originalResolveBoardUserImportRowComp = window.resolveBoardUserImportRow || (typeof resolveBoardUserImportRow === 'function' ? resolveBoardUserImportRow : null);
+  if(typeof originalResolveBoardUserImportRowComp === 'function'){
+    window.resolveBoardUserImportRow = resolveBoardUserImportRow = function(raw, index){
+      const result = originalResolveBoardUserImportRowComp(raw, index);
+      const rawSalary = getBoardUserImportCell(raw, ['الراتب الشهري','الراتب','salary','monthly_salary','Monthly Salary']);
+      const parsed = parseOptionalSalary(rawSalary);
+      result.monthly_salary = parsed.value;
+      if(!parsed.valid){
+        result.valid = false;
+        result.errors = result.errors || [];
+        result.errors.push(parsed.error);
+      }
+      return result;
+    };
+  }
+
+  function renderSalaryCellForPreview(row){
+    return row.monthly_salary !== null && row.monthly_salary !== undefined && row.monthly_salary !== '' ? money(row.monthly_salary) : '—';
+  }
+
+  window.renderUsersImportPreview = renderUsersImportPreview = function(){
+    const box=document.getElementById('usersImportPreview');
+    if(!box) return;
+    if(!usersImportRows.length){ box.innerHTML='<div class="empty">لم يتم رفع ملف بعد.</div>'; return; }
+    const validCount=usersImportRows.filter(r=>r.valid).length;
+    const invalidCount=usersImportRows.length-validCount;
+    box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي الصفوف: ${usersImportRows.length} | صالح: ${validCount} | فيه أخطاء: ${invalidCount}</div>
+    <div class="actions" style="justify-content:flex-start;margin:8px 0 12px;"><button class="btn btn-sm" onclick="cleanUsersImportPreview()">تنظيف المعاينة</button><button class="btn btn-sm" onclick="clearUsersImport()">مسح المعاينة</button></div>
+    <div class="meta" style="margin-bottom:10px;">يمكن إضافة عمود اختياري باسم <b>الراتب الشهري</b> ليُحفظ في صفحة تكلفة الهيكل التنظيمي.</div>
+    <div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الراتب الشهري</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${usersImportRows.map((r,index)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${renderSalaryCellForPreview(r)}</td><td>${r.valid?'<span class="chip done">جاهز</span>':`<span class="chip late">${escapeHtml((r.errors||[]).join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeImportedUserRow(${index})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  };
+
+  window.renderBoardUsersImportPreview = renderBoardUsersImportPreview = function(){
+    const box=document.getElementById('boardUsersImportPreview');
+    if(!box) return;
+    if(boardUsersImportRows.length){
+      const rawRows=boardUsersImportRows.map(item=>item.raw || item);
+      boardUsersImportRows=rawRows.map((row,i)=>resolveBoardUserImportRow(row,i));
+    }
+    if(!boardUsersImportRows.length){ box.innerHTML='<div class="empty">لم يتم رفع ملف مستخدمين بعد.</div>'; return; }
+    const validCount=boardUsersImportRows.filter(r=>r.valid).length;
+    const invalidCount=boardUsersImportRows.length-validCount;
+    box.innerHTML=`<div class="meta" style="margin-bottom:8px;">إجمالي المستخدمين: ${boardUsersImportRows.length} | صالح للحفظ: ${validCount} | فيه أخطاء: ${invalidCount}</div><div class="actions" style="justify-content:flex-start;margin:8px 0 12px;"><button class="btn btn-sm" onclick="cleanBoardUsersImportPreview()">تنظيف المعاينة</button><button class="btn btn-sm" onclick="clearBoardUsersImport()">مسح المعاينة</button></div><div class="meta" style="margin-bottom:10px;">يمكن إضافة عمود اختياري باسم <b>الراتب الشهري</b> ليُحفظ في صفحة تكلفة الهيكل التنظيمي.</div><div class="table-wrap"><table><thead><tr><th>الصف</th><th>الاسم</th><th>البريد</th><th>الدور</th><th>القطاع</th><th>القسم</th><th>الراتب الشهري</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${boardUsersImportRows.map((r,i)=>`<tr><td>${r.row_number}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_label||r.role)}</td><td>${escapeHtml(r.sector_name||'—')}</td><td>${escapeHtml(r.department_name||'—')}</td><td>${renderSalaryCellForPreview(r)}</td><td>${r.valid?'<span class="chip done">جاهز للإنشاء نشطًا</span>':`<span class="chip late">${escapeHtml((r.errors||[]).join('، '))}</span>`}</td><td><button class="btn btn-danger btn-sm" onclick="removeBoardUserImportRow(${i})">حذف من المعاينة</button></td></tr>`).join('')}</tbody></table></div>`;
+  };
+
+  window.importUsersFromExcel = importUsersFromExcel = async function(){
+    try{
+      if(!usersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
+      const invalid=usersImportRows.filter(r=>!r.valid).length;
+      if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الملف ثم أعد رفعه.`,'error');
+      const ok=await askConfirm({title:'إنشاء المستخدمين بدون إرسال بريد',message:`سيتم إنشاء ${usersImportRows.length} مستخدم كحسابات نشطة داخل النظام بدون إرسال أي دعوة أو بريد الآن. هل تريد المتابعة؟`,okText:'إنشاء المستخدمين',danger:false});
+      if(!ok) return;
+      const existingEmails=new Set(state.users.map(u=>String(u.email||'').toLowerCase()));
+      const duplicates=usersImportRows.filter(r=>existingEmails.has(String(r.email||'').toLowerCase()));
+      if(duplicates.length) return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين. احذف التكرارات من المعاينة ثم أعد الحفظ.`,'error',6000);
+      const rowsSnapshot=usersImportRows.slice();
+      const payload=rowsSnapshot.map(r=>({name:r.name,email:r.email,job_title:r.job_title||null,role:r.role,sector_id:r.sector_id,department_id:r.department_id}));
+      const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{body:{users:payload, send_invite:false}});
+      if(error) throw error;
+      if(data?.error) throw new Error(data.error);
+      await loadAll();
+      let salaryCount=0;
+      try{ salaryCount=await saveCompensationsForRows(rowsSnapshot); await loadEmployeeCompensations(); }catch(salaryError){ console.error(salaryError); showToast('تم إنشاء المستخدمين، لكن تعذر حفظ بعض الرواتب.','error',7000); }
+      const summary=data?.summary||{};
+      const failed=(data?.results||[]).filter(r=>!r.success);
+      if(failed.length){
+        const first=failed[0];
+        showToast(`تم إنشاء ${summary.success||0} مستخدم، وفشل ${summary.failed||failed.length}. أول خطأ: ${first.email || ''} - ${first.error || 'غير محدد'}`,'error',9000);
+      }else{
+        showToast(`تم إنشاء ${summary.success ?? payload.length} مستخدم كحسابات نشطة${salaryCount?`، وحفظ ${salaryCount} راتب.`:''}`,'success',7000);
+        clearUsersImport();
+      }
+      await loadAll();
+      renderAdmin();
+    }catch(e){ console.error(e); showToast(e.message||'تعذر إنشاء المستخدمين.','error',7000); }
+  };
+
+  window.importBoardUsersFromExcel = importBoardUsersFromExcel = async function(){
+    try{
+      if(!boardUsersImportRows.length) return showToast('ارفع ملف المستخدمين أولاً.','error');
+      renderBoardUsersImportPreview();
+      const invalid=boardUsersImportRows.filter(r=>!r.valid).length;
+      if(invalid) return showToast(`يوجد ${invalid} صف فيه أخطاء. صحح الخيارات أو الملف ثم أعد المحاولة.`,'error',6000);
+      const ok=await askConfirm({title:'إنشاء مستخدمين من لوحة أخرى',message:`سيتم إنشاء ${boardUsersImportRows.length} مستخدم كحسابات نشطة داخل النظام بدون إرسال أي بريد الآن. هل تريد المتابعة؟`,okText:'إنشاء المستخدمين',danger:false});
+      if(!ok) return;
+      const existingEmails=new Set(state.users.map(u=>String(u.email||'').toLowerCase()));
+      const duplicates=boardUsersImportRows.filter(r=>existingEmails.has(String(r.email||'').toLowerCase()));
+      if(duplicates.length) return showToast(`يوجد ${duplicates.length} بريد موجود مسبقًا في المستخدمين. احذف التكرارات من المعاينة ثم أعد الحفظ.`,'error',7000);
+      const rowsSnapshot=boardUsersImportRows.slice();
+      const payload=rowsSnapshot.map(r=>({name:r.name,email:r.email,job_title:r.job_title||null,role:r.role,sector_id:r.sector_id,department_id:r.department_id}));
+      const {data,error}=await supabaseClient.functions.invoke('admin-import-users',{body:{users:payload, send_invite:false}});
+      if(error) throw error;
+      if(data?.error) throw new Error(data.error);
+      await loadAll();
+      let salaryCount=0;
+      try{ salaryCount=await saveCompensationsForRows(rowsSnapshot); await loadEmployeeCompensations(); }catch(salaryError){ console.error(salaryError); showToast('تم إنشاء المستخدمين، لكن تعذر حفظ بعض الرواتب.','error',7000); }
+      const summary=data?.summary||{};
+      const failed=(data?.results||[]).filter(r=>!r.success);
+      if(failed.length){
+        const first=failed[0];
+        showToast(`تم إنشاء ${summary.success||0} مستخدم، وفشل ${summary.failed||failed.length}. أول خطأ: ${first.email || ''} - ${first.error || 'غير محدد'}`,'error',9000);
+      }else{
+        showToast(`تم إنشاء ${summary.success ?? payload.length} مستخدم كحسابات نشطة${salaryCount?`، وحفظ ${salaryCount} راتب.`:''}`,'success',7000);
+        clearBoardUsersImport();
+      }
+      await loadAll();
+      renderAdmin();
+    }catch(e){ console.error(e); showToast(e.message||'تعذر إنشاء المستخدمين.','error',7000); }
+  };
+
+  setTimeout(function(){
+    try{
+      ensureOrgCostDom();
+      if(canViewOrgCost()) loadEmployeeCompensations().then(()=>{
+        if(!document.getElementById(ORG_COST_PAGE_ID)?.classList.contains('hidden')) renderOrgCost();
+      });
+    }catch(error){ console.error(error); }
+  },0);
+})();
+
 </script>
