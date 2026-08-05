@@ -23756,3 +23756,110 @@ window.openTaskFromSummary=openTaskFromSummary;
 })();
 
 </script>
+
+<script>
+/* === FINAL HOTFIX: تمكين الرئيس التنفيذي من إسناد مهمة لرئيس تنفيذي شركة شقيقة ===
+   السبب: توجد طبقات لاحقة تعيد تعريف validateAssignment وتنسى دور sister_company_ceo.
+   هذا التصحيح يُحمّل في آخر الملف ليكون هو المنطق النهائي.
+*/
+(function(){
+  const SISTER_ROLE = 'sister_company_ceo';
+  const ASSIGNABLE_FOR_CEO = new Set(['employee','department_manager','sector_head',SISTER_ROLE]);
+  const previousPermittedAssigneeUsers = window.permittedAssigneeUsers;
+  const previousValidateAssignment = window.validateAssignment;
+  const previousRoleLabel = window.roleLabel;
+
+  function getRole(){
+    try { return String((typeof currentRole === 'function' ? currentRole() : state.profile?.role) || '').trim(); }
+    catch(e){ return String(state.profile?.role || '').trim(); }
+  }
+  function isMainCeo(){ return getRole() === 'ceo'; }
+  function isSisterCeo(){ return getRole() === SISTER_ROLE; }
+  function userById(id){ return (state.users || []).find(u => String(u.id) === String(id)); }
+  function uniqueUsers(rows){
+    return [...new Map((rows || []).filter(Boolean).map(u => [u.id, u])).values()].sort((a,b)=>{
+      if(a.id === state.profile?.id) return -1;
+      if(b.id === state.profile?.id) return 1;
+      return String(a.name || '').localeCompare(String(b.name || ''),'ar');
+    });
+  }
+
+  window.roleLabel = roleLabel = function(role){
+    if(String(role || '').trim() === SISTER_ROLE) return 'رئيس تنفيذي شركة شقيقة';
+    return typeof previousRoleLabel === 'function' ? previousRoleLabel(role) : String(role || '');
+  };
+
+  window.permittedAssigneeUsers = permittedAssigneeUsers = function(){
+    const type = document.getElementById('assignmentType')?.value || 'employees';
+    const sector = document.getElementById('taskTargetSector')?.value || '';
+    let rows = typeof previousPermittedAssigneeUsers === 'function'
+      ? (previousPermittedAssigneeUsers.apply(this, arguments) || [])
+      : [];
+
+    // رئيس تنفيذي شركة شقيقة لا يرى إلا نفسه عند الإسناد.
+    if(isSisterCeo()){
+      return uniqueUsers([(state.users || []).find(u => String(u.id) === String(state.profile?.id)) || state.profile]);
+    }
+
+    // الرئيس التنفيذي فقط: إظهار رؤساء التنفيذ في الشركات الشقيقة ضمن "موظفون محددون".
+    if(isMainCeo() && type === 'employees'){
+      const sisters = (state.users || []).filter(u =>
+        u && u.is_active !== false &&
+        String(u.role || '').trim() === SISTER_ROLE &&
+        (!sector || String(u.sector_id || '') === String(sector))
+      );
+      rows = rows.concat(sisters);
+    }
+
+    return uniqueUsers(rows);
+  };
+
+  window.validateAssignment = validateAssignment = function(type, selected){
+    const selectedIds = [...new Set((selected || []).filter(Boolean).map(String))];
+
+    if(type !== 'employees'){
+      return typeof previousValidateAssignment === 'function'
+        ? (previousValidateAssignment.apply(this, arguments) || '')
+        : '';
+    }
+
+    if(!selectedIds.length) return 'اختر مستخدمًا واحدًا على الأقل.';
+
+    const selectedUsers = selectedIds.map(userById).filter(Boolean);
+    if(selectedUsers.length !== selectedIds.length) return 'تعذر التحقق من أحد المستخدمين المختارين.';
+
+    const inactiveUsers = selectedUsers.filter(u => u.is_active === false);
+    if(inactiveUsers.length) return 'لا يمكن الإسناد لمستخدم غير نشط.';
+
+    // إذا دخل رئيس تنفيذي شركة شقيقة بحسابه، لا يسند إلا لنفسه.
+    if(isSisterCeo()){
+      const notSelf = selectedUsers.some(u => String(u.id) !== String(state.profile?.id));
+      return notSelf ? 'رئيس تنفيذي شركة شقيقة يستطيع إسناد مهمة لنفسه فقط.' : '';
+    }
+
+    // الرئيس التنفيذي يستطيع إسناد مهمة للموظفين، مدراء الأقسام، رؤساء القطاعات، ورؤساء التنفيذ في الشركات الشقيقة.
+    if(isMainCeo()){
+      const invalidRole = selectedUsers.filter(u => !ASSIGNABLE_FOR_CEO.has(String(u.role || '').trim()));
+      if(invalidRole.length) return 'يمكن الإسناد للموظفين ومدراء الأقسام ورؤساء القطاعات ورؤساء التنفيذ في الشركات الشقيقة فقط.';
+      return '';
+    }
+
+    // غير الرئيس التنفيذي لا يستطيع الإسناد لرئيس تنفيذي شركة شقيقة.
+    const sisterSelected = selectedUsers.some(u => String(u.role || '').trim() === SISTER_ROLE);
+    if(sisterSelected) return 'لا يمكن إسناد مهمة إلى رئيس تنفيذي شركة شقيقة إلا من الرئيس التنفيذي.';
+
+    return typeof previousValidateAssignment === 'function'
+      ? (previousValidateAssignment.apply(this, arguments) || '')
+      : '';
+  };
+
+  setTimeout(function(){
+    try{
+      if(typeof renderAssigneePicker === 'function' && document.getElementById('taskModal') && !document.getElementById('taskModal').classList.contains('hidden')){
+        renderAssigneePicker();
+      }
+    }catch(error){ console.error(error); }
+  },0);
+})();
+</script>
+
