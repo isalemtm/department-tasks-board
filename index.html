@@ -18957,6 +18957,204 @@ init();
 })();
 </script>
 
+
+
+<!-- === ARCHIVE READ-ONLY MODE PATCH - 2026-08-19 === -->
+<style id="archiveReadOnlyStyle">
+  .archive-readonly-banner{
+    margin:14px auto 10px;
+    max-width:1400px;
+    border:1px solid #decfc4;
+    background:#fff7ef;
+    color:#4b2f25;
+    border-radius:16px;
+    padding:14px 18px;
+    display:flex;
+    gap:14px;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    box-shadow:0 8px 22px rgba(75,47,37,.08);
+    direction:rtl;
+  }
+  .archive-readonly-banner strong{font-size:17px;display:block;margin-bottom:3px;color:#3a241c}
+  .archive-readonly-banner span{font-size:14px;color:#6f5548}
+  .archive-readonly-banner a{
+    background:#5d4036;
+    color:#fff!important;
+    border-radius:999px;
+    padding:10px 18px;
+    font-weight:800;
+    text-decoration:none;
+    white-space:nowrap;
+  }
+  .archive-readonly-hidden{display:none!important}
+  .archive-readonly-disabled{opacity:.55!important;pointer-events:none!important;filter:grayscale(.25)}
+  #tasksPage .add-task-panel,
+  #appSection .add-task-full-btn,
+  #appSection button[onclick*="openTaskModal"]{
+    display:none!important;
+  }
+  #taskModal input,
+  #taskModal textarea,
+  #taskModal select,
+  #userEditModal input,
+  #userEditModal textarea,
+  #userEditModal select{
+    pointer-events:none!important;
+    opacity:.65!important;
+  }
+  .archive-readonly-note{
+    display:inline-block;
+    margin:6px 0;
+    padding:6px 10px;
+    border-radius:999px;
+    background:#efe8e3;
+    color:#5d4036;
+    font-size:12px;
+    font-weight:700;
+  }
+</style>
+<script id="archiveReadOnlyScript">
+(function(){
+  'use strict';
+  const ARCHIVE_READ_ONLY_MODE = true;
+  const NEW_TASKS_URL = 'https://app.ilpapps.com/ar/rasf/home/';
+  const MUTATION_LABEL_RE = /(حفظ|إضافة|اعتماد|رفض|حذف|تعديل|تحويل|استيراد|إرسال|دعوة|تنظيف|مسح|تعطيل|أرشفة|تفعيل|إيقاف|توليد|طلب\s*إكمال|إكمال|مؤجلة|مكتملة)/i;
+  const SAFE_LABEL_RE = /(تسجيل\s*الخروج|تسجيل\s*الدخول|الدخول\s*إلى\s*منصة|تصدير|Excel|PowerPoint|بحث|إغلاق|عرض|فتح|رجوع|عودة|تفاصيل|طباعة|تحميل|تنزيل)/i;
+  const WRITE_FUNCTION_NAMES = [
+    'saveTask','saveRecurringTaskTemplate','addComment','deleteTask','deleteTaskComment','deleteComment','approveTransferRequest','rejectTransferRequest',
+    'confirmTaskTransfer','requestTaskTransfer','applyTaskTransfer','directTransferTask','approveRequest','rejectRequest','deletePendingUserImport',
+    'archiveUser','deleteUserByAdmin','approveSubmittedTask','rejectSubmittedTask','saveUserEdit','setJoinRequestsEnabled','toggleJoinRequestsEnabled',
+    'approveTaskCompletion','rejectTaskCompletion','saveProductivityEvaluationForEmployee','requestMyCompletion','requestMyCompletionGlobal',
+    'updateTaskAggregate','updateTaskAggregateAfterRows','saveCompensationsForRows','upsertCompensation','upsertCompensationByEmail',
+    'inviteUserByAdmin','importBoardUsersFromExcel','importUsersFromExcel','importBoardTasksFromExcel','sendPasswordSetupNotification','sendPendingUserInvites',
+    'clearUsersImport','clearBoardUsersImport','clearBoardTasksImport','cleanUsersImportPreview','cleanBoardUsersImportPreview','removeImportedUserRow',
+    'removeBoardUserImportRow','removeBoardTaskImportRow','generateDueRecurringTasksQuiet','sendPasswordRecovery','stableSendPasswordResetEmails','passwordDirectSend',
+    'passwordFixSendReset','sendResetViaAuth','sendResetViaEdge','submitJoinRequest'
+  ];
+  function notifyReadOnly(){
+    const msg = 'تم إيقاف العمل على هذه اللوحة، وهي متاحة للاطلاع فقط. يرجى استخدام منصة المهام الجديدة.';
+    try{ if(typeof showToast === 'function'){ showToast(msg); return; } }catch(e){}
+    try{ alert(msg); }catch(e){}
+  }
+  function installBanner(){
+    if(document.getElementById('archiveReadOnlyBanner')) return;
+    const banner=document.createElement('div');
+    banner.id='archiveReadOnlyBanner';
+    banner.className='archive-readonly-banner';
+    banner.innerHTML='<div><strong>تم إيقاف العمل على هذه اللوحة</strong><span>هذه النسخة متاحة للاطلاع على المهام والبيانات السابقة فقط. تم الانتقال إلى منصة متابعة المهام الجديدة.</span></div><a href="'+NEW_TASKS_URL+'" target="_blank" rel="noopener">الدخول إلى منصة المهام الجديدة</a>';
+    const topbar=document.querySelector('.topbar');
+    if(topbar && topbar.parentNode){ topbar.insertAdjacentElement('afterend', banner); }
+    else { document.body.insertAdjacentElement('afterbegin', banner); }
+  }
+  function shouldDisableButton(btn){
+    if(!btn || btn.closest('#authSection')) return false;
+    if(btn.closest('#archiveReadOnlyBanner')) return false;
+    const text=(btn.textContent||'').replace(/\s+/g,' ').trim();
+    const onclick=(btn.getAttribute('onclick')||'');
+    if(SAFE_LABEL_RE.test(text)) return false;
+    if(MUTATION_LABEL_RE.test(text)) return true;
+    if(/save|add|delete|remove|approve|reject|update|create|import|send|complete|transfer|archive|disable|enable|invite|comment|upsert|generate/i.test(onclick)) return true;
+    return false;
+  }
+  function disableMutationButtons(){
+    const root=document.getElementById('appSection') || document.body;
+    root.querySelectorAll('button').forEach(btn=>{
+      if(shouldDisableButton(btn)){
+        btn.classList.add('archive-readonly-disabled');
+        btn.setAttribute('aria-disabled','true');
+        btn.title='اللوحة متاحة للاطلاع فقط';
+      }
+    });
+    root.querySelectorAll('input[type="file"]').forEach(el=>{ el.disabled=true; el.classList.add('archive-readonly-disabled'); });
+    document.querySelectorAll('#tasksPage .add-task-panel, #appSection .add-task-full-btn, #appSection button[onclick*="openTaskModal"]').forEach(el=>el.classList.add('archive-readonly-hidden'));
+    document.querySelectorAll('#appSection textarea[placeholder*="تعليق"], #appSection textarea[placeholder*="اكتب تعليق"]').forEach(el=>{
+      el.placeholder='التعليقات متاحة للقراءة فقط';
+      el.readOnly=true;
+      el.classList.add('archive-readonly-disabled');
+    });
+  }
+  function overrideWriteFunctions(){
+    WRITE_FUNCTION_NAMES.forEach(name=>{
+      try{
+        if(typeof window[name] === 'function' && !window[name].__archiveReadOnlyWrapped){
+          const blocked=function(){ notifyReadOnly(); return Promise.resolve(null); };
+          blocked.__archiveReadOnlyWrapped=true;
+          window[name]=blocked;
+        }
+      }catch(e){}
+    });
+  }
+  function blockSupabaseWrites(){
+    try{
+      if(typeof supabaseClient === 'undefined' || supabaseClient.__archiveReadOnlyPatched) return;
+      const originalFrom=supabaseClient.from.bind(supabaseClient);
+      supabaseClient.from=function(table){
+        const builder=originalFrom(table);
+        return new Proxy(builder,{
+          get(target,prop,receiver){
+            if(['insert','update','upsert','delete'].includes(String(prop))){
+              return function(){ notifyReadOnly(); return Promise.reject(new Error('ARCHIVE_READ_ONLY_MODE')); };
+            }
+            const value=Reflect.get(target,prop,receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+        });
+      };
+      const originalRpc=supabaseClient.rpc ? supabaseClient.rpc.bind(supabaseClient) : null;
+      if(originalRpc){
+        supabaseClient.rpc=function(fn,args,opts){
+          if(/^generate_due_recurring_tasks$/i.test(String(fn)) || /create|update|delete|send|invite|generate/i.test(String(fn))){
+            notifyReadOnly();
+            return Promise.resolve({data:null,error:new Error('ARCHIVE_READ_ONLY_MODE')});
+          }
+          return originalRpc(fn,args,opts);
+        };
+      }
+      supabaseClient.__archiveReadOnlyPatched=true;
+    }catch(e){}
+  }
+  function installClickGuard(){
+    if(document.__archiveClickGuardInstalled) return;
+    document.__archiveClickGuardInstalled=true;
+    document.addEventListener('click',function(ev){
+      const btn=ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if(btn && shouldDisableButton(btn)){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        notifyReadOnly();
+        return false;
+      }
+    },true);
+    document.addEventListener('submit',function(ev){
+      if(ev.target && ev.target.closest && ev.target.closest('#appSection')){
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        notifyReadOnly();
+      }
+    },true);
+  }
+  function installReadOnly(){
+    document.documentElement.classList.add('readonly-archived');
+    document.body && document.body.classList.add('readonly-archived');
+    installBanner();
+    overrideWriteFunctions();
+    blockSupabaseWrites();
+    disableMutationButtons();
+  }
+  window.ARCHIVE_READ_ONLY_MODE = true;
+  window.NEW_TASKS_URL = NEW_TASKS_URL;
+  document.addEventListener('DOMContentLoaded',function(){
+    installReadOnly();
+    installClickGuard();
+    const obs=new MutationObserver(()=>{ disableMutationButtons(); overrideWriteFunctions(); });
+    obs.observe(document.body,{childList:true,subtree:true});
+    setInterval(()=>{ disableMutationButtons(); overrideWriteFunctions(); blockSupabaseWrites(); },1500);
+  });
+})();
+</script>
+<!-- === END ARCHIVE READ-ONLY MODE PATCH === -->
 </body>
 </html>
 
