@@ -19064,6 +19064,7 @@ init();
       if(shouldDisableButton(btn)){
         btn.classList.add('archive-readonly-disabled');
         btn.setAttribute('aria-disabled','true');
+        btn.disabled=true;
         btn.title='اللوحة متاحة للاطلاع فقط';
       }
     });
@@ -19072,7 +19073,18 @@ init();
     document.querySelectorAll('#appSection textarea[placeholder*="تعليق"], #appSection textarea[placeholder*="اكتب تعليق"]').forEach(el=>{
       el.placeholder='التعليقات متاحة للقراءة فقط';
       el.readOnly=true;
+      el.disabled=true;
       el.classList.add('archive-readonly-disabled');
+    });
+    root.querySelectorAll('select').forEach(sel=>{
+      const options=Array.from(sel.options||[]).map(o=>(o.textContent||'').trim());
+      const hasTaskStatuses=options.some(v=>['جديدة','قيد التنفيذ','متأخرة','مكتملة','مؤجلة'].includes(v));
+      const isFilter=options.some(v=>/كل\s*الحالات|كل\s*الموظفين|المسند\s*منه|المسند\s*إليه/.test(v));
+      if(hasTaskStatuses && !isFilter){
+        sel.disabled=true;
+        sel.classList.add('archive-readonly-disabled');
+        sel.title='تغيير الحالة متوقف؛ اللوحة للاطلاع فقط';
+      }
     });
   }
   function overrideWriteFunctions(){
@@ -19086,6 +19098,17 @@ init();
       }catch(e){}
     });
   }
+  function makeArchiveBlockedQuery(){
+    notifyReadOnly();
+    const result={data:null,error:{message:'اللوحة متاحة للاطلاع فقط ولا يمكن تعديل البيانات.',code:'ARCHIVE_READ_ONLY_MODE'}};
+    const chain={};
+    const methods=['select','eq','neq','gt','gte','lt','lte','is','in','not','match','filter','order','limit','range','single','maybeSingle','csv'];
+    methods.forEach(m=>{ chain[m]=function(){ return chain; }; });
+    chain.then=function(resolve){ return Promise.resolve(result).then(resolve); };
+    chain.catch=function(){ return Promise.resolve(result); };
+    chain.finally=function(resolve){ return Promise.resolve(result).finally(resolve); };
+    return chain;
+  }
   function blockSupabaseWrites(){
     try{
       if(typeof supabaseClient === 'undefined' || supabaseClient.__archiveReadOnlyPatched) return;
@@ -19095,7 +19118,7 @@ init();
         return new Proxy(builder,{
           get(target,prop,receiver){
             if(['insert','update','upsert','delete'].includes(String(prop))){
-              return function(){ notifyReadOnly(); return Promise.reject(new Error('ARCHIVE_READ_ONLY_MODE')); };
+              return function(){ return makeArchiveBlockedQuery(); };
             }
             const value=Reflect.get(target,prop,receiver);
             return typeof value === 'function' ? value.bind(target) : value;
@@ -19107,7 +19130,7 @@ init();
         supabaseClient.rpc=function(fn,args,opts){
           if(/^generate_due_recurring_tasks$/i.test(String(fn)) || /create|update|delete|send|invite|generate/i.test(String(fn))){
             notifyReadOnly();
-            return Promise.resolve({data:null,error:new Error('ARCHIVE_READ_ONLY_MODE')});
+            return Promise.resolve({data:null,error:{message:'اللوحة متاحة للاطلاع فقط ولا يمكن تعديل البيانات.',code:'ARCHIVE_READ_ONLY_MODE'}});
           }
           return originalRpc(fn,args,opts);
         };
@@ -19132,6 +19155,21 @@ init();
         ev.preventDefault();
         ev.stopImmediatePropagation();
         notifyReadOnly();
+      }
+    },true);
+    document.addEventListener('change',function(ev){
+      const el=ev.target;
+      if(!el || !el.closest || !el.closest('#appSection')) return;
+      if(el.matches('select')){
+        const options=Array.from(el.options||[]).map(o=>(o.textContent||'').trim());
+        const hasTaskStatuses=options.some(v=>['جديدة','قيد التنفيذ','متأخرة','مكتملة','مؤجلة'].includes(v));
+        const isFilter=options.some(v=>/كل\s*الحالات|كل\s*الموظفين|المسند\s*منه|المسند\s*إليه/.test(v));
+        if(hasTaskStatuses && !isFilter){
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          el.disabled=true;
+          notifyReadOnly();
+        }
       }
     },true);
   }
